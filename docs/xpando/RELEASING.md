@@ -1,8 +1,8 @@
 # Releasing xpando
 
-How xpando is versioned and released. Nothing here is automated yet; the release workflow is
-planned in M5 of [PLAN.md](PLAN.md). This page is the agreed scheme, so the automation can be
-built to match it.
+How xpando is versioned and released. The scheme below is implemented by `scripts/version.mjs` and
+`.github/workflows/release.yml`; the remaining M5 items (signing, updater) are in
+[PLAN.md](PLAN.md).
 
 ## Version scheme (date-based)
 
@@ -65,10 +65,22 @@ the UI always shows the human version.
 
 Users never see the derived value; it only exists so the build tools and the updater work.
 
-## Release process (to be automated)
+## Version script
 
-1. Decide the version from today's date (see above) and write it to the three manifests using the
-   derived semver. A script does this; never edit by hand.
+`node scripts/version.mjs <version>` validates the human version (no `v`, no zero padding, a real
+date, patch >= 1, first beta unnumbered and later betas `-beta2`+; `2026.11.23-beta1` and
+`2026.11.23.0` are rejected) and writes the derived semver into `xpando-app/package.json`,
+`xpando-app/src-tauri/tauri.conf.json`, `xpando-app/src-tauri/Cargo.toml` and
+`xpando-core/Cargo.toml`. It also updates only the `xpando-app` / `xpando-core` entries in the two
+`Cargo.lock` files, so `cargo --locked` keeps working. `xpando-app/package-lock.json` is left alone
+(`npm ci` does not check the root version). Other modes: `--check [version]` (manifests match the
+version, or agree with each other), `--info <version>` (prints `version`, `semver`, `prerelease`
+for CI), `--from-semver <semver>` (reverse mapping). Tests: `node --test "scripts/*.test.mjs"`.
+
+## Release process
+
+1. Decide the version from today's date (see above) and write it to the manifests with
+   `node scripts/version.mjs <version>` (never edit by hand) and commit the result.
 2. Update the changelog / release notes for the version.
 3. Merge to `dev`, wait for CI to be green on Windows, macOS and Linux.
 4. Create the tag (the human version) on that commit and push it. The tag triggers the release
@@ -79,8 +91,35 @@ Users never see the derived value; it only exists so the build tools and the upd
      not mark it as latest;
    - otherwise: a normal release, marked latest.
 6. Smoke-test the artifacts from the release page before announcing.
-7. The in-app updater channel follows the same rule: stable users only see stable and patch
-   releases; an opt-in "beta" setting also offers pre-releases.
+7. The in-app updater channel follows the same rule (see the design note below).
+
+What `release.yml` does: a `validate` job rejects tags that are not in the scheme and runs the script
+tests; a `build` job per OS (Windows NSIS, macOS universal DMG, Linux AppImage + deb on
+ubuntu-22.04) runs `version.mjs <tag>` and `--check`, `npm ci --ignore-scripts`, then `tauri build`
+with no secrets in the environment, and renames installers to the human version; a `publish` job
+(the only one with `contents: write`) runs `gh release create --verify-tag --generate-notes`, with
+`--prerelease --latest=false` for betas and `--latest` otherwise. All actions are pinned to full
+commit SHAs. Not done yet: code signing / notarization, and a changelog agreement check.
+
+## Updater design note (not implemented)
+
+The Tauri updater (`tauri-plugin-updater`, a new dependency, so deferred to its own PR) reads a
+JSON manifest from an endpoint and compares the **derived semver** with the running app, which
+already sorts correctly. Proposed channels:
+
+- Two static manifests published as release assets: `latest-stable.json` and `latest-beta.json`.
+  The workflow would generate them from the signed bundle `.sig` files after the build matrix.
+  Stable releases update both files; betas update only `latest-beta.json`.
+- The app picks its endpoint from a setting (default stable; opt-in "Include beta releases").
+  Both endpoints would use the GitHub release URL, e.g.
+  `https://github.com/ultimatejimmy/xpando/releases/latest/download/latest-stable.json` (GitHub's
+  "latest" skips pre-releases, which matches the stable channel for free); the beta manifest would
+  live at a fixed tag such as `updater-beta`.
+- Updates must be signed (Tauri's own minisign key pair): the private key is a repository secret
+  used only in the signing step of the build job, never in install steps; the public key goes in
+  `tauri.conf.json`. A beta user on `2026.1123.0-beta.2` is offered stable `2026.1123.0`
+  automatically since it sorts higher; stable users are never offered a pre-release.
+- Needs the signing key and Windows/macOS code-signing decisions (see M5) before it is enabled.
 
 Tag patterns the workflow should use (case-sensitive):
 
