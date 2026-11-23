@@ -60,7 +60,7 @@ Advanced on (persisted setting, also toggleable from the header) adds:
 - **Variables tab** — table view of `vars` (name, type, params) for direct editing.
 - **File awareness** — backing file names next to folders, `file · line` under the phrase title.
 - **Hotkey badges** in the phrase list next to trigger chips.
-- **Search operators** — `trigger:`, `folder:`, `app:`, `file:`.
+- **Search operators** — `trigger:`, `label:`, `folder:`, `file:`, `comment:`, `body:`.
 - **Trigger-conflict panel** in the sidebar (duplicates and prefix collisions).
 - **Status bar** — engine state, config path, phrase/file counts, Reload.
 
