@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { KeyboardEvent, ReactNode } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import {
@@ -9,6 +9,8 @@ import {
   ChevronRight,
   Clipboard,
   ClipboardCopy,
+  ClipboardList,
+  FileCode2,
   Info,
   ListChecks,
   MessageSquare,
@@ -20,6 +22,7 @@ import {
   Undo2,
   X,
 } from "lucide-react";
+import { useAdvanced } from "./AdvancedPanels";
 import { placeholders, removePlaceholders, renameInText, sortByDependency, usedBy } from "./varorder";
 import "./vars.css";
 
@@ -47,17 +50,27 @@ interface Item extends VarSpec {
   key: number;
 }
 
-const KNOWN_TYPES = ["date", "clipboard", "echo", "random", "choice", "shell", "script", "form"] as const;
+const KNOWN_TYPES = ["date", "clipboard", "echo", "random", "choice", "shell", "script", "form", "set_clipboard"] as const;
 const TYPE_LABELS: Record<string, string> = {
   date: "Date and time",
   clipboard: "Clipboard",
-  echo: "Text (echo)",
-  random: "Random choice",
-  choice: "Choice list (asks when expanding)",
-  shell: "Shell command",
-  script: "Script",
-  form: "Form",
+  echo: "Fixed text",
+  random: "Random pick from a list",
+  choice: "Pick from a list when expanding",
+  shell: "Output of a command",
+  script: "Output of a program",
+  form: "Form (asks several questions)",
+  set_clipboard: "Set the clipboard (xpando only)",
 };
+
+/** Whether to show the file's own names (YAML keys, type names) next to the plain labels. */
+const AdvancedContext = createContext(false);
+
+/** The name used in the file, shown small next to a plain-language label in Advanced mode. */
+function KeyTag({ name }: { name: string }) {
+  const advanced = useContext(AdvancedContext);
+  return advanced ? <code className="var-key">{name}</code> : null;
+}
 const SHELLS = ["bash", "cmd", "powershell", "pwsh", "sh", "zsh", "fish", "nu", "wsl", "wsl2"];
 const NAME_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
@@ -104,6 +117,7 @@ const HANDLED: Record<string, string[]> = {
   shell: ["cmd", "shell", "trim", "debug"],
   script: ["args", "trim", "debug", "ignore_error"],
   form: ["layout", "fields"],
+  set_clipboard: ["text"],
 };
 
 // ---------------------------------------------------------------------------------------
@@ -137,7 +151,7 @@ export function validateItems(items: VarSpec[]): (string | null)[] {
   return items.map((s, i) => {
     if (s.name === "") return "Give the variable a name.";
     if (!NAME_RE.test(s.name))
-      return "Use letters, digits and _ in the name, and don't start with a digit.";
+      return "Names can use letters, digits and _, and can't start with a digit.";
     if (items.some((o, j) => j !== i && o.name === s.name)) return "Another variable already has this name.";
     if (!/^[A-Za-z0-9_-]+$/.test(s.type)) return "The type needs letters, digits, - or _ only.";
     const keys = s.params.map((p) => p.key);
@@ -147,13 +161,13 @@ export function validateItems(items: VarSpec[]): (string | null)[] {
     const noList = (k: string) => listOf(s, k).every((x) => x.trim() === "") && getParam(s, k)?.t !== "raw";
     switch (s.type) {
       case "echo":
-        return getParam(s, "echo") === undefined ? "Enter the text to output." : null;
+        return getParam(s, "echo") === undefined ? "Enter the text for this variable." : null;
       case "shell":
         return blank("cmd") ? "Enter the command to run." : null;
       case "random":
-        return noList("choices") ? "Add at least one choice." : null;
+        return noList("choices") ? "Add at least one option." : null;
       case "choice":
-        return noList("values") ? "Add at least one value." : null;
+        return noList("values") ? "Add at least one option." : null;
       case "script":
         return noList("args") ? "Enter the program to run." : null;
       case "form":
@@ -307,7 +321,7 @@ const MACROS: MacroDef[] = [
   },
   {
     id: "shell",
-    label: "Shell command",
+    label: "Command output",
     hint: "Output of a command",
     icon: <Terminal size={16} aria-hidden="true" />,
     baseName: "output",
@@ -315,7 +329,7 @@ const MACROS: MacroDef[] = [
   },
   {
     id: "random",
-    label: "Random",
+    label: "Random pick",
     hint: "One of several, picked at random",
     icon: <Shuffle size={16} aria-hidden="true" />,
     baseName: "random",
@@ -331,8 +345,8 @@ const MACROS: MacroDef[] = [
   },
   {
     id: "echo",
-    label: "Echo",
-    hint: "A fixed text, reusable in other variables",
+    label: "Fixed text",
+    hint: "Text you can reuse in other variables",
     icon: <MessageSquare size={16} aria-hidden="true" />,
     baseName: "text",
     make: (n) => spec(n, "echo", [{ key: "echo", value: text("") }]),
@@ -345,6 +359,22 @@ const MACROS: MacroDef[] = [
     icon: <ClipboardCopy size={16} aria-hidden="true" />,
     baseName: "setclip",
     make: (n) => spec(n, "set_clipboard", [{ key: "text", value: text("") }]),
+  },
+  {
+    id: "script",
+    label: "Program output",
+    hint: "Output of a program you name",
+    icon: <FileCode2 size={16} aria-hidden="true" />,
+    baseName: "script",
+    make: (n) => spec(n, "script", [{ key: "args", value: { t: "list", v: [""] } }]),
+  },
+  {
+    id: "form",
+    label: "Form",
+    hint: "Asks several questions when expanding",
+    icon: <ClipboardList size={16} aria-hidden="true" />,
+    baseName: "form",
+    make: (n) => spec(n, "form", [{ key: "layout", value: text("") }]),
   },
   {
     id: "cursor",
@@ -427,7 +457,8 @@ export function useVars(opts: UseVarsOptions): VarsApi {
   const [state, setState] = useState<"loading" | "ready" | "error">(index !== null && hasVars ? "loading" : "ready");
   const [loadError, setLoadError] = useState("");
   const [announce, setAnnounce] = useState("");
-  const lastValid = useRef(new Map<number, string>());
+  const [announceAdd, setAnnounceAdd] = useState("");
+  const [focusKey, setFocusKey] = useState<number | null>(null);
   const [open, setOpenState] = useState(sectionOpenMemory);
 
   useEffect(() => {
@@ -437,7 +468,6 @@ export function useVars(opts: UseVarsOptions): VarsApi {
       .then((specs) => {
         if (cancelled) return;
         const loaded = specs.map((s) => ({ ...s, key: nextKey++ }));
-        loaded.forEach((it) => lastValid.current.set(it.key, it.name));
         setOriginal(specs);
         setItems(loaded);
         setState("ready");
@@ -464,7 +494,7 @@ export function useVars(opts: UseVarsOptions): VarsApi {
 
   const problems = useMemo(() => {
     if (!editable) return [];
-    const own = errors.flatMap((e, i) => (e ? [`${shown[i].name || `Variable ${i + 1}`}: ${e}`] : []));
+    const own = errors.flatMap((e, i) => (e ? [`Variable “${shown[i].name || i + 1}”: ${e}`] : []));
     return [...own, ...ordered.problems];
   }, [errors, shown, ordered.problems, editable]);
 
@@ -496,32 +526,41 @@ export function useVars(opts: UseVarsOptions): VarsApi {
     setItems((all) => all.map((it) => (it.key === key ? fn(it) : it)));
   }, []);
 
-  const rename = useCallback(
-    (key: number, name: string) => {
-      const item = items.find((it) => it.key === key);
-      if (!item) return;
-      const prev = lastValid.current.get(key) ?? item.name;
-      const ok = NAME_RE.test(name) && !items.some((o) => o.key !== key && o.name === name);
-      if (!ok || name === prev) {
-        update(key, (it) => ({ ...it, name }));
-        return;
-      }
-      lastValid.current.set(key, name);
-      setItems((all) =>
-        all.map((it) => {
-          const params = it.params.map((p) => ({ key: p.key, value: renameInValue(p.value, prev, name) }));
-          return it.key === key ? { ...it, name, params } : { ...it, params };
-        }),
-      );
-      setBody(renameInText(body, prev, name));
-    },
-    [items, body, setBody, update],
-  );
-
   /** Changes the body from here; a rich text editor is told to show it. */
   function replaceBody(next: string) {
     setBody(next);
     if (bodyIsHtml) onBodyReplaced?.();
+  }
+
+  /**
+   * Renames a variable once the user is done typing the name (leaving the field or Enter):
+   * the text and the other variables' settings follow. Returns why it can't, or null.
+   */
+  function renameItem(key: number, name: string): string | null {
+    const item = items.find((it) => it.key === key);
+    if (!item || name === item.name) return null;
+    if (name === "") return "A variable needs a name.";
+    if (!NAME_RE.test(name)) {
+      return `“${name}” can't be a name: use letters, digits and _, and don't start with a digit.`;
+    }
+    if (items.some((o) => o.key !== key && o.name === name)) return `Another variable is already called “${name}”.`;
+    const prev = item.name;
+    const users = usedBy(items, prev, usesOf);
+    const inText = bodyEditable && placeholders(body).includes(prev);
+    setItems((all) =>
+      all.map((it) => ({
+        ...it,
+        name: it.key === key ? name : it.name,
+        params: it.params.map((p) => ({ key: p.key, value: renameInValue(p.value, prev, name) })),
+      })),
+    );
+    if (inText) replaceBody(renameInText(body, prev, name));
+    const where = [...(inText ? ["in the text"] : []), ...(users.length > 0 ? [`in ${listNames(users)}`] : [])];
+    setNotice({
+      tone: "info",
+      text: `Renamed {{${prev}}} to {{${name}}}${where.length > 0 ? ` ${where.join(" and ")}` : ""}.`,
+    });
+    return null;
   }
 
   function removeItem(key: number) {
@@ -580,7 +619,6 @@ export function useVars(opts: UseVarsOptions): VarsApi {
   const addItem = useCallback((make: (name: string) => VarSpec, base: string): string => {
     const name = uniqueName(base, items);
     const item: Item = { ...make(name), key: nextKey++ };
-    lastValid.current.set(item.key, name);
     setItems([...items, item]);
     setOpenState(true);
     return name;
@@ -611,8 +649,16 @@ export function useVars(opts: UseVarsOptions): VarsApi {
     setAnnounce(`Inserted {{${name}}} and added a ${m.label} variable named ${name}.`);
   }
 
+  /** The section's Add menu: makes the variable without putting it in the text. */
+  function addMacro(m: MacroDef) {
+    if (!m.make) return;
+    const name = addItem(m.make, m.baseName);
+    setFocusKey(nextKey - 1);
+    setAnnounceAdd(`Added a ${m.label} variable named ${name}. Open below.`);
+  }
+
   const menu =
-    editable && bodyEditable ? <MacroMenu onPick={insertMacro} announce={announce} /> : null;
+    editable && bodyEditable ? <MacroMenu kind="insert" onPick={insertMacro} announce={announce} /> : null;
 
   const section = (
     <VarsSection
@@ -626,20 +672,15 @@ export function useVars(opts: UseVarsOptions): VarsApi {
       problemCount={problems.length}
       warningCount={warnings.length}
       onUpdate={update}
-      onRename={rename}
+      onRename={renameItem}
       onRemove={removeItem}
       unusedKeys={unusedKeys}
       notice={notice}
       onUndo={undoRemove}
       onDismissNotice={() => setNotice(null)}
-      onAdd={(type) => {
-        const m = MACROS.find((x) => x.id === type);
-        const name = addItem(
-          m?.make ?? ((n) => spec(n, type, [])),
-          m?.baseName || (type === "script" ? "script" : type === "form" ? "form" : "var"),
-        );
-        setAnnounce(`Added a variable named ${name}.`);
-      }}
+      addMenu={<MacroMenu kind="add" onPick={addMacro} announce={announceAdd} />}
+      focusKey={focusKey}
+      canInsert={menu !== null}
     />
   );
 
@@ -650,7 +691,17 @@ export function useVars(opts: UseVarsOptions): VarsApi {
 // Insert macro menu
 // ---------------------------------------------------------------------------------------
 
-function MacroMenu({ onPick, announce }: { onPick: (m: MacroDef) => void; announce: string }) {
+function MacroMenu({
+  kind,
+  onPick,
+  announce,
+}: {
+  kind: "insert" | "add";
+  onPick: (m: MacroDef) => void;
+  announce: string;
+}) {
+  const label = kind === "insert" ? "Insert macro" : "Add a variable";
+  const list = kind === "insert" ? MACROS : MACROS.filter((m) => m.make);
   const [open, setOpen] = useState(false);
   const wrap = useRef<HTMLDivElement>(null);
   const button = useRef<HTMLButtonElement>(null);
@@ -703,15 +754,16 @@ function MacroMenu({ onPick, announce }: { onPick: (m: MacroDef) => void; announ
         aria-haspopup="menu"
         aria-expanded={open}
         aria-controls={`${uid}-menu`}
+        title={kind === "insert" ? "Adds a variable and puts it in the text at the cursor" : "Adds a variable without putting it in the text"}
         onClick={() => setOpen((o) => !o)}
       >
-        <Braces size={16} aria-hidden="true" />
-        Insert macro
+        {kind === "insert" ? <Braces size={16} aria-hidden="true" /> : <Plus size={16} aria-hidden="true" />}
+        {label}
         <ChevronDown size={16} aria-hidden="true" />
       </button>
       {open && (
-        <div className="macro-list" role="menu" id={`${uid}-menu`} aria-label="Insert macro">
-          {MACROS.map((m) => (
+        <div className={`macro-list${kind === "add" ? " macro-up" : ""}`} role="menu" id={`${uid}-menu`} aria-label={label}>
+          {list.map((m) => (
             <button
               key={m.id}
               type="button"
@@ -750,14 +802,19 @@ interface SectionProps {
   problemCount: number;
   warningCount: number;
   onUpdate: (key: number, fn: (it: Item) => Item) => void;
-  onRename: (key: number, name: string) => void;
+  onRename: (key: number, name: string) => string | null;
   onRemove: (key: number) => void;
   unusedKeys: Set<number>;
   notice: Notice | null;
   onUndo: () => void;
   onDismissNotice: () => void;
   onFocusCapture: (el: HTMLElement | null) => void;
-  onAdd: (type: string) => void;
+  /** The "Add a variable" menu. */
+  addMenu: ReactNode;
+  /** The card of this variable gets the focus when it appears (it was just added). */
+  focusKey: number | null;
+  /** The Insert macro menu is available above the text. */
+  canInsert: boolean;
 }
 
 /** The notice under the cards, with Undo when a removal can still be taken back. */
@@ -799,26 +856,12 @@ function NoticeBar({ p }: { p: SectionProps }) {
 
 function VarsSection(p: SectionProps) {
   const uid = useId();
-  const [newType, setNewType] = useState("echo");
+  const [advanced] = useAdvanced();
   const count = p.items.length;
   const addRow = (
     <div className="var-add">
-      <select
-        className="field"
-        aria-label="Type of the new variable"
-        value={newType}
-        onChange={(e) => setNewType(e.target.value)}
-      >
-        {KNOWN_TYPES.map((t) => (
-          <option key={t} value={t}>
-            {TYPE_LABELS[t]}
-          </option>
-        ))}
-      </select>
-      <button type="button" className="btn" onClick={() => p.onAdd(newType)}>
-        <Plus size={16} aria-hidden="true" />
-        Add variable
-      </button>
+      {p.addMenu}
+      <span className="var-hint">Adds it without putting it in the text.</span>
     </div>
   );
 
@@ -851,7 +894,10 @@ function VarsSection(p: SectionProps) {
         </span>
         <p className="editor-note">
           <Info size={16} aria-hidden="true" />
-          None yet. A variable fills in something when the phrase expands, like today's date.
+          <span>
+            None yet. A variable fills in something when the phrase expands, like today's date.
+            {p.canInsert && " Use Insert macro above the text to put one in."}
+          </span>
         </p>
         <NoticeBar p={p} />
         {addRow}
@@ -861,6 +907,7 @@ function VarsSection(p: SectionProps) {
 
   const issues = p.problemCount + p.warningCount;
   return (
+    <AdvancedContext.Provider value={advanced}>
     <div className="editor-group vars-section" role="group" aria-labelledby={`${uid}-h`}>
       <h3 className="vars-heading" id={`${uid}-h`}>
         <button
@@ -909,6 +956,7 @@ function VarsSection(p: SectionProps) {
               item={it}
               index={i}
               error={p.errors[i]}
+              autoFocus={p.focusKey === it.key}
               onUpdate={p.onUpdate}
               onRename={p.onRename}
               onRemove={p.onRemove}
@@ -920,6 +968,69 @@ function VarsSection(p: SectionProps) {
         {addRow}
       </div>
     </div>
+    </AdvancedContext.Provider>
+  );
+}
+
+/**
+ * The name box. The name is applied (and the text and other variables follow) when the user
+ * leaves the box or presses Enter, not on every key, so `{{date}}` is never half-renamed.
+ */
+function NameField({
+  id,
+  item,
+  invalid,
+  onRename,
+}: {
+  id: string;
+  item: Item;
+  invalid: boolean;
+  onRename: (key: number, name: string) => string | null;
+}) {
+  const [draft, setDraft] = useState(item.name);
+  const [why, setWhy] = useState("");
+  useEffect(() => setDraft(item.name), [item.name]);
+  function commit() {
+    const trimmed = draft.trim();
+    if (trimmed === item.name) {
+      setDraft(item.name);
+      setWhy("");
+      return;
+    }
+    const problem = onRename(item.key, trimmed);
+    if (problem) {
+      setWhy(problem);
+      setDraft(item.name);
+    } else {
+      setWhy("");
+    }
+  }
+  return (
+    <>
+      <input
+        id={id}
+        className="field mono"
+        value={draft}
+        spellCheck={false}
+        autoComplete="off"
+        aria-invalid={invalid || why !== ""}
+        aria-describedby={`${id}-help`}
+        onChange={(e) => {
+          setDraft(e.target.value);
+          setWhy("");
+        }}
+        onBlur={commit}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            commit();
+          }
+        }}
+      />
+      <p className={why ? "var-error" : "var-hint"} id={`${id}-help`} role={why ? "alert" : undefined}>
+        {why || `In the text: {{${item.name}}}`}
+      </p>
+    </>
   );
 }
 
@@ -927,6 +1038,7 @@ function VarCard({
   item,
   index,
   error,
+  autoFocus,
   onUpdate,
   onRename,
   onRemove,
@@ -935,48 +1047,65 @@ function VarCard({
   item: Item;
   index: number;
   error: string | null;
+  autoFocus: boolean;
   onUpdate: (key: number, fn: (it: Item) => Item) => void;
-  onRename: (key: number, name: string) => void;
+  onRename: (key: number, name: string) => string | null;
   onRemove: (key: number) => void;
   unused: boolean;
 }) {
   const uid = useId();
+  const advanced = useContext(AdvancedContext);
   const known = isKnown(item.type);
   const set = (fn: (it: Item) => Item) => onUpdate(item.key, fn);
   const label = item.name || `variable ${index + 1}`;
+  const card = useRef<HTMLLIElement>(null);
+  useEffect(() => {
+    // A variable that was just added: go to its first setting (or its name), ready to fill in.
+    if (!autoFocus || !card.current) return;
+    const first =
+      card.current.querySelector<HTMLElement>(".var-head ~ .var-field input:not([type=checkbox]), .var-head ~ .var-field textarea") ??
+      card.current.querySelector<HTMLElement>(".var-name input");
+    first?.focus();
+    card.current.scrollIntoView({ block: "nearest" });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   return (
-    <li className="var-card" aria-label={`Variable ${label}`}>
+    <li className="var-card" aria-label={`Variable ${label}`} ref={card}>
       <div className="var-head">
         <div className="var-field var-name">
           <label htmlFor={`${uid}-name`}>Name</label>
-          <input
+          <NameField
             id={`${uid}-name`}
-            className="field mono"
-            value={item.name}
-            spellCheck={false}
-            autoComplete="off"
-            aria-invalid={error !== null && /name/i.test(error)}
-            onChange={(e) => onRename(item.key, e.target.value)}
+            item={item}
+            invalid={error !== null && /name/i.test(error)}
+            onRename={onRename}
           />
         </div>
         <div className="var-field var-type">
-          <label htmlFor={`${uid}-type`}>Type</label>
+          <label htmlFor={`${uid}-type`}>What it fills in</label>
           <select
             id={`${uid}-type`}
             className="field"
             value={known ? item.type : "__other"}
+            aria-describedby={item.params.length > 0 ? `${uid}-type-help` : undefined}
             onChange={(e) => {
               const type = e.target.value === "__other" ? "custom" : e.target.value;
-              set((it) => ({ ...it, type, params: [] }));
+              const fresh = MACROS.find((m) => m.id === type)?.make?.(item.name);
+              set((it) => ({ ...it, type, params: fresh ? fresh.params : [] }));
             }}
           >
             {KNOWN_TYPES.map((t) => (
               <option key={t} value={t}>
-                {TYPE_LABELS[t]}
+                {advanced ? `${TYPE_LABELS[t]} (${t})` : TYPE_LABELS[t]}
               </option>
             ))}
-            <option value="__other">Other type…</option>
+            {(advanced || !known) && <option value="__other">Other type…</option>}
           </select>
+          {item.params.length > 0 && (
+            <span className="var-hint" id={`${uid}-type-help`}>
+              Changing this clears the settings below.
+            </span>
+          )}
         </div>
         <div className="var-buttons">
           <button
@@ -1003,7 +1132,7 @@ function VarCard({
           />
           <p className="editor-note">
             <Info size={16} aria-hidden="true" />
-            xpando doesn't know this type, so its parameters are edited as plain name and value pairs.
+            xpando doesn't know this type, so its settings are shown as plain name and value pairs.
           </p>
         </div>
       )}
@@ -1042,6 +1171,7 @@ function TextField({
   multiline = false,
   rows = 3,
   placeholder,
+  yamlKey,
   hint,
 }: {
   id: string;
@@ -1052,12 +1182,16 @@ function TextField({
   multiline?: boolean;
   rows?: number;
   placeholder?: string;
+  yamlKey?: string;
   hint?: ReactNode;
 }) {
   const cls = `field${mono ? " mono" : ""}`;
   return (
     <div className="var-field">
-      <label htmlFor={id}>{label}</label>
+      <label htmlFor={id}>
+        {label}
+        {yamlKey && <KeyTag name={yamlKey} />}
+      </label>
       {multiline ? (
         <textarea
           id={id}
@@ -1088,17 +1222,22 @@ function CheckField({
   id,
   label,
   checked,
+  yamlKey,
   onChange,
 }: {
   id: string;
   label: string;
   checked: boolean;
+  yamlKey?: string;
   onChange: (v: boolean) => void;
 }) {
   return (
     <div className="var-check">
       <input id={id} type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} />
-      <label htmlFor={id}>{label}</label>
+      <label htmlFor={id}>
+        {label}
+        {yamlKey && <KeyTag name={yamlKey} />}
+      </label>
     </div>
   );
 }
@@ -1109,6 +1248,7 @@ function ListField({
   values,
   onChange,
   addLabel,
+  yamlKey,
   mono = false,
 }: {
   uid: string;
@@ -1116,11 +1256,15 @@ function ListField({
   values: string[];
   onChange: (v: string[]) => void;
   addLabel: string;
+  yamlKey?: string;
   mono?: boolean;
 }) {
   return (
     <div className="var-field" role="group" aria-label={label}>
-      <span className="var-label">{label}</span>
+      <span className="var-label">
+        {label}
+        {yamlKey && <KeyTag name={yamlKey} />}
+      </span>
       {values.map((v, i) => (
         <div className="trigger-row" key={i}>
           <input
@@ -1186,6 +1330,7 @@ function ListOrRaw({
       <TextField
         id={`${uid}-${paramKey}`}
         label={label}
+        yamlKey={paramKey}
         multiline
         rows={6}
         value={v.v}
@@ -1200,12 +1345,16 @@ function ListOrRaw({
     <ListField
       uid={`${uid}-${paramKey}`}
       label={label}
+      yamlKey={paramKey}
       values={values}
       addLabel={addLabel}
       onChange={(l) => set((it) => withParam(it, paramKey, { t: "list", v: l }))}
     />
   );
 }
+
+/** Common date formats, offered as one-click examples. */
+const DATE_EXAMPLES = ["%Y-%m-%d", "%m/%d/%Y", "%d.%m.%Y", "%B %d, %Y", "%A", "%H:%M", "%Y-%m-%d %H:%M"];
 
 function DateFields({ item, set, uid }: { item: Item; set: SetItem; uid: string }) {
   const format = textOf(item, "format");
@@ -1222,18 +1371,39 @@ function DateFields({ item, set, uid }: { item: Item; set: SetItem; uid: string 
     <>
       <TextField
         id={`${uid}-format`}
-        label="Format"
+        label="How the date is written"
+        yamlKey="format"
         value={format}
         placeholder="%Y-%m-%d"
         onChange={(v) => opt("format", v)}
         hint={
           <>
-            Preview: <output className="date-preview">{preview || "(empty)"}</output>
+            Looks like: <output className="date-preview">{preview || "(empty)"}</output>
           </>
         }
       />
+      <div className="var-field" role="group" aria-label="Date format examples">
+        <span className="var-label">Or pick an example</span>
+        <div className="date-examples">
+          {DATE_EXAMPLES.map((f) => {
+            const example = formatDate(f, now, locale);
+            return (
+              <button
+                type="button"
+                key={f}
+                className={`btn date-example${format === f ? " is-on" : ""}`}
+                aria-pressed={format === f}
+                title={`Uses the format ${f}`}
+                onClick={() => opt("format", f)}
+              >
+                {example}
+              </button>
+            );
+          })}
+        </div>
+      </div>
       <details className="var-help">
-        <summary>Format codes</summary>
+        <summary>Build your own: what the format codes mean</summary>
         <dl className="token-list">
           {DATE_TOKENS.map(([tok, what]) => (
             <div key={tok}>
@@ -1248,7 +1418,8 @@ function DateFields({ item, set, uid }: { item: Item; set: SetItem; uid: string 
       <div className="var-row">
         <TextField
           id={`${uid}-offset`}
-          label="Offset in seconds"
+          label="Shift by (seconds)"
+          yamlKey="offset"
           value={offset}
           placeholder="0"
           onChange={(v) => opt("offset", v)}
@@ -1256,22 +1427,24 @@ function DateFields({ item, set, uid }: { item: Item; set: SetItem; uid: string 
         />
         <TextField
           id={`${uid}-locale`}
-          label="Language (locale)"
+          label="Language of month and day names"
+          yamlKey="locale"
           value={locale}
           placeholder="en-US"
           onChange={(v) => opt("locale", v)}
-          hint="Month and day names, for example de-DE."
+          hint="Leave empty for English, or for example de-DE."
         />
         <TextField
           id={`${uid}-tz`}
           label="Time zone"
+          yamlKey="tz"
           value={textOf(item, "tz")}
           placeholder="Europe/Berlin"
           onChange={(v) => opt("tz", v)}
           hint="Leave empty for this computer's time zone."
         />
       </div>
-      <p className="var-hint">The preview is approximate; espanso formats the final result.</p>
+      <p className="var-hint">The preview is approximate; espanso writes the final result.</p>
     </>
   );
 }
@@ -1282,20 +1455,23 @@ function ShellOptions({ item, set, uid, ignoreError }: { item: Item; set: SetIte
     <div className="var-checks">
       <CheckField
         id={`${uid}-trim`}
-        label="Trim whitespace around the output"
+        label="Trim spaces and line breaks around the output"
+        yamlKey="trim"
         checked={textOf(item, "trim") !== "false"}
         onChange={(c) => set((it) => withParam(it, "trim", c ? null : text("false")))}
       />
       <CheckField
         id={`${uid}-debug`}
-        label="Write debug details to the log"
+        label="Write details to the log (for troubleshooting)"
+        yamlKey="debug"
         checked={flag("debug")}
         onChange={(c) => set((it) => withParam(it, "debug", c ? text("true") : null))}
       />
       {ignoreError && (
         <CheckField
           id={`${uid}-ignore`}
-          label="Ignore errors"
+          label="Carry on if the program fails"
+          yamlKey="ignore_error"
           checked={flag("ignore_error")}
           onChange={(c) => set((it) => withParam(it, "ignore_error", c ? text("true") : null))}
         />
@@ -1320,7 +1496,8 @@ function TypeFields({ item, set, uid }: { item: Item; set: SetItem; uid: string 
       return (
         <TextField
           id={`${uid}-echo`}
-          label="Text"
+          label="Text to insert"
+          yamlKey="echo"
           multiline
           mono={false}
           value={textOf(item, "echo")}
@@ -1335,8 +1512,8 @@ function TypeFields({ item, set, uid }: { item: Item; set: SetItem; uid: string 
           set={set}
           uid={uid}
           paramKey="choices"
-          label="Choice"
-          addLabel="Add choice"
+          label="Option"
+          addLabel="Add option"
           rawNote="This list holds more than plain text."
         />
       );
@@ -1347,8 +1524,8 @@ function TypeFields({ item, set, uid }: { item: Item; set: SetItem; uid: string 
           set={set}
           uid={uid}
           paramKey="values"
-          label="Value"
-          addLabel="Add value"
+          label="Option"
+          addLabel="Add option"
           rawNote="These values have an id and a label."
         />
       );
@@ -1358,7 +1535,8 @@ function TypeFields({ item, set, uid }: { item: Item; set: SetItem; uid: string 
         <>
           <TextField
             id={`${uid}-cmd`}
-            label="Command"
+            label="Command to run"
+            yamlKey="cmd"
             multiline
             rows={3}
             value={textOf(item, "cmd")}
@@ -1366,7 +1544,10 @@ function TypeFields({ item, set, uid }: { item: Item; set: SetItem; uid: string 
             hint="Its output replaces the variable. Can use other variables."
           />
           <div className="var-field">
-            <label htmlFor={`${uid}-shell`}>Shell</label>
+            <label htmlFor={`${uid}-shell`}>
+              Run it with
+              <KeyTag name="shell" />
+            </label>
             <select id={`${uid}-shell`} className="field" value={shell} onChange={(e) => opt("shell", e.target.value)}>
               <option value="">Default for this system</option>
               {SHELLS.map((s) => (
@@ -1387,13 +1568,14 @@ function TypeFields({ item, set, uid }: { item: Item; set: SetItem; uid: string 
         <>
           <ListField
             uid={`${uid}-args`}
-            label="Argument"
+            label="Program or argument"
+            yamlKey="args"
             values={args}
-            addLabel="Add argument"
+            addLabel="Add an argument"
             mono
             onChange={(l) => set((it) => withParam(it, "args", { t: "list", v: l }))}
           />
-          <p className="var-hint">The first argument is the program, the rest are passed to it.</p>
+          <p className="var-hint">The first line is the program to run, the lines after it are passed to it.</p>
           <ShellOptions item={item} set={set} uid={uid} ignoreError />
         </>
       );
@@ -1404,26 +1586,41 @@ function TypeFields({ item, set, uid }: { item: Item; set: SetItem; uid: string 
         <>
           <TextField
             id={`${uid}-layout`}
-            label="Layout"
+            label="What the form looks like"
+            yamlKey="layout"
             multiline
             rows={4}
             mono={false}
             value={textOf(item, "layout")}
             onChange={(v) => set((it) => withParam(it, "layout", text(v)))}
-            hint={<>Use [[name]] where a field goes.</>}
+            hint={<>Write the text of the form and put [[name]] where an answer goes.</>}
           />
           <TextField
             id={`${uid}-fields`}
-            label="Fields (YAML)"
+            label="The questions (written as YAML)"
+            yamlKey="fields"
             multiline
             rows={6}
             value={fields ? (fields.t === "list" ? fields.v.join("\n") : fields.v) : ""}
             onChange={(v) => set((it) => withParam(it, "fields", v.trim() === "" ? null : { t: "raw", v }))}
-            hint="Each field is a name with a type, for example: name: then type: text on the next line, indented."
+            hint={<>One entry per [[name]] in the layout. For example a line <code>name:</code> and below it, indented, <code>type: text</code>.</>}
           />
         </>
       );
     }
+    case "set_clipboard":
+      return (
+        <TextField
+          id={`${uid}-text`}
+          label="Text to put on the clipboard"
+          yamlKey="text"
+          multiline
+          mono={false}
+          value={textOf(item, "text")}
+          onChange={(v) => set((it) => withParam(it, "text", text(v)))}
+          hint="Needs xpando's own engine; stock espanso rejects this type. The variable itself inserts nothing."
+        />
+      );
     default:
       return null;
   }
@@ -1438,13 +1635,13 @@ function ExtraParams({ item, set, uid }: { item: Item; set: SetItem; uid: string
     set((it) => ({ ...it, params: it.params.map((p, i) => (i === idx ? fn(p) : p)) }));
   if (extras.length === 0 && known) return null;
   return (
-    <div className="var-field" role="group" aria-label={known ? "Other parameters" : "Parameters"}>
-      <span className="var-label">{known ? "Other parameters" : "Parameters"}</span>
+    <div className="var-field" role="group" aria-label={known ? "Other settings" : "Settings"}>
+      <span className="var-label">{known ? "Other settings" : "Settings"}</span>
       {extras.map(({ p, idx }, n) => (
         <div className="param-row" key={idx}>
           <input
             className="field mono"
-            aria-label={`Parameter name ${n + 1}`}
+            aria-label={`Setting name ${n + 1}`}
             value={p.key}
             spellCheck={false}
             autoComplete="off"
@@ -1453,7 +1650,7 @@ function ExtraParams({ item, set, uid }: { item: Item; set: SetItem; uid: string
           {p.value.t === "text" ? (
             <input
               className="field mono"
-              aria-label={`Value of ${p.key || `parameter ${n + 1}`}`}
+              aria-label={`Value of ${p.key || `setting ${n + 1}`}`}
               value={p.value.v}
               spellCheck={false}
               autoComplete="off"
@@ -1463,7 +1660,7 @@ function ExtraParams({ item, set, uid }: { item: Item; set: SetItem; uid: string
             <textarea
               className="field mono"
               rows={3}
-              aria-label={`Value of ${p.key || `parameter ${n + 1}`} (${p.value.t === "list" ? "one per line" : "YAML"})`}
+              aria-label={`Value of ${p.key || `setting ${n + 1}`} (${p.value.t === "list" ? "one per line" : "YAML"})`}
               value={p.value.t === "list" ? p.value.v.join("\n") : p.value.v}
               spellCheck={false}
               onChange={(e) =>
@@ -1480,8 +1677,8 @@ function ExtraParams({ item, set, uid }: { item: Item; set: SetItem; uid: string
           <button
             type="button"
             className="btn btn-icon"
-            aria-label={`Remove parameter ${p.key || n + 1}`}
-            title="Remove parameter"
+            aria-label={`Remove setting ${p.key || n + 1}`}
+            title="Remove setting"
             onClick={() => set((it) => ({ ...it, params: it.params.filter((_, i) => i !== idx) }))}
           >
             <X size={16} aria-hidden="true" />
@@ -1496,7 +1693,7 @@ function ExtraParams({ item, set, uid }: { item: Item; set: SetItem; uid: string
           onClick={() => set((it) => ({ ...it, params: [...it.params, { key: "", value: text("") }] }))}
         >
           <Plus size={16} aria-hidden="true" />
-          Add parameter
+          Add setting
         </button>
       </div>
     </div>

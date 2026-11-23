@@ -204,12 +204,12 @@ textarea.field {
 /* Sticky Save / Cancel bar at the top of the editor */
 .editor-topbar {
   position: sticky;
-  top: -8px;
+  top: -16px;
   z-index: 4;
   display: grid;
   gap: 8px;
-  margin: -8px -8px 0;
-  padding: 8px;
+  margin: -16px -24px 0;
+  padding: 12px 24px;
   border-bottom: 1px solid var(--border);
   background: var(--surface);
 }
