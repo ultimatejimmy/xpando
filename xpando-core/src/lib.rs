@@ -13,6 +13,7 @@ use serde::{Deserialize, Serialize};
 use serde_norway::Value;
 
 pub mod edit;
+pub mod folders;
 pub mod vars;
 
 /// Returns every `*.yml` / `*.yaml` match file under `<config_dir>/match`,

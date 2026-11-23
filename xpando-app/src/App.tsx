@@ -24,6 +24,7 @@ import {
   normalizeOptions,
   type EditorOptions,
 } from "./PhraseEditor";
+import { FolderToolbar, NewFolderButton, ScopeLabel, useFolderInfo } from "./FolderManager";
 
 interface Variable {
   name: string;
@@ -168,6 +169,7 @@ export default function App() {
     else action();
   };
   const closeEditor = () => setEditing(null);
+  const folderActionsLocked = editing !== null && dirty;
 
   const load = (): Promise<FolderData[] | null> =>
     invoke<FolderData[]>("list_phrases")
@@ -186,6 +188,16 @@ export default function App() {
   useEffect(() => {
     void load();
   }, []);
+
+  const infos = useFolderInfo(folders);
+
+  /** A folder was created, renamed, deleted or given other apps: reload and show it. */
+  const folderChanged = async (file: string | null) => {
+    await load();
+    setEditing(null);
+    setSelected(null);
+    setScope(file ?? ALL);
+  };
 
   useEffect(() => {
     if (!advanced) return;
@@ -356,12 +368,17 @@ export default function App() {
                   <span className="grow">
                     {f.name}
                     {advanced && <span className="adv-folder-file">{f.file}</span>}
+                    <ScopeLabel info={infos[f.file]} />
                   </span>
                   <span className="count">{f.phrases.length}</span>
                 </button>
               </li>
             ))}
           </ul>
+          {/* Folder actions reload everything and close the editor, so they wait for unsaved edits. */}
+          <div inert={folderActionsLocked} className={folderActionsLocked ? "folder-actions-locked" : undefined}>
+            <NewFolderButton onDone={(file) => void folderChanged(file)} />
+          </div>
           {advanced && <ConflictsPanel conflicts={conflicts} onJump={jumpTo} />}
         </nav>
 
@@ -369,6 +386,26 @@ export default function App() {
           <h2 className="pane-title">
             {scopeName} <span className="count">{visible.length}</span>
           </h2>
+          {scopeFolder && (
+            <div
+              inert={folderActionsLocked}
+              className={folderActionsLocked ? "folder-actions-locked" : undefined}
+              title={folderActionsLocked ? "Save or cancel your edit to change this folder" : undefined}
+            >
+              <FolderToolbar
+                key={scopeFolder.file}
+                folder={{
+                  name: scopeFolder.name,
+                  file: scopeFolder.file,
+                  hash: scopeFolder.hash,
+                  phrases: scopeFolder.phrases.length,
+                }}
+                info={infos[scopeFolder.file]}
+                advanced={advanced}
+                onDone={(file) => void folderChanged(file)}
+              />
+            </div>
+          )}
           <NewPhraseButton
             disabled={folders.length === 0}
             onClick={() =>

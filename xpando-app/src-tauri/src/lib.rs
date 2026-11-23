@@ -1,5 +1,6 @@
 mod advanced;
 mod edit;
+mod folders;
 mod vars;
 mod yamledit;
 
@@ -41,7 +42,15 @@ pub fn run() {
             yamledit::get_file_source,
             vars::get_phrase_vars,
             vars::save_phrase_vars,
-            vars::create_phrase_with_vars
+            vars::create_phrase_with_vars,
+            folders::list_folder_info,
+            folders::create_folder,
+            folders::preview_rename_folder,
+            folders::rename_folder,
+            folders::preview_delete_folder,
+            folders::delete_folder,
+            folders::preview_folder_scope,
+            folders::set_folder_scope
         ])
         .run(tauri::generate_context!())
         .expect("error while running xpando");
