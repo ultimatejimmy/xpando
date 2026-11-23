@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type CSSProperties } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { AlertTriangle, CheckCircle2, ChevronDown, ChevronRight, FileCode2 } from "lucide-react";
 import { OPERATORS } from "./search";
@@ -155,7 +155,10 @@ export function YamlPane({ file, index }: { file: string; index: number }) {
           {source.lines.map((text, i) => (
             <tr key={i}>
               <td className="adv-ln">{source.first_line + i}</td>
-              <td className={text.trimStart().startsWith("#") ? "adv-src adv-cmt" : "adv-src"}>
+              <td
+                className={text.trimStart().startsWith("#") ? "adv-src adv-cmt" : "adv-src"}
+                style={{ "--indent": text.length - text.trimStart().length } as CSSProperties}
+              >
                 {text || " "}
               </td>
             </tr>

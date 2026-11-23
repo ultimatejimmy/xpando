@@ -91,8 +91,11 @@
   flex-direction: column;
 }
 
+/* The list grows so the conflicts panel sits at the bottom, but its rows must stay compact
+   instead of stretching to fill the extra height. */
 .sidebar > ul {
   flex: 1 0 auto;
+  align-content: start;
 }
 
 .adv-folder-file {
@@ -267,18 +270,25 @@
   border-right: 1px solid var(--border);
 }
 
+/* Long lines wrap instead of scrolling sideways. Leading spaces are kept (pre-wrap) and
+   wrapped lines get a hanging indent of the line's own indent plus 2 characters. */
 .adv-src {
-  padding: 0 12px;
-  white-space: pre;
-  overflow-wrap: normal;
+  padding: 0 12px 0 calc(12px + (var(--indent, 0) + 2) * 1ch);
+  text-indent: calc(-1 * (var(--indent, 0) + 2) * 1ch);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 .adv-cmt {
   color: var(--muted);
 }
 
-.detail:has(.adv-code) {
-  overflow-x: auto;
+.adv-code {
+  table-layout: fixed;
+}
+
+.adv-ln {
+  width: 3.5em;
 }
 
 /* Status bar */
