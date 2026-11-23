@@ -194,8 +194,10 @@ export function PhraseEditor({ folders, file, phrase, onSaved, onCancel, onReloa
         {phrase ? `In ${folder?.file ?? file}` : `Will be added to the end of ${folder?.file ?? file}`}
       </p>
 
-      <fieldset className="editor-group">
-        <legend>{phrase?.is_regex ? "Regex trigger" : triggers.length > 1 ? "Triggers" : "Trigger"}</legend>
+      <div className="editor-group" role="group" aria-labelledby={`${uid}-triggers`}>
+        <span className="editor-legend" id={`${uid}-triggers`}>
+          {phrase?.is_regex ? "Regex trigger" : triggers.length > 1 ? "Triggers" : "Trigger"}
+        </span>
         {triggers.map((t, i) => (
           <div className="trigger-row" key={i}>
             <input
@@ -233,7 +235,7 @@ export function PhraseEditor({ folders, file, phrase, onSaved, onCancel, onReloa
             Regex triggers can't be edited here yet.
           </p>
         )}
-      </fieldset>
+      </div>
 
       <div className="editor-group">
         <label htmlFor={`${uid}-label`}>Name (label)</label>

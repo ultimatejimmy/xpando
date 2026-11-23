@@ -91,7 +91,7 @@
 /* Editor form */
 .editor {
   display: grid;
-  gap: 16px;
+  gap: 22px;
   max-width: 720px;
 }
 
@@ -100,9 +100,11 @@
   margin: 0;
 }
 
+/* Label-to-field gap is wide enough that the 2px focus outline (plus its offset) never
+   touches the label above. */
 .editor-group {
   display: grid;
-  gap: 6px;
+  gap: 10px;
   margin: 0;
   padding: 0;
   border: 0;
@@ -110,7 +112,7 @@
 }
 
 .editor-group > label,
-.editor-group > legend {
+.editor-group > .editor-legend {
   padding: 0;
   font-size: 13px;
   font-weight: 600;
