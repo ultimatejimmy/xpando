@@ -1,0 +1,8 @@
+[package]
+name = "xpando-core"
+version = "0.1.0"
+description = "Phrase model and espanso config discovery for the xpando app"
+edition = "2021"
+license = "GPL-3.0"
+
+[dependencies]

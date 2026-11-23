@@ -17,6 +17,7 @@ members = [
   "espanso-kvs",
   "espanso-engine",
   "espanso-package",
+  "xpando-core",
 ]
 
 [workspace.lints.clippy]
