@@ -90,7 +90,12 @@ export default function App() {
 
   useEffect(() => {
     invoke<FolderData[]>("list_phrases")
-      .then(setFolders)
+      .then((data) =>
+        // Tolerate a backend that predates the `vars` field instead of crashing the page.
+        setFolders(
+          data.map((f) => ({ ...f, phrases: f.phrases.map((p) => ({ ...p, vars: p.vars ?? [] })) })),
+        ),
+      )
       .catch((e) => setError(String(e)))
       .finally(() => setLoaded(true));
   }, []);
