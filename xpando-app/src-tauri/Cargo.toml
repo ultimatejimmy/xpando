@@ -1,0 +1,20 @@
+[package]
+name = "xpando-app"
+version = "0.1.0"
+description = "xpando phrase manager"
+edition = "2021"
+license = "GPL-3.0"
+
+# Standalone workspace: keeps the Tauri dependency tree out of espanso's Cargo.lock and lints.
+[workspace]
+
+[lib]
+name = "xpando_app_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = "=2.7.6"
+
+[dependencies]
+tauri = "=2.12.7"
+xpando-core = { path = "../../xpando-core" }
