@@ -4476,6 +4476,10 @@ dependencies = [
 [[package]]
 name = "xpando-core"
 version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_norway",
+]
 
 [[package]]
 name = "zbus"
