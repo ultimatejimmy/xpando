@@ -2,6 +2,7 @@ import { useEffect, useState, useSyncExternalStore, type CSSProperties } from "r
 import { invoke } from "@tauri-apps/api/core";
 import { AlertTriangle, CheckCircle2, ChevronDown, ChevronRight, FileCode2, Pencil } from "lucide-react";
 import { OPERATORS } from "./search";
+import { EngineLine, type EngineStatus } from "./EnginePanels";
 import { YamlEditor, hasDraft, type SavedFolder } from "./YamlEditor";
 
 const STORAGE_KEY = "xpando.advanced";
@@ -318,10 +319,12 @@ export function StatusBar({
   configPath,
   phrases,
   files,
+  engine,
 }: {
   configPath: string | null;
   phrases: number;
   files: number;
+  engine: EngineStatus | null;
 }) {
   return (
     <footer className="adv-statusbar">
@@ -334,6 +337,7 @@ export function StatusBar({
       <span>
         {files} {files === 1 ? "file" : "files"}
       </span>
+      <EngineLine engine={engine} />
     </footer>
   );
 }

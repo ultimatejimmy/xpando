@@ -57,7 +57,8 @@ mod path;
 mod preferences;
 mod util;
 
-const VERSION: &str = env!("CARGO_PKG_VERSION");
+// The suffix lets the xpando app tell this build from stock espanso (docs/xpando/ENGINE.md).
+const VERSION: &str = concat!(env!("CARGO_PKG_VERSION"), "-xpando");
 const LOG_FILE_NAME: &str = "espanso.log";
 
 static CLI_HANDLERS: LazyLock<Vec<CliModule>> = LazyLock::new(|| {

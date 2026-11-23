@@ -1,5 +1,6 @@
 mod advanced;
 mod edit;
+mod engine;
 mod folders;
 mod richtext;
 mod vars;
@@ -33,6 +34,9 @@ pub fn run() {
             advanced::get_entry_source,
             advanced::list_conflicts,
             advanced::config_path,
+            engine::engine_status,
+            engine::preview_clipboard_hack,
+            engine::convert_clipboard_hack,
             edit::save_phrase,
             edit::create_phrase,
             edit::delete_phrase,
