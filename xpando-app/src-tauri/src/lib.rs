@@ -1,4 +1,5 @@
 mod advanced;
+mod edit;
 
 use std::path::PathBuf;
 
@@ -27,7 +28,10 @@ pub fn run() {
             list_phrases,
             advanced::get_entry_source,
             advanced::list_conflicts,
-            advanced::config_path
+            advanced::config_path,
+            edit::save_phrase,
+            edit::create_phrase,
+            edit::delete_phrase
         ])
         .run(tauri::generate_context!())
         .expect("error while running xpando");

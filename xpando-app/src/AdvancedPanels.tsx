@@ -94,7 +94,8 @@ interface EntrySource {
 }
 
 /** The phrase's exact source text with the file's real line numbers. */
-export function YamlPane({ file, index }: { file: string; index: number }) {
+/** `version` is the file's content hash: when it changes (after a save) the source is reloaded. */
+export function YamlPane({ file, index, version }: { file: string; index: number; version: string }) {
   const [source, setSource] = useState<EntrySource | null>(null);
   const [state, setState] = useState<"loading" | "ok" | "unavailable" | "error">("loading");
   const [message, setMessage] = useState("");
@@ -116,7 +117,7 @@ export function YamlPane({ file, index }: { file: string; index: number }) {
     return () => {
       current = false;
     };
-  }, [file, index]);
+  }, [file, index, version]);
 
   if (state === "loading") return <p className="empty">Loading source...</p>;
   if (state === "error") {

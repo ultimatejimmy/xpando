@@ -278,6 +278,7 @@ mod tests {
             file: file.into(),
             phrases,
             warnings: vec![],
+            hash: String::new(),
         }
     }
 

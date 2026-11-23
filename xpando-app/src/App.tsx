@@ -14,6 +14,7 @@ import {
   type DetailTab,
 } from "./AdvancedPanels";
 import { matchesTerms, parseQuery } from "./search";
+import { NewPhraseButton, PhraseActions, PhraseEditor } from "./PhraseEditor";
 
 interface Variable {
   name: string;
@@ -39,6 +40,12 @@ interface FolderData {
   file: string;
   phrases: Phrase[];
   warnings: string[];
+  hash: string;
+}
+
+/** Tolerate a backend that predates the `vars` field instead of crashing the page. */
+function normalizeFolder(f: FolderData): FolderData {
+  return { ...f, phrases: f.phrases.map((p) => ({ ...p, vars: p.vars ?? [] })) };
 }
 
 interface Row {
@@ -135,16 +142,20 @@ export default function App() {
   const [conflicts, setConflicts] = useState<Conflict[]>([]);
   const [configPath, setConfigPath] = useState<string | null>(null);
 
-  useEffect(() => {
+  // Editing: an existing phrase (by row id) or a new phrase in a file.
+  const [editing, setEditing] = useState<{ id: string } | { newIn: string } | null>(null);
+
+  const load = () =>
     invoke<FolderData[]>("list_phrases")
-      .then((data) =>
-        // Tolerate a backend that predates the `vars` field instead of crashing the page.
-        setFolders(
-          data.map((f) => ({ ...f, phrases: f.phrases.map((p) => ({ ...p, vars: p.vars ?? [] })) })),
-        ),
-      )
+      .then((data) => {
+        setFolders(data.map(normalizeFolder));
+        setError(null);
+      })
       .catch((e) => setError(String(e)))
       .finally(() => setLoaded(true));
+
+  useEffect(() => {
+    void load();
   }, []);
 
   useEffect(() => {
@@ -157,11 +168,20 @@ export default function App() {
       .catch(() => setConfigPath(null));
   }, [advanced, folders]);
 
+  /** A folder came back from a save: swap it in and select the phrase at `index`. */
+  const saved = (folder: FolderData, index: number | null) => {
+    setFolders((fs) => fs.map((f) => (f.file === folder.file ? normalizeFolder(folder) : f)));
+    setSelected(index === null ? null : `${folder.file}#${index}`);
+    setEditing(null);
+  };
+
   const rows = useMemo<Row[]>(
     () =>
       folders.flatMap((f) =>
-        f.phrases.map((phrase, i) => ({
-          id: `${f.file}#${i}`,
+        f.phrases.map((phrase) => ({
+          // Address a phrase by its entry index, not its list position: they differ once an
+          // unparseable entry has been skipped.
+          id: `${f.file}#${phrase.index}`,
           folder: f.file,
           folderName: f.name,
           phrase,
@@ -184,6 +204,28 @@ export default function App() {
   const current = visible.find((r) => r.id === selected) ?? null;
   const scopeFolder = folders.find((f) => f.file === scope);
   const scopeName = scope === ALL ? "All phrases" : (scopeFolder?.name ?? "");
+  const editorPane =
+    editing && "newIn" in editing ? (
+      <PhraseEditor
+        key={`new:${editing.newIn}`}
+        folders={folders}
+        file={editing.newIn}
+        phrase={null}
+        onSaved={saved}
+        onCancel={() => setEditing(null)}
+        onReload={load}
+      />
+    ) : editing && current && current.id === editing.id ? (
+      <PhraseEditor
+        key={current.id}
+        folders={folders}
+        file={current.folder}
+        phrase={current.phrase}
+        onSaved={saved}
+        onCancel={() => setEditing(null)}
+        onReload={load}
+      />
+    ) : null;
   const warnings = folders.flatMap((f) => f.warnings.map((w) => `${f.file}: ${w}`));
 
   return (
@@ -270,6 +312,10 @@ export default function App() {
           <h2 className="pane-title">
             {scopeName} <span className="count">{visible.length}</span>
           </h2>
+          <NewPhraseButton
+            disabled={folders.length === 0}
+            onClick={() => setEditing({ newIn: scopeFolder?.file ?? folders[0].file })}
+          />
           {loaded && visible.length === 0 && (
             <p className="empty">
               {query ? "No phrases match your search." : "No phrases found in your espanso match files."}
@@ -282,7 +328,10 @@ export default function App() {
                   type="button"
                   className="phrase"
                   aria-current={r.id === selected}
-                  onClick={() => setSelected(r.id)}
+                  onClick={() => {
+                    setSelected(r.id);
+                    setEditing(null);
+                  }}
                 >
                   <span className="phrase-top">
                     <span className="phrase-name">{title(r.phrase)}</span>
@@ -298,8 +347,15 @@ export default function App() {
         </section>
 
         <section className="pane detail" aria-label="Phrase details">
-          {current ? (
+          {editorPane ?? (current ? (
             <>
+              <PhraseActions
+                folder={folders.find((f) => f.file === current.folder)!}
+                phrase={current.phrase}
+                onEdit={() => setEditing({ id: current.id })}
+                onDeleted={(f) => saved(f, null)}
+                onReload={load}
+              />
               <h2 className="detail-title">{title(current.phrase)}</h2>
               {advanced && <FileMeta file={current.folder} line={current.phrase.line} />}
               {current.phrase.comment && current.phrase.comment !== title(current.phrase) && (
@@ -308,7 +364,11 @@ export default function App() {
               {advanced && <DetailTabs tab={tab} onChange={setTab} />}
               {advanced && tab === "yaml" ? (
                 <div role="tabpanel" id="detail-tabpanel" aria-labelledby="detail-tab-yaml">
-                  <YamlPane file={current.folder} index={current.phrase.index} />
+                  <YamlPane
+                    file={current.folder}
+                    index={current.phrase.index}
+                    version={folders.find((f) => f.file === current.folder)?.hash ?? ""}
+                  />
                 </div>
               ) : (
               <div role={advanced ? "tabpanel" : undefined} id={advanced ? "detail-tabpanel" : undefined}>
@@ -355,7 +415,7 @@ export default function App() {
             </>
           ) : (
             <p className="empty">Select a phrase to see its details.</p>
-          )}
+          ))}
         </section>
       </div>
       {advanced && <StatusBar configPath={configPath} phrases={rows.length} files={folders.length} />}

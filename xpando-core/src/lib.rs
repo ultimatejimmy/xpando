@@ -11,6 +11,8 @@ use std::path::{Path, PathBuf};
 use serde::Serialize;
 use serde_norway::Value;
 
+pub mod edit;
+
 /// Returns every `*.yml` / `*.yaml` match file under `<config_dir>/match`,
 /// recursively, sorted by path. A missing `match` directory yields an empty list.
 pub fn discover_match_files(config_dir: &Path) -> io::Result<Vec<PathBuf>> {
@@ -81,6 +83,8 @@ pub struct Folder {
     pub file: String,
     pub phrases: Vec<Phrase>,
     pub warnings: Vec<String>,
+    /// Hash of the file's text as loaded; pass it back to `edit::save_file` to detect changes.
+    pub hash: String,
 }
 
 const PREVIEW_CHARS: usize = 120;
@@ -325,15 +329,23 @@ pub fn load_folders(config_dir: &Path) -> io::Result<Vec<Folder>> {
             .unwrap_or(&path)
             .to_string_lossy()
             .replace('\\', "/");
-        let (phrases, warnings) = match fs::read_to_string(&path) {
-            Ok(text) => parse_match_text(&text),
-            Err(e) => (Vec::new(), vec![format!("cannot read file: {e}")]),
+        let (phrases, warnings, hash) = match fs::read_to_string(&path) {
+            Ok(text) => {
+                let (p, w) = parse_match_text(&text);
+                (p, w, edit::content_hash(text.as_bytes()))
+            }
+            Err(e) => (
+                Vec::new(),
+                vec![format!("cannot read file: {e}")],
+                String::new(),
+            ),
         };
         folders.push(Folder {
             name: folder_name(&path),
             file,
             phrases,
             warnings,
+            hash,
         });
     }
     Ok(folders)
