@@ -3,6 +3,7 @@
 
 pub mod advanced;
 pub mod conflicts;
+pub mod yamledit;
 
 use std::fs;
 use std::io;

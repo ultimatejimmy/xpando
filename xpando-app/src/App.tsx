@@ -429,6 +429,8 @@ export default function App() {
                     file={current.folder}
                     index={current.phrase.index}
                     version={folders.find((f) => f.file === current.folder)?.hash ?? ""}
+                    onSaved={(f) => saved(f as FolderData, current.phrase.index)}
+                    onReload={load}
                   />
                 </div>
               ) : (

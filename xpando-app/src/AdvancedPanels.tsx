@@ -1,7 +1,8 @@
 import { useEffect, useState, type CSSProperties } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { AlertTriangle, CheckCircle2, ChevronDown, ChevronRight, FileCode2 } from "lucide-react";
+import { AlertTriangle, CheckCircle2, ChevronDown, ChevronRight, FileCode2, Pencil } from "lucide-react";
 import { OPERATORS } from "./search";
+import { YamlEditor, hasDraft, type SavedFolder } from "./YamlEditor";
 
 const STORAGE_KEY = "xpando.advanced";
 
@@ -93,16 +94,32 @@ interface EntrySource {
   error: string | null;
 }
 
-/** The phrase's exact source text with the file's real line numbers. */
-/** `version` is the file's content hash: when it changes (after a save) the source is reloaded. */
-export function YamlPane({ file, index, version }: { file: string; index: number; version: string }) {
+interface YamlPaneProps {
+  file: string;
+  index: number;
+  /** The file's content hash: when it changes (after a save or reload) the source is reloaded. */
+  version: string;
+  /** Called with the reloaded folder after the YAML was saved. */
+  onSaved: (folder: SavedFolder) => void;
+  /** Reloads every folder from disk. */
+  onReload: () => Promise<void>;
+}
+
+/** The phrase's exact source text with the file's real line numbers, and its editor. */
+export function YamlPane(props: YamlPaneProps) {
+  // A new phrase gets a fresh pane, so edit mode never leaks between phrases.
+  return <YamlPaneFor key={`${props.file}#${props.index}`} {...props} />;
+}
+
+function YamlPaneFor({ file, index, version, onSaved, onReload }: YamlPaneProps) {
   const [source, setSource] = useState<EntrySource | null>(null);
   const [state, setState] = useState<"loading" | "ok" | "unavailable" | "error">("loading");
   const [message, setMessage] = useState("");
+  const [editing, setEditing] = useState(() => hasDraft(file, index));
 
   useEffect(() => {
     let current = true;
-    setState("loading");
+    // The old source stays on screen while a reload runs, so an open editor is not torn down.
     invoke<EntrySource | null>("get_entry_source", { file, index })
       .then((s) => {
         if (!current) return;
@@ -131,8 +148,25 @@ export function YamlPane({ file, index, version }: { file: string; index: number
     return (
       <p className="empty">
         The exact source of this phrase cannot be located reliably in {file} (for example, the file uses
-        a flow-style list).
+        a flow-style list), so it cannot be edited here either.
       </p>
+    );
+  }
+  if (editing) {
+    return (
+      <YamlEditor
+        file={file}
+        index={index}
+        entryBase={source.lines.join("\n")}
+        firstLine={source.first_line}
+        hash={version}
+        onSaved={(f) => {
+          setEditing(false);
+          onSaved(f);
+        }}
+        onClose={() => setEditing(false)}
+        onReload={onReload}
+      />
     );
   }
   return (
@@ -150,6 +184,10 @@ export function YamlPane({ file, index, version }: { file: string; index: number
             Invalid{source.error ? `: ${source.error}` : ""}
           </span>
         )}
+        <button type="button" className="btn" onClick={() => setEditing(true)}>
+          <Pencil size={16} aria-hidden="true" />
+          Edit YAML
+        </button>
       </div>
       <table className="adv-code" aria-label={`Source of ${file}`}>
         <tbody>
@@ -160,7 +198,7 @@ export function YamlPane({ file, index, version }: { file: string; index: number
                 className={text.trimStart().startsWith("#") ? "adv-src adv-cmt" : "adv-src"}
                 style={{ "--indent": text.length - text.trimStart().length } as CSSProperties}
               >
-                {text || " "}
+                {text || " "}
               </td>
             </tr>
           ))}
