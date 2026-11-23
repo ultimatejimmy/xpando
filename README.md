@@ -1,119 +1,100 @@
-# ![Espanso Logo](images/espanso-dark.png#gh-dark-mode-only) ![Espanso Logo](images/espanso-light.png#gh-light-mode-only)
+<p align="center">
+  <img src="xpando-app/src-tauri/icons/128x128.png" alt="xpando logo" width="96" />
+</p>
 
-> *A cross-platform Text Expander written in Rust*
+<h1 align="center">xpando</h1>
 
-![GitHub release (latest by date)](https://img.shields.io/github/v/release/espanso/espanso)
-![Maintenance](https://img.shields.io/badge/Maintained-yes-green.svg)
-![Language](https://img.shields.io/badge/language-rust-orange)
-[![inspect.software](https://raw.githubusercontent.com/inspect-software/badges/main/v1/e/espanso/espanso.svg)](https://inspect.software/software/espanso/espanso)
-![License](https://img.shields.io/github/license/espanso/espanso)
+<p align="center"><em>A text expander with a real app. Built on <a href="https://github.com/espanso/espanso">espanso</a>.</em></p>
 
-![Platforms](https://img.shields.io/badge/platforms-Windows%2C%20macOS%20and%20Linux-blue)
+<p align="center">
+  <img alt="License" src="https://img.shields.io/badge/license-GPL--3.0-blue" />
+  <img alt="Platforms" src="https://img.shields.io/badge/platforms-Windows%20(primary)%2C%20macOS%20and%20Linux-blue" />
+  <img alt="Status" src="https://img.shields.io/badge/status-early%20development-orange" />
+</p>
 
-[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/espanso/espanso)
+xpando is a fork of espanso with a modern desktop app for managing your phrases,
+in the spirit of tools like PhraseExpress. Your phrases stay in plain YAML files,
+so everything espanso can do still works, but you no longer have to hand-edit them.
 
-|         Example: 2019          |              Example: 2025              |
-| :----------------------------: | :-------------------------------------: |
-| ![example](images/example.gif) | ![example2025](images/example-2025.gif) |
+> **Status:** early development. Windows is the primary target. macOS and Linux
+> are kept building in CI but get less testing. Expect rough edges, and keep
+> backups of your `match` folder (xpando also writes a one-time `.yml.bak` the
+> first time it edits a file).
 
-## Quick Links
+## What you get
 
-* [espanso website](https://espanso.org)
-* [espanso hub](https://hub.espanso.org/)
+* **Phrase manager.** Browse, search and edit every phrase in a three-pane window.
+  Search understands operators, and conflicting triggers are flagged.
+* **Rich text.** A full WYSIWYG editor for formatted phrases (bold, lists, links,
+  tables), stored as espanso `html:` matches.
+* **Macros.** Insert the date, the clipboard, a random pick, a choice list and
+  more, with a simple editor. Power options (shell commands, forms) are in
+  Advanced mode.
+* **Folders and per-app scope.** Each folder is a match file. Limit a folder to
+  chosen apps, or leave it for everything.
+* **Advanced mode.** One switch reveals the power tools: every match option,
+  the macro settings, and an editable YAML view with a safety net.
+* **Safe edits.** Saves are atomic, preserve your comments and formatting, and
+  refuse if the file changed underneath you.
+* **Set clipboard.** A native `set_clipboard` macro for xpando's engine, instead
+  of PowerShell workarounds. Stock espanso does not understand it. See
+  [docs/xpando/SET-CLIPBOARD.md](docs/xpando/SET-CLIPBOARD.md).
+* **Everything espanso does.** Triggers, regex, app-specific configs, packages
+  and the espanso hub keep working. See the [espanso docs](https://espanso.org/docs/).
 
-### What is a Text Expander?
+## Install
 
-A *text expander* is a program that detects when you type
-a specific **keyword** and replaces it with **something else**.
-This is useful in many ways:
+Installers will be published on the [Releases](https://github.com/ultimatejimmy/xpando/releases)
+page once the release pipeline is live. Versions are date-based
+(for example `2026.11.23`, with betas like `2026.11.23-beta`, which are marked
+pre-release). See [docs/xpando/RELEASING.md](docs/xpando/RELEASING.md).
 
-* **Save a lot of typing**, expanding common sentences
-* Create **system-wide** code snippets
-* Execute **custom scripts**
-* Use **emojis** like a pro
-* System-wide 'autocorrect' specific to you
+## Build from source
 
-## Key Features
+You need Rust (stable) and Node.js. On Windows, install the Visual Studio 2022
+Build Tools with the C++ workload.
 
-* Cross-platform (**Windows**, **macOS**, **Linux**)
-* Privacy-first (100% local, no tracking)
-* Works with almost **any program**
-* **Emoji** support 😄
-* **Image** support
-* Includes a powerful **Search Bar** 🔎
-* **Date** expansion support
-* **Custom scripts** support
-* **Shell commands** support
-* **App-specific** configurations
-* Support [Forms](https://espanso.org/docs/matches/forms/)
-* Expandable with **packages**
-* Built-in **package manager** for [espanso hub](https://hub.espanso.org/)
-* File based configuration
-* Support Regex triggers
-* Experimental Wayland support
-* Written in Rust (Fast, Reliable)
-
-## Community & Support
-* 💬 [espanso Discord Server](https://discord.gg/DFcCNDg7bB)
-* 📖 [official documentation](https://espanso.org/docs/)
-* 💬 [official Subreddit](https://www.reddit.com/r/espanso/)
-* 🐛 [Report Issues](https://github.com/espanso/espanso/issues)
-* 💡 [Feature Requests](https://github.com/espanso/espanso/discussions)
-
-## Quick Start Examples
-
-You can create additional files to organize your matches any way you want.<br />
-Make sure to adhere to proper YAML spacing.
-```yaml
-matches:
-  - trigger: ":hello"
-    replace: "Hi There!"
-  - triggers: [":test1", ":test2"]
-    replace: "These both expand to the same thing"
+```powershell
+cd xpando-app
+npm ci --ignore-scripts
+npx tauri dev
 ```
-## Team Members and Contributors
 
-### Team
+The app reads and writes your existing espanso `match` folder
+(`%APPDATA%\espanso\match` on Windows). Run the checks with:
 
-[Federico Terzi](https://github.com/federico-terzi) (Creator of espanso)<br />
-Rest of team in Alphabetical Order<br />
-[Archigos](https://github.com/Archigos) (Maintainer)<br />
-[Auca](https://github.com/AucaCoyan) (Lead Maintainer)<br />
-[n8henrie](https://github.com/n8henrie)<br />
-[smeech](https://github.com/smeech)<br />
+```powershell
+cd xpando-core; cargo test
+cd ..\xpando-app; npm run build
+```
 
-You can also see the up to date list of Team Members [here](https://github.com/orgs/espanso/people)
+The espanso engine itself builds as before, see [Compilation.md](Compilation.md).
 
-### Contributors
+## Project layout
 
-So many people have helped the project along the way. Thank you all!
+| Path | What it is |
+| :--- | :--------- |
+| `xpando-core/` | Rust library: parsing, format-preserving YAML edits, conflicts, folders |
+| `xpando-app/` | The Tauri 2 desktop app (React and TypeScript front end) |
+| `docs/xpando/` | Plan, glossary, design notes and release process |
+| everything else | The upstream espanso engine, kept close to upstream so changes can be merged |
 
-[![Image](https://contrib.rocks/image?repo=espanso/espanso)](https://github.com/espanso/espanso/graphs/contributors)
+The roadmap is in [docs/xpando/PLAN.md](docs/xpando/PLAN.md) and the shared
+vocabulary (for example, "macro") is in [docs/xpando/TERMS.md](docs/xpando/TERMS.md).
 
-## Sponsors
+## Contributing
 
-We want to thank SignPath.io for code signing the Windows binaries ❤️
+Issues and pull requests are welcome. Please keep user-facing wording consistent
+with [TERMS.md](docs/xpando/TERMS.md), and run the checks above before opening a PR.
+Dependencies are pinned to exact versions and installed with `--ignore-scripts`.
 
-## Donations
+## Credits and license
 
-espanso is a free, open-source software project created by [Federico Terzi](https://github.com/federico-terzi) and now maintained by a small team.<br />
-If you liked the project and would like to support further development,
-please consider  making a small donation, it really helps :)
+xpando is built on [espanso](https://github.com/espanso/espanso), created by
+[Federico Terzi](https://github.com/federico-terzi) and maintained by the espanso
+team and contributors. Thank you all. The espanso engine, its docs and its
+community live at [espanso.org](https://espanso.org).
 
-### Current Options
-
-| PayPal | Coming Soon |
-| :----: | :---------: |
-| [![Donate with PayPal](images/donate.gif)](https://www.paypal.com/cgi-bin/webscr?cmd=_s-xclick&hosted_button_id=FHNLR5DRS267E&source=url) | |
-
-## Remarks
-
-* Thanks to [libxdo](https://github.com/jordansissel/xdotool) and [xclip](https://github.com/astrand/xclip), used to implement the Linux port.
-* Thanks to [libxkbcommon](https://xkbcommon.org/) and [wl-clipboard](https://github.com/bugaevc/wl-clipboard), used to implement the Wayland port.
-* Thanks to [wxWidgets](https://www.wxwidgets.org/) for providing a powerful cross-platform GUI library.
-* Free code signing provided by SignPath.io, certificate by SignPath Foundation.
-
-## License
-
-espanso was created by [Federico Terzi](http://federicoterzi.com)
-and is licensed under the [GPL-3.0 license](/LICENSE).
+xpando is free software, licensed under the [GPL-3.0 license](LICENSE), the same
+license as espanso. The panda icon is from [Lucide](https://lucide.dev), and the
+wordmark font is Fredoka (SIL Open Font License).
