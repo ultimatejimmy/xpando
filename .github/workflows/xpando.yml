@@ -66,6 +66,11 @@ jobs:
       - name: Type-check and build frontend
         working-directory: xpando-app
         run: npm run build
-      - name: Check Tauri shell
+      - name: Test search parser
+        working-directory: xpando-app
+        run: node --test --experimental-strip-types src/search.test.ts
+      - name: Check Tauri shell formatting and build
         working-directory: xpando-app/src-tauri
-        run: cargo check --locked
+        run: |
+          cargo fmt --check
+          cargo check --locked
