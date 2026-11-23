@@ -2,6 +2,9 @@ import { useEffect, useId, useMemo, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { AlertTriangle, Info, Pencil, Plus, RefreshCw, Save, Trash2, X } from "lucide-react";
+import { BodyModeSwitch, RichBodyEditor } from "./RichLazy";
+import type { BodyMode } from "./RichLazy";
+import { isBlankHtml } from "./richtextUtil";
 import "./editor.css";
 
 /** The parts of the browser's phrase and folder types that editing needs. */
@@ -89,6 +92,10 @@ export function PhraseEditor({ folders, file, phrase, onSaved, onCancel, onReloa
   const [triggers, setTriggers] = useState<string[]>(phrase ? phrase.triggers : [""]);
   const [label, setLabel] = useState(phrase?.label ?? "");
   const [body, setBody] = useState(phrase?.content ?? "");
+  // Rich text (html:) bodies: `body` holds HTML in rich mode and plain text in plain mode.
+  const originalMode: BodyMode = phrase?.kind === "html" ? "rich" : "plain";
+  const [mode, setMode] = useState<BodyMode>(originalMode);
+  const [switches, setSwitches] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const firstTrigger = useRef<HTMLInputElement>(null);
@@ -99,7 +106,8 @@ export function PhraseEditor({ folders, file, phrase, onSaved, onCancel, onReloa
   }, []);
 
   const triggersEditable = !phrase || !phrase.is_regex;
-  const bodyEditable = !phrase || (phrase.kind === "replace" && phrase.vars.length === 0);
+  const bodyEditable =
+    !phrase || (phrase.kind === "replace" && phrase.vars.length === 0) || phrase.kind === "html";
   const bodyNote = !phrase
     ? null
     : phrase.kind !== "replace"
@@ -132,15 +140,18 @@ export function PhraseEditor({ folders, file, phrase, onSaved, onCancel, onReloa
         }
       }
     }
-    if (bodyEditable && body.trim() === "") problems.push("Enter the text to insert.");
+    if (bodyEditable && (mode === "rich" ? isBlankHtml(body) : body.trim() === "")) {
+      problems.push("Enter the text to insert.");
+    }
     return { problems, warnings };
-  }, [triggers, body, bodyEditable, triggersEditable, folder, folders, file, phrase]);
+  }, [triggers, body, mode, bodyEditable, triggersEditable, folder, folders, file, phrase]);
 
   const changed =
     !phrase ||
     !sameList(triggers, phrase.triggers) ||
     label !== (phrase.label ?? "") ||
-    (bodyEditable && body !== phrase.content);
+    (bodyEditable && body !== phrase.content) ||
+    mode !== originalMode;
 
   function setTrigger(i: number, value: string) {
     setTriggers((ts) => ts.map((t, j) => (j === i ? value : t)));
@@ -153,7 +164,29 @@ export function PhraseEditor({ folders, file, phrase, onSaved, onCancel, onReloa
     setError(null);
     const labelOut = label === (phrase?.label ?? "") ? (phrase?.label ?? null) : label.trim() || null;
     try {
-      if (phrase) {
+      const rich = mode === "rich";
+      if (phrase && (originalMode === "rich" || mode !== originalMode)) {
+        // Rich text: the body goes through the HTML sanitiser, and a switch between plain and
+        // rich text is part of the same atomic save.
+        const switched = mode !== originalMode;
+        const saved = await invoke<EditorFolder>("save_rich_phrase", {
+          file,
+          index: phrase.index,
+          edit: { triggers, label: labelOut, body: rich ? null : body },
+          convert: switched ? (rich ? "html" : "plain") : null,
+          html: rich && (switched || body !== phrase.content) ? body : null,
+          expectedHash: folder.hash,
+        });
+        onSaved(saved, phrase.index);
+      } else if (!phrase && rich) {
+        const saved = await invoke<EditorFolder>("create_rich_phrase", {
+          file,
+          phrase: { triggers, label: labelOut, body: "" },
+          html: body,
+          expectedHash: folder.hash,
+        });
+        onSaved(saved, Math.max(...saved.phrases.map((p) => p.index)));
+      } else if (phrase) {
         const saved = await invoke<EditorFolder>("save_phrase", {
           file,
           index: phrase.index,
@@ -249,8 +282,31 @@ export function PhraseEditor({ folders, file, phrase, onSaved, onCancel, onReloa
       </div>
 
       <div className="editor-group">
-        <label htmlFor={`${uid}-body`}>Text</label>
-        {bodyEditable ? (
+        <div className="rt-labelrow">
+          <label htmlFor={`${uid}-body`} id={`${uid}-body-label`}>
+            Text
+          </label>
+          {bodyEditable && (
+            <BodyModeSwitch
+              mode={mode}
+              body={body}
+              onSwitch={(m, b) => {
+                setMode(m);
+                setBody(b);
+                setSwitches((n) => n + 1);
+              }}
+            />
+          )}
+        </div>
+        {mode === "rich" ? (
+          <RichBodyEditor
+            // A new editor after each switch, so it starts from the converted body.
+            key={switches}
+            html={body}
+            onChange={setBody}
+            labelledBy={`${uid}-body-label`}
+          />
+        ) : bodyEditable ? (
           <textarea
             id={`${uid}-body`}
             className="field mono"

@@ -14,6 +14,7 @@ import {
   type DetailTab,
 } from "./AdvancedPanels";
 import { matchesTerms, parseQuery } from "./search";
+import { RichTextView } from "./RichLazy";
 import { NewPhraseButton, PhraseActions, PhraseEditor } from "./PhraseEditor";
 
 interface Variable {
@@ -384,7 +385,11 @@ export default function App() {
                 ))}
               </div>
               <p className="detail-meta">{KIND_LABEL[current.phrase.kind] ?? current.phrase.kind}</p>
-              <pre className="content-text">{withPlaceholders(current.phrase.content)}</pre>
+              {current.phrase.kind === "html" ? (
+                <RichTextView html={current.phrase.content} />
+              ) : (
+                <pre className="content-text">{withPlaceholders(current.phrase.content)}</pre>
+              )}
               {current.phrase.vars.length > 0 && (
                 <>
                   <h3 className="detail-meta">Variables</h3>
