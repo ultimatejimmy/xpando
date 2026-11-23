@@ -16,6 +16,7 @@ interface Phrase {
   content: string;
   preview: string;
   vars: Variable[];
+  comment: string | null;
 }
 
 interface FolderData {
@@ -45,8 +46,9 @@ function triggerText(p: Phrase): string {
   return p.is_regex ? "regex" : p.triggers.join("  ");
 }
 
+/** Name shown for a phrase: its label, else the comment above it, else its trigger. */
 function title(p: Phrase): string {
-  return p.label || p.triggers[0] || "(untitled)";
+  return p.label || p.comment?.split("\n")[0] || p.triggers[0] || "(untitled)";
 }
 
 const PLACEHOLDER_ONLY = /^(\s*\{\{[^}]+\}\}\s*)+$/;
@@ -77,7 +79,9 @@ function matches(row: Row, query: string): boolean {
   const q = query.trim().toLowerCase();
   if (!q) return true;
   const p = row.phrase;
-  return [...p.triggers, p.label ?? "", p.content].some((s) => s.toLowerCase().includes(q));
+  return [...p.triggers, p.label ?? "", p.comment ?? "", p.content].some((s) =>
+    s.toLowerCase().includes(q),
+  );
 }
 
 export default function App() {
@@ -220,6 +224,9 @@ export default function App() {
           {current ? (
             <>
               <h2 className="detail-title">{title(current.phrase)}</h2>
+              {current.phrase.comment && current.phrase.comment !== title(current.phrase) && (
+                <p className="detail-comment">{current.phrase.comment}</p>
+              )}
               <p className="detail-meta">
                 {current.phrase.is_regex ? "Regex trigger" : "Trigger"}
                 {current.phrase.triggers.length > 1 ? "s" : ""}

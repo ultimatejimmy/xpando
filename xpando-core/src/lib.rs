@@ -61,6 +61,8 @@ pub struct Phrase {
     pub preview: String,
     /// Variables the body's `{{placeholders}}` are built from, in file order.
     pub vars: Vec<Var>,
+    /// The `# comment` lines directly above the entry, joined with newlines.
+    pub comment: Option<String>,
 }
 
 /// A folder is one match file.
@@ -139,8 +141,7 @@ fn parse_entry(entry: &Value) -> Result<Phrase, String> {
             break;
         }
     }
-    let (kind, content) =
-        body.ok_or("no replace, html, markdown, image_path or form")?;
+    let (kind, content) = body.ok_or("no replace, html, markdown, image_path or form")?;
     let content = content.trim_end_matches('\n').to_string();
     Ok(Phrase {
         triggers,
@@ -150,13 +151,72 @@ fn parse_entry(entry: &Value) -> Result<Phrase, String> {
         preview: make_preview(&content),
         content,
         vars: get("vars").map(parse_vars).unwrap_or_default(),
+        comment: None,
     })
+}
+
+/// Finds the `# comment` block directly above each entry of `matches:`.
+///
+/// YAML parsers drop comments, so this scans the raw lines. It returns one slot per
+/// entry, or `None` when the number of entries it finds differs from `expected`
+/// (unusual layout), so a comment is never attached to the wrong phrase.
+fn entry_comments(text: &str, expected: usize) -> Option<Vec<Option<String>>> {
+    let lines: Vec<&str> = text.lines().collect();
+    let start = lines.iter().position(|l| l.trim_end() == "matches:")? + 1;
+    let indent_of = |l: &str| l.len() - l.trim_start().len();
+    let is_entry = |l: &str| l.trim_start() == "-" || l.trim_start().starts_with("- ");
+
+    let mut entry_indent = None;
+    let mut starts = Vec::new();
+    for (i, line) in lines.iter().enumerate().skip(start) {
+        let t = line.trim_start();
+        if t.is_empty() || t.starts_with('#') {
+            continue;
+        }
+        let indent = indent_of(line);
+        if indent == 0 && !t.starts_with('-') {
+            break; // next top-level key
+        }
+        let base = *entry_indent.get_or_insert(indent);
+        if indent == base && is_entry(line) {
+            starts.push(i);
+        }
+    }
+    if starts.len() != expected {
+        return None;
+    }
+    Some(
+        starts
+            .into_iter()
+            .map(|s| {
+                let mut block = Vec::new();
+                let mut j = s;
+                let entry_indent = indent_of(lines[s]);
+                // Only comments at or left of the entry's own indent describe it; a deeper
+                // comment sits inside the previous entry's body.
+                while j > 0
+                    && lines[j - 1].trim_start().starts_with('#')
+                    && indent_of(lines[j - 1]) <= entry_indent
+                {
+                    j -= 1;
+                    let c = lines[j].trim_start().trim_start_matches('#');
+                    block.push(c.strip_prefix(' ').unwrap_or(c).trim_end().to_string());
+                }
+                block.reverse();
+                (!block.is_empty()).then(|| block.join("\n"))
+            })
+            .collect(),
+    )
 }
 
 /// Text form of a YAML value: scalars as-is, lists and maps as trimmed YAML.
 fn value_text(v: &Value) -> String {
-    scalar_string(v)
-        .unwrap_or_else(|| serde_norway::to_string(v).unwrap_or_default().trim().to_string())
+    scalar_string(v).unwrap_or_else(|| {
+        serde_norway::to_string(v)
+            .unwrap_or_default()
+            .trim()
+            .to_string()
+    })
 }
 
 /// Reads a `vars:` list. Lenient: items that are not mappings or have no name are skipped.
@@ -202,9 +262,16 @@ pub fn parse_match_text(text: &str) -> (Vec<Phrase>, Vec<String>) {
         },
         _ => return (phrases, vec!["file is not a YAML mapping".into()]),
     };
+    let mut comments = entry_comments(text, entries.len())
+        .unwrap_or_default()
+        .into_iter();
     for (i, entry) in entries.iter().enumerate() {
+        let comment = comments.next().flatten();
         match parse_entry(entry) {
-            Ok(p) => phrases.push(p),
+            Ok(mut p) => {
+                p.comment = comment;
+                phrases.push(p);
+            }
             Err(e) => warnings.push(format!("match #{}: {e}", i + 1)),
         }
     }
@@ -257,7 +324,12 @@ mod tests {
         let files = discover_match_files(&dir).unwrap();
         let names: Vec<_> = files
             .iter()
-            .map(|p| p.strip_prefix(&dir).unwrap().to_string_lossy().replace('\\', "/"))
+            .map(|p| {
+                p.strip_prefix(&dir)
+                    .unwrap()
+                    .to_string_lossy()
+                    .replace('\\', "/")
+            })
             .collect();
         assert_eq!(names, ["match/base.yml", "match/work/sales.yaml"]);
         fs::remove_dir_all(&dir).unwrap();
@@ -329,9 +401,15 @@ mod tests {
         let names: Vec<_> = p[0].vars.iter().map(|v| v.name.as_str()).collect();
         assert_eq!(names, ["d", "clip", "out", "s"]);
         assert_eq!(p[0].vars[0].kind, "date");
-        assert_eq!(p[0].vars[0].params, [("format".to_string(), "%Y%m%d".to_string())]);
+        assert_eq!(
+            p[0].vars[0].params,
+            [("format".to_string(), "%Y%m%d".to_string())]
+        );
         assert!(p[0].vars[1].params.is_empty());
-        assert_eq!(p[0].vars[2].params[0], ("echo".to_string(), "{{d}}_{{clip}}".to_string()));
+        assert_eq!(
+            p[0].vars[2].params[0],
+            ("echo".to_string(), "{{d}}_{{clip}}".to_string())
+        );
         // Param order follows the file.
         assert_eq!(p[0].vars[3].params[0].0, "shell");
         assert_eq!(p[0].vars[3].params[1].0, "cmd");
@@ -350,6 +428,36 @@ mod tests {
     }
 
     #[test]
+    fn comments_above_entries_become_descriptions() {
+        let text = "# file header\n\nmatches:\n  # report end year\n  - trigger: a\n    replace: x\n\n  # not attached: blank line below\n\n  - trigger: b\n    replace: y\n  # line one\n  # line two\n  - trigger: c\n    replace: z\n    # inner comment, not a description\n  - trigger: d\n    replace: w\n";
+        let (p, w) = parse_match_text(text);
+        assert!(w.is_empty());
+        assert_eq!(p[0].comment.as_deref(), Some("report end year"));
+        assert_eq!(p[1].comment, None);
+        assert_eq!(p[2].comment.as_deref(), Some("line one\nline two"));
+        assert_eq!(p[3].comment, None);
+    }
+
+    #[test]
+    fn comments_stay_aligned_when_an_entry_is_skipped() {
+        let text = "matches:\n  # first\n  - trigger: a\n    replace: x\n  # broken\n  - just text\n  # third\n  - trigger: c\n    replace: z\n";
+        let (p, w) = parse_match_text(text);
+        assert_eq!(w.len(), 1);
+        assert_eq!(p.len(), 2);
+        assert_eq!(p[0].comment.as_deref(), Some("first"));
+        assert_eq!(p[1].comment.as_deref(), Some("third"));
+    }
+
+    #[test]
+    fn unusual_layout_gets_no_comments_rather_than_wrong_ones() {
+        // Flow-style list: the line scan cannot find the entries, so it attaches nothing.
+        let text = "matches:\n  # note\n  [{trigger: a, replace: x}]\nglobal_vars: []\n";
+        let (p, _) = parse_match_text(text);
+        assert_eq!(p.len(), 1);
+        assert_eq!(p[0].comment, None);
+    }
+
+    #[test]
     fn empty_and_invalid_files() {
         assert_eq!(parse_match_text(""), (vec![], vec![]));
         assert!(parse_match_text("matches: []").1.is_empty());
@@ -362,7 +470,11 @@ mod tests {
     fn loads_folders_with_names() {
         let dir = temp_dir("folders");
         fs::create_dir_all(dir.join("match")).unwrap();
-        fs::write(dir.join("match/_base.yml"), "matches:\n  - trigger: a\n    replace: b\n").unwrap();
+        fs::write(
+            dir.join("match/_base.yml"),
+            "matches:\n  - trigger: a\n    replace: b\n",
+        )
+        .unwrap();
         fs::write(dir.join("match/bad.yml"), "matches: [x").unwrap();
         let f = load_folders(&dir).unwrap();
         assert_eq!(f[0].name, "base");

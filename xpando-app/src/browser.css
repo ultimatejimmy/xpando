@@ -305,3 +305,11 @@ button {
   overflow-wrap: anywhere;
   font-family: "Cascadia Mono", Consolas, monospace;
 }
+
+/* The # comment above a phrase, shown as its description */
+.detail-comment {
+  margin: -4px 0 12px;
+  color: var(--muted);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
