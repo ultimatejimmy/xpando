@@ -2,6 +2,12 @@ import { useEffect, useMemo, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { AlertTriangle, Folder as FolderIcon, Library, Panda, Search } from "lucide-react";
 
+interface Variable {
+  name: string;
+  kind: string;
+  params: [string, string][];
+}
+
 interface Phrase {
   triggers: string[];
   is_regex: boolean;
@@ -9,6 +15,7 @@ interface Phrase {
   kind: string;
   content: string;
   preview: string;
+  vars: Variable[];
 }
 
 interface FolderData {
@@ -40,6 +47,30 @@ function triggerText(p: Phrase): string {
 
 function title(p: Phrase): string {
   return p.label || p.triggers[0] || "(untitled)";
+}
+
+const PLACEHOLDER_ONLY = /^(\s*\{\{[^}]+\}\}\s*)+$/;
+
+/** A body made only of {{placeholders}} says nothing, so describe how it is built. */
+function previewText(p: Phrase): string {
+  if (p.vars.length > 0 && PLACEHOLDER_ONLY.test(p.content)) {
+    const kinds = [...new Set(p.vars.map((v) => v.kind).filter(Boolean))];
+    return `Built from ${kinds.join(", ")}`;
+  }
+  return p.preview;
+}
+
+/** Renders text with each {{placeholder}} highlighted. */
+function withPlaceholders(text: string) {
+  return text.split(/(\{\{[^}]+\}\})/).map((part, i) =>
+    /^\{\{[^}]+\}\}$/.test(part) ? (
+      <span className="placeholder" key={i}>
+        {part}
+      </span>
+    ) : (
+      part
+    ),
+  );
 }
 
 function matches(row: Row, query: string): boolean {
@@ -173,7 +204,7 @@ export default function App() {
                     <span className="phrase-name">{title(r.phrase)}</span>
                     <span className="chip">{triggerText(r.phrase)}</span>
                   </span>
-                  <span className="preview">{r.phrase.preview}</span>
+                  <span className="preview">{previewText(r.phrase)}</span>
                 </button>
               </li>
             ))}
@@ -196,7 +227,32 @@ export default function App() {
                 ))}
               </div>
               <p className="detail-meta">{KIND_LABEL[current.phrase.kind] ?? current.phrase.kind}</p>
-              <pre className="content-text">{current.phrase.content}</pre>
+              <pre className="content-text">{withPlaceholders(current.phrase.content)}</pre>
+              {current.phrase.vars.length > 0 && (
+                <>
+                  <h3 className="detail-meta">Variables</h3>
+                  <ul className="vars">
+                    {current.phrase.vars.map((v) => (
+                      <li className="var" key={v.name}>
+                        <div className="var-head">
+                          <span className="placeholder">{`{{${v.name}}}`}</span>
+                          <span className="var-kind">{v.kind || "unknown type"}</span>
+                        </div>
+                        {v.params.length > 0 && (
+                          <dl className="var-params">
+                            {v.params.map(([k, val]) => (
+                              <div key={k}>
+                                <dt>{k}</dt>
+                                <dd>{withPlaceholders(val)}</dd>
+                              </div>
+                            ))}
+                          </dl>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              )}
             </>
           ) : (
             <p className="empty">Select a phrase to see its details.</p>

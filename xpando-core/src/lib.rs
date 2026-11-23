@@ -35,6 +35,17 @@ fn collect(dir: &Path, out: &mut Vec<PathBuf>) -> io::Result<()> {
     Ok(())
 }
 
+/// One `vars:` entry: a dynamic value that `{{name}}` placeholders refer to
+/// (date, clipboard, shell, echo, choice, ...).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct Var {
+    pub name: String,
+    /// The variable type, e.g. `date`, `clipboard`, `shell`, `echo`.
+    pub kind: String,
+    /// `params:` as ordered key/value pairs; nested values are rendered as YAML text.
+    pub params: Vec<(String, String)>,
+}
+
 /// One phrase (a single entry of `matches:`), read-only.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Phrase {
@@ -48,6 +59,8 @@ pub struct Phrase {
     pub content: String,
     /// Plain-text preview: whitespace collapsed, about 120 characters.
     pub preview: String,
+    /// Variables the body's `{{placeholders}}` are built from, in file order.
+    pub vars: Vec<Var>,
 }
 
 /// A folder is one match file.
@@ -136,7 +149,38 @@ fn parse_entry(entry: &Value) -> Result<Phrase, String> {
         kind: kind.to_string(),
         preview: make_preview(&content),
         content,
+        vars: get("vars").map(parse_vars).unwrap_or_default(),
     })
+}
+
+/// Text form of a YAML value: scalars as-is, lists and maps as trimmed YAML.
+fn value_text(v: &Value) -> String {
+    scalar_string(v)
+        .unwrap_or_else(|| serde_norway::to_string(v).unwrap_or_default().trim().to_string())
+}
+
+/// Reads a `vars:` list. Lenient: items that are not mappings or have no name are skipped.
+fn parse_vars(vars: &Value) -> Vec<Var> {
+    let Some(seq) = vars.as_sequence() else {
+        return Vec::new();
+    };
+    seq.iter()
+        .filter_map(|item| {
+            let map = item.as_mapping()?;
+            let name = map.get("name").and_then(scalar_string)?;
+            let kind = map.get("type").and_then(scalar_string).unwrap_or_default();
+            let params = map
+                .get("params")
+                .and_then(Value::as_mapping)
+                .map(|p| {
+                    p.iter()
+                        .filter_map(|(k, v)| Some((scalar_string(k)?, value_text(v))))
+                        .collect()
+                })
+                .unwrap_or_default();
+            Some(Var { name, kind, params })
+        })
+        .collect()
 }
 
 /// Parses the text of one match file. Unparseable entries are skipped and
@@ -274,6 +318,35 @@ mod tests {
         );
         assert_eq!(p.len(), 1);
         assert_eq!(w.len(), 3);
+    }
+
+    #[test]
+    fn vars_are_parsed_in_order_with_params() {
+        let (p, w) = parse_match_text(
+            "matches:\n  - trigger: TDC\n    replace: \"{{out}}\"\n    vars:\n      - name: d\n        type: date\n        params:\n          format: \"%Y%m%d\"\n      - name: clip\n        type: clipboard\n      - name: out\n        type: echo\n        params:\n          echo: \"{{d}}_{{clip}}\"\n      - name: s\n        type: shell\n        params:\n          shell: powershell\n          cmd: run it\n  - trigger: plain\n    replace: hi\n",
+        );
+        assert!(w.is_empty());
+        let names: Vec<_> = p[0].vars.iter().map(|v| v.name.as_str()).collect();
+        assert_eq!(names, ["d", "clip", "out", "s"]);
+        assert_eq!(p[0].vars[0].kind, "date");
+        assert_eq!(p[0].vars[0].params, [("format".to_string(), "%Y%m%d".to_string())]);
+        assert!(p[0].vars[1].params.is_empty());
+        assert_eq!(p[0].vars[2].params[0], ("echo".to_string(), "{{d}}_{{clip}}".to_string()));
+        // Param order follows the file.
+        assert_eq!(p[0].vars[3].params[0].0, "shell");
+        assert_eq!(p[0].vars[3].params[1].0, "cmd");
+        assert!(p[1].vars.is_empty());
+    }
+
+    #[test]
+    fn nested_param_values_and_bad_vars_are_tolerated() {
+        let (p, w) = parse_match_text(
+            "matches:\n  - trigger: c\n    replace: \"{{x}}\"\n    vars:\n      - name: x\n        type: choice\n        params:\n          values: [a, b]\n      - just a string\n      - type: date\n",
+        );
+        assert!(w.is_empty());
+        assert_eq!(p[0].vars.len(), 1);
+        assert_eq!(p[0].vars[0].params[0].0, "values");
+        assert!(p[0].vars[0].params[0].1.contains("- a"));
     }
 
     #[test]
