@@ -1,0 +1,242 @@
+/* Phrase editor, delete confirmation and their buttons. Uses the variables from styles.css. */
+
+:root {
+  --on-accent: #ffffff;
+  --danger: #b3261e;
+  --on-danger: #ffffff;
+  --danger-text: #c42b1c;
+  --warn-text: #7a4b00;
+  --field-border: #747a86;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --on-accent: #0f1f0d;
+    --danger: #ffb4ab;
+    --on-danger: #3b0a07;
+    --danger-text: #ff99a4;
+    --warn-text: #ffcc66;
+    --field-border: #8b92a0;
+  }
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 4px 12px;
+  border: 1px solid var(--field-border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.btn:hover:not(:disabled) {
+  background: var(--bg);
+}
+
+.btn:focus-visible,
+.field:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.btn:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.btn-primary {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: var(--accent);
+  filter: brightness(0.92);
+}
+
+.btn-danger {
+  border-color: var(--danger);
+  background: var(--danger);
+  color: var(--on-danger);
+}
+
+.btn-danger:hover:not(:disabled) {
+  background: var(--danger);
+  filter: brightness(0.92);
+}
+
+.btn-icon {
+  min-width: 32px;
+  padding: 4px;
+}
+
+.new-phrase {
+  margin: 0 8px 8px;
+}
+
+.detail-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  margin: 0 0 8px;
+}
+
+/* Editor form */
+.editor {
+  display: grid;
+  gap: 16px;
+  max-width: 720px;
+}
+
+.editor .detail-title,
+.editor .editor-where {
+  margin: 0;
+}
+
+.editor-group {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+
+.editor-group > label,
+.editor-group > legend {
+  padding: 0;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.trigger-row {
+  display: flex;
+  gap: 6px;
+}
+
+.field {
+  width: 100%;
+  min-width: 0;
+  padding: 6px 10px;
+  border: 1px solid var(--field-border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+}
+
+.field.mono {
+  font-family: "Cascadia Mono", Consolas, monospace;
+  font-size: 13px;
+}
+
+textarea.field {
+  resize: vertical;
+  line-height: 1.4;
+}
+
+.field[readonly] {
+  background: var(--bg);
+}
+
+.editor-note,
+.editor-warnings li,
+.editor-error {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0;
+  font-size: 13px;
+}
+
+.editor-note {
+  color: var(--muted);
+}
+
+.editor-note svg,
+.editor-warnings svg,
+.editor-error svg {
+  flex: none;
+  margin-top: 2px;
+}
+
+.editor-problems,
+.editor-warnings {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 4px;
+  font-size: 13px;
+}
+
+.editor-problems {
+  color: var(--danger-text);
+}
+
+.editor-warnings {
+  color: var(--warn-text);
+}
+
+.editor-error {
+  align-items: center;
+  padding: 8px 12px;
+  border: 1px solid var(--danger-text);
+  border-radius: 6px;
+  color: var(--danger-text);
+}
+
+.editor-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* Delete confirmation */
+.confirm {
+  max-width: min(480px, calc(100vw - 32px));
+  padding: 20px 24px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--ink);
+}
+
+.confirm::backdrop {
+  background: rgb(0 0 0 / 45%);
+}
+
+.confirm-title {
+  margin: 0 0 12px;
+  font-size: 18px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.confirm p {
+  margin: 0 0 12px;
+}
+
+.confirm-list {
+  margin: 0 0 12px;
+  padding-left: 20px;
+  display: grid;
+  gap: 4px;
+  overflow-wrap: anywhere;
+}
+
+.confirm-comment {
+  color: var(--muted);
+  white-space: pre-wrap;
+}
+
+.confirm .editor-error {
+  margin-bottom: 12px;
+}
