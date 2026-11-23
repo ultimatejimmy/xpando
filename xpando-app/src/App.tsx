@@ -27,6 +27,7 @@ import {
 import { FolderToolbar, NewFolderButton, ScopeLabel, useFolderInfo } from "./FolderManager";
 import { RichTextView } from "./RichLazy";
 import { VarsAka, macroLabel } from "./VarsEditor";
+import { ClipboardHackOffer, EngineWarning, useEngine } from "./EnginePanels";
 
 interface MacroInfo {
   name: string;
@@ -157,6 +158,7 @@ export default function App() {
   const [searchFocused, setSearchFocused] = useState(false);
   const [conflicts, setConflicts] = useState<Conflict[]>([]);
   const [configPath, setConfigPath] = useState<string | null>(null);
+  const engine = useEngine();
 
   // Editing: an existing phrase (by row id) or a new phrase in a file.
   // The phrase is a snapshot taken when editing started; the editor compares it with the file.
@@ -461,6 +463,18 @@ export default function App() {
               {current.phrase.comment && current.phrase.comment !== title(current.phrase) && (
                 <p className="detail-comment">{current.phrase.comment}</p>
               )}
+              <EngineWarning
+                engine={engine}
+                usesSetClipboard={current.phrase.vars.some((v) => v.kind === "set_clipboard")}
+              />
+              {advanced && (
+                <ClipboardHackOffer<FolderData>
+                  file={current.folder}
+                  index={current.phrase.index}
+                  hash={folders.find((f) => f.file === current.folder)?.hash ?? ""}
+                  onConverted={(f) => saved(normalizeFolder(f), current.phrase.index)}
+                />
+              )}
               {advanced && <DetailTabs tab={tab} onChange={setTab} />}
               {advanced && tab === "yaml" ? (
                 <div role="tabpanel" id="detail-tabpanel" aria-labelledby="detail-tab-yaml">
@@ -556,7 +570,7 @@ export default function App() {
           }}
         />
       )}
-      {advanced && <StatusBar configPath={configPath} phrases={rows.length} files={folders.length} />}
+      {advanced && <StatusBar configPath={configPath} phrases={rows.length} files={folders.length} engine={engine} />}
     </div>
   );
 }

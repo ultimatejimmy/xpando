@@ -2,7 +2,9 @@
 //! (read-only) while keeping the YAML files as the single source of truth.
 
 pub mod advanced;
+pub mod clipboard_hack;
 pub mod conflicts;
+pub mod engine;
 pub mod yamledit;
 
 use std::fs;
