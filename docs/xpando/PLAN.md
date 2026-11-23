@@ -141,6 +141,29 @@ Key principles:
       choice, random, nested phrase → generates `vars` + `{{placeholders}}`.
 - [ ] Visual form-field designer (text, multiline, choice, list) → `form`/`form_fields`.
 
+### M4b — Native "set clipboard" action (≈1–2 weeks, engine patch)
+Today the only way to put text on the clipboard after an expansion is a `shell` variable running
+PowerShell (`Set-Clipboard -Value $env:ESPANSO_OUT`), as in the PhraseExpress-converted `TDC` phrase
+(`{#datetime}_{#insertclipboard}{#setclipboard}`). That is slow, Windows-only, spawns a process, and
+is invisible as a feature. Replace it with a built-in action that works the same on every OS.
+
+- **Engine:** new variable type (working name `set_clipboard`) in `espanso-render/src/extension/`,
+  modelled on the existing `clipboard.rs` (reader). It takes `text:` (placeholders allowed, e.g.
+  `"{{d}}_{{clip}}"`) and writes it with the existing `espanso-clipboard` `set_text` (already
+  implemented for Win32, X11, Wayland and macOS). A small `ClipboardWriter` provider trait mirrors
+  `ClipboardProvider` so the extension stays unit-testable. Wire it up where the reader is wired
+  (`espanso/src`). Output is empty, so it composes with other variables.
+- **Ordering risk:** espanso saves and restores the user's clipboard around a paste-based
+  injection. The new action must write *after* that restore, or its result is lost. Needs an
+  explicit "after injection" step in the engine; design and test this first, per OS.
+- **Compatibility:** keep `shell`/`script` variables working unchanged. The app can offer a
+  one-click "Convert to Set clipboard" for phrases that match the PowerShell pattern. Stock espanso
+  would not understand the new type, so xpando-written files using it are xpando-only; say so in
+  the UI and docs, and offer to upstream the patch.
+- **UI:** "Set clipboard" in the Insert-macro menu (M4), shown in the Variables list with its text.
+- **Tests:** unit tests for the extension, plus a manual per-OS matrix (paste vs type injection,
+  clipboard restore on/off, empty and multi-line text, images on the clipboard beforehand).
+
 ### M5 — Release polish (≈2 weeks)
 - [ ] First-run onboarding (permissions on macOS, start-at-login, import existing espanso config).
 - [ ] Settings UI for `config/default.yml` (backend, toggle key, search shortcut, etc.).
@@ -162,6 +185,7 @@ Key principles:
 | YAML round-trip loses comments/formatting | Prototype in M0/M1; extensive round-trip tests; fall back to rewriting only touched nodes |
 | Rich text pastes inconsistently across apps | Constrain editor feature set; per-app test matrix; plain-text fallback |
 | Upstream drift | Keep engine patches small; merge `upstream/dev` monthly; upstream generic fixes |
+| Native set-clipboard needs an engine change and files using it break in stock espanso | Isolate it in one extension file; flag xpando-only phrases in the UI; offer the patch upstream |
 | macOS/Linux regressions unnoticed | CI on all three; recruit community testers; label platform issues |
 | Name/branding confusion with espanso | Clear README attribution; distinct name/icon; GPL compliance |
 
