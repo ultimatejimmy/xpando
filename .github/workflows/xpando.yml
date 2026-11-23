@@ -13,6 +13,11 @@ on:
 permissions:
   contents: read
 
+# A newer push supersedes older runs of the same ref, so stale macOS jobs don't pile up in the queue.
+concurrency:
+  group: xpando-${{ github.ref }}
+  cancel-in-progress: true
+
 defaults:
   run:
     shell: bash
