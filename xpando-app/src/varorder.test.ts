@@ -111,7 +111,14 @@ test("removal keeps other placeholders and newlines intact", () => {
 test("removal in html does not damage tags", () => {
   assert.equal(rm("<p>Hi {{d}}</p>", "d", true).text, "<p>Hi</p>");
   assert.equal(rm("<p>{{d}} Hi</p>", "d", true).text, "<p>Hi</p>");
-  assert.equal(rm("<p>a <b>{{d}}</b> c</p>", "d", true).text, "<p>a <b></b> c</p>");
+  // The tags stay; the space next to them is tidied through them.
+  assert.equal(rm("<p>a <b>{{d}}</b> c</p>", "d", true).text, "<p>a<b></b> c</p>");
+  assert.equal(rm("Dear <b>{{d}}</b>, y", "d", true).text, "Dear<b></b>, y");
+  assert.equal(rm("<b>{{d}}</b>, y", "d", true).text, "<b></b>, y");
+  assert.equal(rm("<p>Hi <em>{{d}}</em></p>", "d", true).text, "<p>Hi<em></em></p>");
+  assert.equal(rm("<p>Hi</p><p>{{d}} there</p>", "d", true).text, "<p>Hi</p><p>there</p>");
+  assert.equal(rm("Hi {{d}}<br>there", "d", true).text, "Hi<br>there");
+  assert.equal(rm('a <a href="u">{{d}}</a> b', "d", true).text, 'a<a href="u"></a> b');
   assert.equal(rm('<p>a {{d}} <a href="x">l</a></p>', "d", true).text, '<p>a <a href="x">l</a></p>');
   // A placeholder inside a tag is not touched.
   const inTag = '<a href="{{d}}">x</a> {{d}}';

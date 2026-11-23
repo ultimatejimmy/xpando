@@ -207,16 +207,7 @@ export function analyzeItems(items: VarSpec[], body: string): string[] {
       );
     }
   }
-  for (const s of items) {
-    const byVar = items.some(
-      (o) =>
-        o.name !== s.name &&
-        o.params.some((p) => paramStrings(p.value).some((t) => placeholders(t).includes(s.name))),
-    );
-    if (!inBody.includes(s.name) && !byVar) {
-      out.push(`The macro “${s.name}” is not used by the text or by another macro.`);
-    }
-  }
+  // A macro nothing uses is not listed here: its own card already says so, with a Remove button.
   return out;
 }
 
@@ -426,11 +417,19 @@ function listNames(names: string[]): string {
   return q.length <= 1 ? q.join("") : `${q.slice(0, -1).join(", ")} and ${q[q.length - 1]}`;
 }
 
-/** A message under the cards. `undo` restores a removed variable and the text it was cut from. */
+/** What applying a name draft did: nothing to apply, renamed, or refused (the box says why). */
+type CommitResult = "none" | "applied" | "problem";
+
+/** What Undo takes back: a removed macro (and the text it was cut from) or a changed type. */
+type UndoInfo =
+  | { kind: "remove"; item: Item; index: number; bodyBefore: string; bodyAfter: string }
+  | { kind: "type"; before: Item; afterType: string };
+
+/** A message under the cards, with Undo while it can still restore things exactly. */
 interface Notice {
   tone: "info" | "error";
   text: string;
-  undo?: { item: Item; index: number; bodyBefore: string; bodyAfter: string };
+  undo?: UndoInfo;
 }
 
 interface UseVarsOptions {
@@ -466,6 +465,8 @@ export interface VarsApi {
   problems: string[];
   /** Soft problems. */
   warnings: string[];
+  /** Applies a macro name that is still being typed (for Ctrl+S). */
+  commitPendingName: () => "none" | "applied" | "problem";
   /** The complete list to send to the backend; null when not editable. */
   specs: VarSpec[] | null;
 }
@@ -549,6 +550,21 @@ export function useVars(opts: UseVarsOptions): VarsApi {
     });
   }, []);
 
+  // Name boxes apply their draft on blur or Enter; Ctrl+S has neither, so it asks them to.
+  const committers = useRef(new Map<number, () => CommitResult>());
+  const registerCommit = useCallback((key: number, commit: (() => CommitResult) | null) => {
+    if (commit) committers.current.set(key, commit);
+    else committers.current.delete(key);
+  }, []);
+  /** Applies a name that is still being typed. "problem" means it was refused and the box says why. */
+  const commitPendingName = useCallback((): CommitResult => {
+    for (const commit of committers.current.values()) {
+      const r = commit();
+      if (r !== "none") return r; // only one box can have focus, so at most one draft is pending
+    }
+    return "none";
+  }, []);
+
   const update = useCallback((key: number, fn: (it: Item) => Item) => {
     setItems((all) => all.map((it) => (it.key === key ? fn(it) : it)));
   }, []);
@@ -608,15 +624,37 @@ export function useVars(opts: UseVarsOptions): VarsApi {
     setNotice({
       tone: "info",
       text: r.count > 0 ? `Removed {{${item.name}}} from the text too.` : `Removed the macro “${item.name}”.`,
-      undo: { item, index: at, bodyBefore: body, bodyAfter: r.text },
+      undo: { kind: "remove", item, index: at, bodyBefore: body, bodyAfter: r.text },
     });
     // The card (and the focus in it) is gone: move to Undo, which also announces what happened.
     requestAnimationFrame(() => document.getElementById(`${sectionId}-undo`)?.focus());
   }
 
-  function undoRemove() {
+  /** Changes what a macro fills in. That clears its settings, so the old ones are kept for Undo. */
+  function changeType(key: number, type: string) {
+    const item = items.find((it) => it.key === key);
+    if (!item || item.type === type) return;
+    const fresh = MACROS.find((m) => m.id === type)?.make?.(item.name);
+    setItems((all) => all.map((it) => (it.key === key ? { ...it, type, params: fresh ? fresh.params : [] } : it)));
+    setNotice(
+      item.params.length > 0
+        ? {
+            tone: "info",
+            text: `Changed {{${item.name}}} to ${macroLabel(type)}; its old settings were cleared.`,
+            undo: { kind: "type", before: item, afterType: type },
+          }
+        : null,
+    );
+  }
+
+  function undo() {
     const u = notice?.undo;
     if (!u) return;
+    if (u.kind === "type") {
+      setItems((all) => all.map((it) => (it.key === u.before.key ? u.before : it)));
+      setNotice({ tone: "info", text: `Brought back the settings of {{${u.before.name}}}.` });
+      return;
+    }
     setItems((all) => {
       const next = [...all];
       next.splice(Math.min(u.index, next.length), 0, u.item);
@@ -626,10 +664,16 @@ export function useVars(opts: UseVarsOptions): VarsApi {
     setNotice({ tone: "info", text: `Brought back {{${u.item.name}}}.` });
   }
 
-  // Undo only while it can restore things exactly: the text is as it was left, the name is free.
+  // Undo only while it can restore things exactly: for a removal the text is as it was left and
+  // the name is free; for a type change the macro still has the type it was changed to.
   useEffect(() => {
     const u = notice?.undo;
     if (!u) return;
+    if (u.kind === "type") {
+      const now = items.find((o) => o.key === u.before.key);
+      if (!now || now.type !== u.afterType) setNotice(null);
+      return;
+    }
     if ((u.bodyBefore !== u.bodyAfter && body !== u.bodyAfter) || items.some((o) => o.name === u.item.name)) {
       setNotice(null);
     }
@@ -722,7 +766,9 @@ export function useVars(opts: UseVarsOptions): VarsApi {
       onRemove={removeItem}
       unusedKeys={unusedKeys}
       notice={notice}
-      onUndo={undoRemove}
+      onUndo={undo}
+      onChangeType={changeType}
+      registerCommit={registerCommit}
       onDismissNotice={() => setNotice(null)}
       addMenu={<MacroMenu kind="add" onPick={addMacro} announce={announceAdd} />}
       focusKey={focusKey}
@@ -731,7 +777,7 @@ export function useVars(opts: UseVarsOptions): VarsApi {
     />
   );
 
-  return { menu, section, dirty, editable, problems, warnings, specs: editable ? specs : null };
+  return { menu, section, dirty, editable, problems, warnings, specs: editable ? specs : null, commitPendingName };
 }
 
 // ---------------------------------------------------------------------------------------
@@ -867,6 +913,8 @@ interface SectionProps {
   unusedKeys: Set<number>;
   notice: Notice | null;
   onUndo: () => void;
+  onChangeType: (key: number, type: string) => void;
+  registerCommit: (key: number, commit: (() => CommitResult) | null) => void;
   onDismissNotice: () => void;
   onFocusCapture: (el: HTMLElement | null) => void;
   /** The "Add a macro" menu. */
@@ -1025,6 +1073,8 @@ function VarsSection(p: SectionProps) {
               autoFocus={p.focusKey === it.key}
               onUpdate={p.onUpdate}
               onRename={p.onRename}
+              onChangeType={p.onChangeType}
+              registerCommit={p.registerCommit}
               onRemove={p.onRemove}
               unused={p.unusedKeys.has(it.key)}
             />
@@ -1047,30 +1097,40 @@ function NameField({
   item,
   invalid,
   onRename,
+  registerCommit,
 }: {
   id: string;
   item: Item;
   invalid: boolean;
   onRename: (key: number, name: string) => string | null;
+  registerCommit: (key: number, commit: (() => CommitResult) | null) => void;
 }) {
   const [draft, setDraft] = useState(item.name);
   const [why, setWhy] = useState("");
   useEffect(() => setDraft(item.name), [item.name]);
-  function commit() {
+  function commit(): CommitResult {
     const trimmed = draft.trim();
     if (trimmed === item.name) {
       setDraft(item.name);
       setWhy("");
-      return;
+      return "none";
     }
     const problem = onRename(item.key, trimmed);
     if (problem) {
       setWhy(problem);
       setDraft(item.name);
-    } else {
-      setWhy("");
+      return "problem";
     }
+    setWhy("");
+    return "applied";
   }
+  // Ctrl+S saves without the box losing focus: the hook asks every name box to apply its draft first.
+  const commitRef = useRef(commit);
+  commitRef.current = commit;
+  useEffect(() => {
+    registerCommit(item.key, () => commitRef.current());
+    return () => registerCommit(item.key, null);
+  }, [item.key, registerCommit]);
   return (
     <>
       <input
@@ -1107,6 +1167,8 @@ function VarCard({
   autoFocus,
   onUpdate,
   onRename,
+  onChangeType,
+  registerCommit,
   onRemove,
   unused,
 }: {
@@ -1116,6 +1178,8 @@ function VarCard({
   autoFocus: boolean;
   onUpdate: (key: number, fn: (it: Item) => Item) => void;
   onRename: (key: number, name: string) => string | null;
+  onChangeType: (key: number, type: string) => void;
+  registerCommit: (key: number, commit: (() => CommitResult) | null) => void;
   onRemove: (key: number) => void;
   unused: boolean;
 }) {
@@ -1154,6 +1218,7 @@ function VarCard({
             item={item}
             invalid={error !== null && /name/i.test(error)}
             onRename={onRename}
+            registerCommit={registerCommit}
           />
         </div>
         )}
@@ -1165,11 +1230,7 @@ function VarCard({
             className="field"
             value={known ? item.type : "__other"}
             aria-describedby={item.params.length > 0 ? `${uid}-type-help` : undefined}
-            onChange={(e) => {
-              const type = e.target.value === "__other" ? "custom" : e.target.value;
-              const fresh = MACROS.find((m) => m.id === type)?.make?.(item.name);
-              set((it) => ({ ...it, type, params: fresh ? fresh.params : [] }));
-            }}
+            onChange={(e) => onChangeType(item.key, e.target.value === "__other" ? "custom" : e.target.value)}
           >
             {KNOWN_TYPES.map((t) => (
               <option key={t} value={t}>
@@ -1180,7 +1241,7 @@ function VarCard({
           </select>
           {item.params.length > 0 && (
             <span className="var-hint" id={`${uid}-type-help`}>
-              Changing this clears the settings below.
+              Changing this clears the settings below (Undo is offered).
             </span>
           )}
         </div>

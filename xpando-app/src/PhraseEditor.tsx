@@ -610,11 +610,25 @@ export function PhraseEditor({ folders, file, phrase, onSaved, onCancel, onReloa
   // Ctrl+S saves from anywhere in the window while no dialog is open.
   const saveRef = useRef(save);
   saveRef.current = save;
+  const varsRef = useRef(vars);
+  varsRef.current = vars;
+  // A macro name still being typed is applied first; the save then waits for the next render,
+  // so it sees the renamed macro and text.
+  const [saveSoon, setSaveSoon] = useState(false);
+  useEffect(() => {
+    if (!saveSoon) return;
+    setSaveSoon(false);
+    void saveRef.current();
+  }, [saveSoon]);
   useEffect(() => {
     const handler = (e: globalThis.KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key.toLowerCase() === "s") {
         e.preventDefault();
-        if (!document.querySelector("dialog[open]")) void saveRef.current();
+        if (document.querySelector("dialog[open]")) return;
+        const name = varsRef.current.commitPendingName();
+        if (name === "problem") return; // the name box says why; nothing is saved
+        if (name === "applied") setSaveSoon(true);
+        else void saveRef.current();
       }
     };
     document.addEventListener("keydown", handler);

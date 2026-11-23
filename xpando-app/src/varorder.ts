@@ -138,13 +138,60 @@ export interface Removal {
 
 const isBlank = (c: string | undefined): boolean => c === " " || c === "\t";
 
+/** Tags that sit inside a line of text: the space around them still belongs to the text. */
+const INLINE_TAGS = new Set(["a", "b", "strong", "i", "em", "u", "s", "strike", "del", "ins", "code", "span", "mark", "sub", "sup"]);
+
+interface Neighbour {
+  /** The character, "\n" when a block tag (a paragraph edge, a line break) is in the way, undefined at the very end. */
+  ch: string | undefined;
+  /** Where that character is, or -1 when there is none to delete. */
+  at: number;
+}
+
+/** What `s` shows just before position `i`, looking through inline tags without touching them. */
+function visibleBefore(s: string, i: number, html: boolean): Neighbour {
+  let p = i - 1;
+  for (;;) {
+    if (p < 0) return { ch: undefined, at: -1 };
+    if (html && s[p] === ">") {
+      const open = s.lastIndexOf("<", p);
+      const tag = open < 0 ? null : /^<\/?([a-z][a-z0-9]*)/i.exec(s.slice(open, p + 1));
+      if (tag) {
+        if (!INLINE_TAGS.has(tag[1].toLowerCase())) return { ch: "\n", at: -1 };
+        p = open - 1;
+        continue;
+      }
+    }
+    return { ch: s[p], at: p };
+  }
+}
+
+/** What `s` shows from position `i` on, looking through inline tags without touching them. */
+function visibleAfter(s: string, i: number, html: boolean): Neighbour {
+  let p = i;
+  for (;;) {
+    if (p >= s.length) return { ch: undefined, at: -1 };
+    if (html && s[p] === "<") {
+      const close = s.indexOf(">", p);
+      const tag = close < 0 ? null : /^<\/?([a-z][a-z0-9]*)/i.exec(s.slice(p, close + 1));
+      if (tag) {
+        if (!INLINE_TAGS.has(tag[1].toLowerCase())) return { ch: "\n", at: -1 };
+        p = close + 1;
+        continue;
+      }
+    }
+    return { ch: s[p], at: p };
+  }
+}
+
 /**
  * Removes every `{{name}}`, `{{ name }}` and `{{name.field}}` from `text`, and one adjacent
  * space so no double space (or a space before a comma or at the end of a line) is left.
  *
  * With `html`, `text` is an HTML body: placeholders are plain text inside it. One that sits
- * inside a tag (an attribute) is left alone so no markup is damaged, and tag edges count as
- * the start or end of the text for the space tidying.
+ * inside a tag (an attribute) is left alone so no markup is damaged. Tags are never changed:
+ * the space tidying looks through inline tags (`Dear <b>{{x}}</b>, y` loses the space before
+ * the tag) and treats block tags such as `<p>` and `<br>` as the start or end of a line.
  */
 export function removePlaceholders(text: string, name: string, html = false): Removal {
   if (!/^\w+$/.test(name)) return { text, count: 0 };
@@ -161,17 +208,21 @@ export function removePlaceholders(text: string, name: string, html = false): Re
       from = end;
       continue;
     }
-    const before = out[start - 1];
-    const after = out[end];
+    const before = visibleBefore(out, start, html);
+    const after = visibleAfter(out, end, html);
     const endsRun =
-      after === undefined || after === "\n" || after === "\r" || /[,.;:!?)\]]/.test(after) || (html && after === "<");
-    const startsRun = before === undefined || before === "\n" || before === "\r" || before === "(" || (html && before === ">");
-    let s = start;
-    let e = end;
-    if (isBlank(before) && (isBlank(after) || endsRun)) s--;
-    else if (isBlank(after) && startsRun) e++;
-    out = out.slice(0, s) + out.slice(e);
-    from = s;
+      after.ch === undefined || after.ch === "\n" || after.ch === "\r" || /[,.;:!?)\]]/.test(after.ch);
+    const startsRun = before.ch === undefined || before.ch === "\n" || before.ch === "\r" || before.ch === "(";
+    let next = start;
+    if (isBlank(before.ch) && (isBlank(after.ch) || endsRun)) {
+      out = out.slice(0, before.at) + out.slice(before.at + 1, start) + out.slice(end);
+      next = start - 1;
+    } else if (isBlank(after.ch) && startsRun) {
+      out = out.slice(0, start) + out.slice(end, after.at) + out.slice(after.at + 1);
+    } else {
+      out = out.slice(0, start) + out.slice(end);
+    }
+    from = next;
     count++;
   }
   return { text: out, count };
