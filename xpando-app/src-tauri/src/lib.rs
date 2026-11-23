@@ -1,5 +1,6 @@
 mod advanced;
 mod edit;
+mod richtext;
 
 use std::path::PathBuf;
 
@@ -31,7 +32,12 @@ pub fn run() {
             advanced::config_path,
             edit::save_phrase,
             edit::create_phrase,
-            edit::delete_phrase
+            edit::delete_phrase,
+            richtext::save_rich_phrase,
+            richtext::create_rich_phrase,
+            richtext::sanitize_html,
+            richtext::plain_to_html,
+            richtext::html_to_plain
         ])
         .run(tauri::generate_context!())
         .expect("error while running xpando");

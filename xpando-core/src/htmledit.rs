@@ -2237,6 +2237,69 @@ mod tests {
         assert!(convert_to_plain(FILE, 0, true).is_err(), "already plain");
     }
 
+    /// The sequences the app's save commands run, one `edit_file` closure each.
+    #[test]
+    fn app_save_sequences_compose() {
+        use crate::edit::{add_phrase, update_phrase, CommentChange, NewPhrase, PhraseEdit};
+        let edit = |triggers: &[&str], body: Option<&str>| PhraseEdit {
+            triggers: triggers.iter().map(|s| s.to_string()).collect(),
+            label: Some("L".into()),
+            body: body.map(String::from),
+            comment: CommentChange::Keep,
+        };
+
+        // plain -> rich: edit fields, convert, then set the rich body
+        let t = update_phrase(FILE, 0, &edit(&[":a2"], None)).unwrap();
+        let t = convert_to_html(&t, 0, true).unwrap();
+        let t = set_html_body(&t, 0, "<p>x</p><p><b>y</b></p>").unwrap();
+        let (p, w) = parse_match_text(&t);
+        assert!(w.is_empty());
+        assert_eq!(
+            (p[0].kind.as_str(), p[0].triggers[0].as_str()),
+            ("html", ":a2")
+        );
+        assert_eq!(p[0].content, "<p>x</p>\n<p><strong>y</strong></p>");
+        assert_eq!(p[0].label.as_deref(), Some("L"));
+        assert!(t.contains("  # first\n"), "comment kept");
+
+        // rich phrase: edit fields only, body untouched
+        let t = update_phrase(FILE, 1, &edit(&[":b2"], None)).unwrap();
+        assert!(t.contains("html: \"${<b>rs</b>}\""));
+
+        // rich -> plain, then the plain text the user typed
+        let t = convert_to_plain(FILE, 1, true).unwrap();
+        let t = update_phrase(&t, 1, &edit(&[":b"], Some("typed text"))).unwrap();
+        let (p, _) = parse_match_text(&t);
+        assert_eq!(
+            (p[1].kind.as_str(), p[1].content.as_str()),
+            ("replace", "typed text")
+        );
+        assert!(t.contains("word: true"), "other fields stay");
+
+        // new rich phrase: add as plain text, convert, set the body
+        let added = add_phrase(
+            FILE,
+            &NewPhrase {
+                triggers: vec![":new".into()],
+                label: None,
+                body: html_to_text("<p>a</p><p>b</p>"),
+                comment: None,
+            },
+        )
+        .unwrap();
+        let index = parse_match_text(&added)
+            .0
+            .iter()
+            .map(|p| p.index)
+            .max()
+            .unwrap();
+        let t = convert_to_html(&added, index, true).unwrap();
+        let t = set_html_body(&t, index, "<p>a</p><p><i>b</i></p>").unwrap();
+        let p = parse_match_text(&t).0;
+        assert_eq!(p[index].kind, "html");
+        assert_eq!(p[index].content, "<p>a</p>\n<p><em>b</em></p>");
+    }
+
     #[test]
     fn convert_special_text_is_escaped() {
         let t = "matches:\n  - trigger: a\n    replace: \"<b>x</b> & \\\"y\\\"\"\n";
