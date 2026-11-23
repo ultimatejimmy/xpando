@@ -15,6 +15,7 @@ import {
 } from "./AdvancedPanels";
 import { matchesTerms, parseQuery } from "./search";
 import { NewPhraseButton, PhraseActions, PhraseEditor } from "./PhraseEditor";
+import { FolderToolbar, NewFolderButton, ScopeLabel, useFolderInfo } from "./FolderManager";
 
 interface Variable {
   name: string;
@@ -158,6 +159,16 @@ export default function App() {
     void load();
   }, []);
 
+  const infos = useFolderInfo(folders);
+
+  /** A folder was created, renamed, deleted or given other apps: reload and show it. */
+  const folderChanged = async (file: string | null) => {
+    await load();
+    setEditing(null);
+    setSelected(null);
+    setScope(file ?? ALL);
+  };
+
   useEffect(() => {
     if (!advanced) return;
     invoke<Conflict[]>("list_conflicts")
@@ -299,12 +310,14 @@ export default function App() {
                   <span className="grow">
                     {f.name}
                     {advanced && <span className="adv-folder-file">{f.file}</span>}
+                    <ScopeLabel info={infos[f.file]} />
                   </span>
                   <span className="count">{f.phrases.length}</span>
                 </button>
               </li>
             ))}
           </ul>
+          <NewFolderButton onDone={(file) => void folderChanged(file)} />
           {advanced && <ConflictsPanel conflicts={conflicts} onJump={jumpTo} />}
         </nav>
 
@@ -312,6 +325,20 @@ export default function App() {
           <h2 className="pane-title">
             {scopeName} <span className="count">{visible.length}</span>
           </h2>
+          {scopeFolder && (
+            <FolderToolbar
+              key={scopeFolder.file}
+              folder={{
+                name: scopeFolder.name,
+                file: scopeFolder.file,
+                hash: scopeFolder.hash,
+                phrases: scopeFolder.phrases.length,
+              }}
+              info={infos[scopeFolder.file]}
+              advanced={advanced}
+              onDone={(file) => void folderChanged(file)}
+            />
+          )}
           <NewPhraseButton
             disabled={folders.length === 0}
             onClick={() => setEditing({ newIn: scopeFolder?.file ?? folders[0].file })}
