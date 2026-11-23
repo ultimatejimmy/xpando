@@ -4,6 +4,7 @@ import { invoke } from "@tauri-apps/api/core";
 import {
   AlertTriangle,
   Check,
+  ChevronRight,
   Copy,
   Info,
   Pencil,
@@ -15,9 +16,11 @@ import {
 } from "lucide-react";
 import "./editor.css";
 import { useVars } from "./VarsEditor"; // xpando:vars
+import { useAdvanced } from "./AdvancedPanels";
+import { HelpTip } from "./HelpTip";
 import { BodyModeSwitch, RichBodyEditor } from "./RichLazy"; // xpando:richtext
 import type { BodyMode } from "./RichLazy"; // xpando:richtext
-import { isBlankHtml } from "./richtextUtil"; // xpando:richtext
+import { isBlankHtml, listWords } from "./richtextUtil"; // xpando:richtext
 import type { RichHandle } from "./richtextUtil"; // xpando:richtext
 
 /** espanso's per-match options as the backend sends them (`null` = not set in the file). */
@@ -120,28 +123,35 @@ function samePhrase(a: EditorPhrase, b: EditorPhrase): boolean {
 
 type FlagKey = "word" | "left_word" | "right_word" | "propagate_case";
 
-const FLAGS: { key: FlagKey; label: string; help: string }[] = [
+const FLAGS: { key: FlagKey; label: string; help: string; advanced?: boolean }[] = [
   {
     key: "word",
-    label: "Whole word only",
-    help: "Only expand when the trigger is a whole word, with a space or punctuation on both sides.",
-  },
-  {
-    key: "left_word",
-    label: "Start of a word",
-    help: "Only expand when the trigger starts a word, so it does not fire in the middle of one.",
-  },
-  {
-    key: "right_word",
-    label: "End of a word",
-    help: "Only expand when the trigger ends a word, so it does not fire before more letters.",
+    label: "Only expand when I type it as a whole word",
+    help: "The trigger only expands when it has a space or punctuation on both sides, so it does not fire inside another word.",
   },
   {
     key: "propagate_case",
-    label: "Match the case you type",
+    label: "Match the capitalization I type",
     help: "Typing the trigger capitalised or in capitals gives a capitalised or all-capitals result.",
   },
+  {
+    key: "left_word",
+    label: "Only expand at the start of a word",
+    help: "Only expand when the trigger starts a word, so it does not fire in the middle of one.",
+    advanced: true,
+  },
+  {
+    key: "right_word",
+    label: "Only expand at the end of a word",
+    help: "Only expand when the trigger ends a word, so it does not fire before more letters.",
+    advanced: true,
+  },
 ];
+
+/** The file's own name of an option, shown small next to the plain label in Advanced mode. */
+function KeyName({ name }: { name: string }) {
+  return <code className="opt-key">{name}</code>;
+}
 
 const UPPERCASE_STYLES: [string, string][] = [
   ["", "Default (all capitals)"],
@@ -289,8 +299,6 @@ interface EditorProps {
   onDirtyChange: (dirty: boolean) => void;
 }
 
-type EditorTab = "text" | "options";
-
 /** Plain text of a draft, for the copy button. */
 function draftText(
   triggers: string[],
@@ -322,7 +330,6 @@ export function PhraseEditor({ folders, file, phrase, onSaved, onCancel, onReloa
   const [switches, setSwitches] = useState(0);
   const [opts, setOpts] = useState<EditorOptions>(baseOptions);
   const [termDraft, setTermDraft] = useState("");
-  const [tab, setTab] = useState<EditorTab>("text");
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   // Which Save button was used last, so the save error appears next to it.
@@ -330,6 +337,12 @@ export function PhraseEditor({ folders, file, phrase, onSaved, onCancel, onReloa
   const [stale, setStale] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const firstTrigger = useRef<HTMLInputElement>(null);
+  const [advanced] = useAdvanced();
+  // "More options" is closed until asked for; Advanced mode opens it, since that is what it is for.
+  const [moreOpen, setMoreOpen] = useState(false);
+  useEffect(() => {
+    if (advanced) setMoreOpen(true);
+  }, [advanced]);
   const uid = useId();
   const richRef = useRef<RichHandle | null>(null); // xpando:richtext — insert at the cursor
 
@@ -386,7 +399,7 @@ export function PhraseEditor({ folders, file, phrase, onSaved, onCancel, onReloa
       problems.push("Enter the text to insert."); // xpando:richtext
     }
     if (termDraft.trim() !== "") {
-      problems.push("Press Add to keep the search term you typed on the Options tab, or clear it.");
+      problems.push("Press Add to keep the search term you typed, or clear it.");
     }
     // xpando:vars
     return {
@@ -407,6 +420,23 @@ export function PhraseEditor({ folders, file, phrase, onSaved, onCancel, onReloa
     vars.problems,
     vars.warnings,
   ]);
+
+  // What is set under "More options", so a closed disclosure still says what is inside.
+  const moreSummary = [
+    description.trim() !== "" ? "description" : null,
+    opts.search_terms.length > 0
+      ? `${opts.search_terms.length} search ${opts.search_terms.length === 1 ? "term" : "terms"}`
+      : null,
+  ]
+    .filter(Boolean)
+    .join(", ");
+  // Options that only Advanced mode shows: still kept and saved, so say they exist.
+  const hiddenOptions = [
+    opts.left_word ? "start-of-word matching" : null,
+    opts.right_word ? "end-of-word matching" : null,
+    opts.uppercase_style ? "a capitals style" : null,
+    opts.force_mode ? "a chosen way of inserting the text" : null,
+  ].filter((x): x is string => x !== null);
 
   const optionsChanged = optionsKey(opts) !== optionsKey(baseOptions);
   const descriptionChanged = description !== (phrase?.comment ?? "");
@@ -633,13 +663,31 @@ export function PhraseEditor({ folders, file, phrase, onSaved, onCancel, onReloa
     }
   }
 
-  function onTabKeyDown(e: KeyboardEvent<HTMLButtonElement>) {
-    if (e.key === "ArrowRight" || e.key === "ArrowLeft" || e.key === "Home" || e.key === "End") {
-      e.preventDefault();
-      const next: EditorTab = e.key === "Home" ? "text" : e.key === "End" ? "options" : tab === "text" ? "options" : "text";
-      setTab(next);
-      document.getElementById(`${uid}-tab-${next}`)?.focus();
-    }
+  /** One checkbox of "When it expands", with its longer help one click away. */
+  function flagRow({ key, label: text, help }: (typeof FLAGS)[number]) {
+    return (
+      <div className="opt-row" key={key}>
+        <input
+          type="checkbox"
+          id={`${uid}-${key}`}
+          checked={opts[key] === true}
+          onChange={(e) => {
+            const on = e.target.checked;
+            const off = baseOptions[key] === false ? false : null;
+            if (key === "propagate_case") {
+              patchOptions({ propagate_case: on ? true : off, ...(on ? {} : { uppercase_style: null }) });
+            } else {
+              patchOptions({ [key]: on ? true : off });
+            }
+          }}
+        />
+        <label htmlFor={`${uid}-${key}`}>
+          {text}
+          {advanced && <KeyName name={key} />}
+        </label>
+        <HelpTip label={text}>{help}</HelpTip>
+      </div>
+    );
   }
 
   const staleView = stale !== null;
@@ -691,7 +739,9 @@ export function PhraseEditor({ folders, file, phrase, onSaved, onCancel, onReloa
     >
       <h2 className="detail-title">{phrase ? `Edit “${phraseName(phrase)}”` : "New phrase"}</h2>
       <p className="detail-meta editor-where">
-        {phrase ? `In ${folder?.file ?? file}` : `Will be added to the end of ${folder?.file ?? file}`}
+        {phrase
+          ? `In ${advanced ? (folder?.file ?? file) : (folder?.name ?? file)}`
+          : `Will be added to ${advanced ? (folder?.file ?? file) : (folder?.name ?? file)}`}
       </p>
 
       <div className="editor-topbar" role="toolbar" aria-label="Save or cancel this phrase">
@@ -729,32 +779,7 @@ export function PhraseEditor({ folders, file, phrase, onSaved, onCancel, onReloa
         {error && saveFrom === "top" && <ErrorMessage message={error} onReload={() => void reload()} />}
       </div>
 
-      <div className="editor-tabs" role="tablist" aria-label="Phrase sections">
-        {(["text", "options"] as const).map((t) => (
-          <button
-            key={t}
-            type="button"
-            role="tab"
-            id={`${uid}-tab-${t}`}
-            className="editor-tab"
-            aria-selected={tab === t}
-            aria-controls={`${uid}-panel-${t}`}
-            tabIndex={tab === t ? 0 : -1}
-            onClick={() => setTab(t)}
-            onKeyDown={onTabKeyDown}
-          >
-            {t === "text" ? "Text" : "Options"}
-          </button>
-        ))}
-      </div>
-
-      <div
-        className="editor-panel"
-        role="tabpanel"
-        id={`${uid}-panel-text`}
-        aria-labelledby={`${uid}-tab-text`}
-        hidden={tab !== "text"}
-      >
+      <div className="editor-panel">
         <div className="editor-group" role="group" aria-labelledby={`${uid}-triggers`}>
           <span className="editor-legend" id={`${uid}-triggers`}>
             {phrase?.is_regex ? "Regex trigger" : triggers.length > 1 ? "Triggers" : "Trigger"}
@@ -786,10 +811,12 @@ export function PhraseEditor({ folders, file, phrase, onSaved, onCancel, onReloa
             </div>
           ))}
           {triggersEditable ? (
-            <button type="button" className="btn" onClick={() => setTriggers((ts) => [...ts, ""])}>
-              <Plus size={16} aria-hidden="true" />
-              Add trigger
-            </button>
+            <div>
+              <button type="button" className="btn btn-quiet" onClick={() => setTriggers((ts) => [...ts, ""])}>
+                <Plus size={16} aria-hidden="true" />
+                Add another trigger
+              </button>
+            </div>
           ) : (
             <p className="editor-note">
               <Info size={16} aria-hidden="true" />
@@ -799,7 +826,9 @@ export function PhraseEditor({ folders, file, phrase, onSaved, onCancel, onReloa
         </div>
 
         <div className="editor-group">
-          <label htmlFor={`${uid}-label`}>Name (label)</label>
+          <label htmlFor={`${uid}-label`}>
+            Name <span className="editor-optional">(optional)</span>
+          </label>
           <input
             id={`${uid}-label`}
             className="field"
@@ -807,22 +836,6 @@ export function PhraseEditor({ folders, file, phrase, onSaved, onCancel, onReloa
             autoComplete="off"
             onChange={(e) => setLabel(e.target.value)}
           />
-        </div>
-
-        <div className="editor-group">
-          <label htmlFor={`${uid}-desc`}>Description</label>
-          <textarea
-            id={`${uid}-desc`}
-            className="field"
-            rows={3}
-            value={description}
-            aria-describedby={`${uid}-desc-help`}
-            onChange={(e) => setDescription(e.target.value)}
-          />
-          <p className="editor-note" id={`${uid}-desc-help`}>
-            <Info size={16} aria-hidden="true" />
-            Notes for yourself. Saved as a # comment above the phrase in the file.
-          </p>
         </div>
 
         <div className="editor-group">
@@ -856,7 +869,7 @@ export function PhraseEditor({ folders, file, phrase, onSaved, onCancel, onReloa
             <textarea
               id={`${uid}-body`}
               className="field mono"
-              rows={10}
+              rows={8}
               value={body}
               spellCheck={false}
               onChange={(e) => setBody(e.target.value)}
@@ -877,137 +890,156 @@ export function PhraseEditor({ folders, file, phrase, onSaved, onCancel, onReloa
         </div>
 
         {vars.section /* xpando:vars */}
-      </div>
 
-      <div
-        className="editor-panel"
-        role="tabpanel"
-        id={`${uid}-panel-options`}
-        aria-labelledby={`${uid}-tab-options`}
-        hidden={tab !== "options"}
-      >
         <div className="editor-group" role="group" aria-labelledby={`${uid}-when`}>
           <span className="editor-legend" id={`${uid}-when`}>
             When it expands
           </span>
-          {FLAGS.map(({ key, label: text, help }) => (
-            <div className="opt-row" key={key}>
-              <input
-                type="checkbox"
-                id={`${uid}-${key}`}
-                aria-describedby={`${uid}-${key}-help`}
-                checked={opts[key] === true}
-                onChange={(e) => {
-                  const on = e.target.checked;
-                  const off = baseOptions[key] === false ? false : null;
-                  if (key === "propagate_case") {
-                    patchOptions({ propagate_case: on ? true : off, ...(on ? {} : { uppercase_style: null }) });
-                  } else {
-                    patchOptions({ [key]: on ? true : off });
-                  }
-                }}
-              />
-              <label htmlFor={`${uid}-${key}`}>{text}</label>
-              <p className="opt-help" id={`${uid}-${key}-help`}>
-                {help}
+          {FLAGS.filter((f) => advanced || !f.advanced).map(flagRow)}
+          {advanced && (
+            <div className="opt-select opt-indent">
+              <label htmlFor={`${uid}-upper`}>
+                Capitals style <KeyName name="uppercase_style" />
+              </label>
+              <select
+                id={`${uid}-upper`}
+                className="field"
+                value={opts.uppercase_style ?? ""}
+                disabled={opts.propagate_case !== true}
+                aria-describedby={`${uid}-upper-help`}
+                onChange={(e) => patchOptions({ uppercase_style: e.target.value || null })}
+              >
+                {opts.uppercase_style && !UPPERCASE_STYLES.some(([v]) => v === opts.uppercase_style) && (
+                  <option value={opts.uppercase_style}>{opts.uppercase_style} (not recognised)</option>
+                )}
+                {UPPERCASE_STYLES.map(([v, text]) => (
+                  <option key={v} value={v}>
+                    {text}
+                  </option>
+                ))}
+              </select>
+              <p className="opt-help" id={`${uid}-upper-help`}>
+                How the text is capitalised when you type the trigger in capitals. Needs “Match the capitalization I
+                type”.
               </p>
             </div>
-          ))}
-        </div>
-
-        <div className="opt-select opt-indent">
-          <label htmlFor={`${uid}-upper`}>Capitals style</label>
-          <select
-            id={`${uid}-upper`}
-            className="field"
-            value={opts.uppercase_style ?? ""}
-            disabled={opts.propagate_case !== true}
-            aria-describedby={`${uid}-upper-help`}
-            onChange={(e) => patchOptions({ uppercase_style: e.target.value || null })}
-          >
-            {opts.uppercase_style && !UPPERCASE_STYLES.some(([v]) => v === opts.uppercase_style) && (
-              <option value={opts.uppercase_style}>{opts.uppercase_style} (not recognised)</option>
-            )}
-            {UPPERCASE_STYLES.map(([v, text]) => (
-              <option key={v} value={v}>
-                {text}
-              </option>
-            ))}
-          </select>
-          <p className="opt-help" id={`${uid}-upper-help`}>
-            How the text is capitalised when you type the trigger in capitals. Needs “Match the case you type”.
-          </p>
-        </div>
-
-        <div className="opt-select">
-          <label htmlFor={`${uid}-mode`}>How the text is inserted</label>
-          <select
-            id={`${uid}-mode`}
-            className="field"
-            value={opts.force_mode ?? ""}
-            aria-describedby={`${uid}-mode-help`}
-            onChange={(e) => patchOptions({ force_mode: e.target.value || null })}
-          >
-            {opts.force_mode && !FORCE_MODES.some(([v]) => v === opts.force_mode) && (
-              <option value={opts.force_mode}>{opts.force_mode} (not recognised)</option>
-            )}
-            {FORCE_MODES.map(([v, text]) => (
-              <option key={v} value={v}>
-                {text}
-              </option>
-            ))}
-          </select>
-          <p className="opt-help" id={`${uid}-mode-help`}>
-            Automatic is best. Choose paste if typing drops characters, or typing if an app blocks paste.
-          </p>
-        </div>
-
-        <div className="editor-group" role="group" aria-labelledby={`${uid}-terms`}>
-          <span className="editor-legend" id={`${uid}-terms`}>
-            Search terms
-          </span>
-          <p className="opt-help">Extra words that help you find this phrase when searching. They do not change expansion.</p>
-          {opts.search_terms.length > 0 && (
-            <ul className="term-list">
-              {opts.search_terms.map((t) => (
-                <li key={t}>
-                  <span className="chip grow">{t}</span>
-                  <button
-                    type="button"
-                    className="btn btn-icon"
-                    aria-label={`Remove search term ${t}`}
-                    title="Remove search term"
-                    onClick={() => patchOptions({ search_terms: opts.search_terms.filter((x) => x !== t) })}
-                  >
-                    <X size={16} aria-hidden="true" />
-                  </button>
-                </li>
-              ))}
-            </ul>
           )}
-          <div className="term-row">
-            <input
-              className="field"
-              aria-label="New search term"
-              value={termDraft}
-              autoComplete="off"
-              onChange={(e) => setTermDraft(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  e.preventDefault();
-                  addTerm();
-                }
-              }}
-            />
-            <button type="button" className="btn" onClick={addTerm} disabled={termDraft.trim() === ""}>
-              <Plus size={16} aria-hidden="true" />
-              Add
-            </button>
-          </div>
         </div>
+
+        <details
+          className="editor-more"
+          open={moreOpen}
+          onToggle={(e) => setMoreOpen(e.currentTarget.open)}
+        >
+          <summary>
+            <ChevronRight size={16} aria-hidden="true" className="editor-more-chev" />
+            More options
+            {moreSummary && <span className="editor-more-sum">{moreSummary}</span>}
+          </summary>
+          <div className="editor-more-body">
+            <div className="editor-group">
+              <label htmlFor={`${uid}-desc`}>Description</label>
+              <textarea
+                id={`${uid}-desc`}
+                className="field"
+                rows={2}
+                value={description}
+                aria-describedby={`${uid}-desc-help`}
+                onChange={(e) => setDescription(e.target.value)}
+              />
+              <p className="editor-note" id={`${uid}-desc-help`}>
+                Notes for yourself.{advanced && " Saved as a # comment above the phrase in the file."}
+              </p>
+            </div>
+
+            <div className="editor-group" role="group" aria-labelledby={`${uid}-terms`}>
+              <span className="editor-legend" id={`${uid}-terms`}>
+                Search terms
+              </span>
+              <p className="editor-note">Extra words that find this phrase when you search. They don't change expansion.</p>
+              {opts.search_terms.length > 0 && (
+                <ul className="term-list">
+                  {opts.search_terms.map((t) => (
+                    <li key={t}>
+                      <span className="chip grow">{t}</span>
+                      <button
+                        type="button"
+                        className="btn btn-icon"
+                        aria-label={`Remove search term ${t}`}
+                        title="Remove search term"
+                        onClick={() => patchOptions({ search_terms: opts.search_terms.filter((x) => x !== t) })}
+                      >
+                        <X size={16} aria-hidden="true" />
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <div className="term-row">
+                <input
+                  className="field"
+                  aria-label="New search term"
+                  value={termDraft}
+                  autoComplete="off"
+                  onChange={(e) => setTermDraft(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      addTerm();
+                    }
+                  }}
+                />
+                <button type="button" className="btn" onClick={addTerm} disabled={termDraft.trim() === ""}>
+                  <Plus size={16} aria-hidden="true" />
+                  Add
+                </button>
+              </div>
+            </div>
+
+            {!advanced && hiddenOptions.length > 0 && (
+              <p className="editor-note">
+                <Info size={16} aria-hidden="true" />
+                This phrase also uses {listWords(hiddenOptions)}. Turn on Advanced to change{" "}
+                {hiddenOptions.length === 1 ? "it" : "them"}.
+              </p>
+            )}
+
+            {advanced && (
+              <div className="editor-group editor-adv" role="group" aria-labelledby={`${uid}-adv`}>
+                <span className="editor-legend" id={`${uid}-adv`}>
+                  Insertion
+                </span>
+                <div className="opt-select">
+                  <label htmlFor={`${uid}-mode`}>
+                    How the text is inserted <KeyName name="force_mode" />
+                  </label>
+                  <select
+                    id={`${uid}-mode`}
+                    className="field"
+                    value={opts.force_mode ?? ""}
+                    aria-describedby={`${uid}-mode-help`}
+                    onChange={(e) => patchOptions({ force_mode: e.target.value || null })}
+                  >
+                    {opts.force_mode && !FORCE_MODES.some(([v]) => v === opts.force_mode) && (
+                      <option value={opts.force_mode}>{opts.force_mode} (not recognised)</option>
+                    )}
+                    {FORCE_MODES.map(([v, text]) => (
+                      <option key={v} value={v}>
+                        {text}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="opt-help" id={`${uid}-mode-help`}>
+                    Automatic is best. Choose paste if typing drops characters, or typing if an app blocks paste.
+                  </p>
+                </div>
+              </div>
+            )}
+          </div>
+        </details>
       </div>
 
-      {problems.length > 0 && (
+      {problems.length > 1 && (
         <ul className="editor-problems" aria-live="polite">
           {problems.map((p, i) => (
             <li key={i}>{p}</li>
@@ -1026,21 +1058,23 @@ export function PhraseEditor({ folders, file, phrase, onSaved, onCancel, onReloa
       )}
       {error && saveFrom === "bottom" && <ErrorMessage message={error} onReload={() => void reload()} />}
 
-      <div className="editor-buttons" role="group" aria-label="Save or cancel at the end of the form">
-        <button
-          type="submit"
-          className="btn btn-primary"
-          data-where="bottom"
-          disabled={saveDisabled}
-          title="Save (Ctrl+S)"
-        >
-          <Save size={16} aria-hidden="true" />
-          {saving ? "Saving…" : "Save"}
-        </button>
-        <button type="button" className="btn" onClick={onCancel} disabled={saving} title="Cancel (Esc)">
-          Cancel
-        </button>
-      </div>
+      {advanced && (
+        <div className="editor-buttons" role="group" aria-label="Save or cancel at the end of the form">
+          <button
+            type="submit"
+            className="btn btn-primary"
+            data-where="bottom"
+            disabled={saveDisabled}
+            title="Save (Ctrl+S)"
+          >
+            <Save size={16} aria-hidden="true" />
+            {saving ? "Saving…" : "Save"}
+          </button>
+          <button type="button" className="btn" onClick={onCancel} disabled={saving} title="Cancel (Esc)">
+            Cancel
+          </button>
+        </div>
+      )}
     </form>
   );
 }
@@ -1059,7 +1093,7 @@ export function PhraseActions({ folder, phrase, onEdit, onDeleted, onReload }: A
   const [confirming, setConfirming] = useState(false);
   return (
     <div className="detail-actions">
-      <button type="button" className="btn" onClick={onEdit}>
+      <button type="button" className="btn btn-primary" onClick={onEdit}>
         <Pencil size={16} aria-hidden="true" />
         Edit
       </button>
@@ -1097,6 +1131,7 @@ function ConfirmDelete({
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const titleId = useId();
+  const [advanced] = useAdvanced();
 
   useEffect(() => {
     const dialog = ref.current;
@@ -1124,26 +1159,27 @@ function ConfirmDelete({
       <h2 id={titleId} className="confirm-title">
         Delete “{phraseName(phrase)}”?
       </h2>
-      <p>This removes the phrase from {folder.file}:</p>
-      <ul className="confirm-list">
-        <li>
-          {phrase.triggers.length > 1 ? "Triggers" : "Trigger"}:{" "}
-          {phrase.triggers.map((t) => (
-            <span className="chip" key={t}>
-              {t}
-            </span>
-          ))}
-        </li>
-        {phrase.line !== null && <li>The entry starting at line {phrase.line}.</li>}
-        {phrase.comment && (
-          <li>
-            The comment above it: <q className="confirm-comment">{phrase.comment}</q>
-          </li>
-        )}
-      </ul>
       <p>
-        Nothing else in the file changes. xpando keeps a one-time backup of the file as {folder.file}.bak.
+        This removes the phrase{" "}
+        {phrase.triggers.map((t) => (
+          <span className="chip" key={t}>
+            {t}
+          </span>
+        ))}{" "}
+        from “{folder.name}”. A backup copy of the file is kept.
       </p>
+      {advanced && (
+        <ul className="confirm-list">
+          <li>File: {folder.file}</li>
+          {phrase.line !== null && <li>The entry starting at line {phrase.line}.</li>}
+          {phrase.comment && (
+            <li>
+              The comment above it: <q className="confirm-comment">{phrase.comment}</q>
+            </li>
+          )}
+          <li>Nothing else in the file changes. The one-time backup is {folder.file}.bak.</li>
+        </ul>
+      )}
       {error && <ErrorMessage message={error} onReload={() => void onReload().then(onClose)} />}
       <div className="editor-buttons">
         <button type="button" className="btn btn-danger" onClick={remove} disabled={busy}>

@@ -248,7 +248,7 @@ button {
   }
 }
 
-/* {{placeholders}} and the variables that define them */
+/* {{placeholders}} and the macros that define them */
 .placeholder {
   padding: 0 4px;
   border-radius: 4px;
@@ -257,49 +257,60 @@ button {
   font-size: 0.92em;
 }
 
-.vars {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: grid;
-  gap: 8px;
+/* Detail pane, normal mode: each macro as one line */
+.dm-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
 }
 
-.var {
-  padding: 10px 12px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-}
-
-.var-head {
+.dm-chips li {
   display: flex;
   align-items: center;
   gap: 8px;
 }
 
-.var-kind {
+.dm-kind {
   color: var(--muted);
   font-size: 12px;
 }
 
-.var-params {
+/* Detail pane, Advanced mode: with every setting */
+.dm-list {
+  display: grid;
+  gap: 8px;
+}
+
+.dm {
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.dm-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.dm-params {
   margin: 8px 0 0;
   display: grid;
   gap: 4px;
   font-size: 13px;
 }
 
-.var-params > div {
+.dm-params > div {
   display: flex;
   gap: 12px;
 }
 
-.var-params dt {
+.dm-params dt {
   flex: 0 0 72px;
   color: var(--muted);
 }
 
-.var-params dd {
+.dm-params dd {
   margin: 0;
   white-space: pre-wrap;
   overflow-wrap: anywhere;

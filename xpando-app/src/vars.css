@@ -101,6 +101,48 @@
   gap: 10px;
 }
 
+/* Normal mode: the card's title is what it is and how it shows in the text */
+.var-head:has(.var-title) {
+  align-items: center;
+  justify-content: space-between;
+}
+
+.var-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  margin: 0;
+  font-weight: 600;
+}
+
+.var-title svg {
+  flex: none;
+}
+
+/* Settings that are rarely changed */
+.var-more > summary {
+  width: fit-content;
+  color: var(--muted);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.var-more > summary:hover {
+  color: var(--ink);
+}
+
+.var-more > summary:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.var-more-body {
+  display: grid;
+  gap: 12px;
+  margin-top: 10px;
+}
+
 .var-name {
   flex: 1 1 140px;
 }

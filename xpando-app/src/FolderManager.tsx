@@ -1,6 +1,6 @@
-import { useEffect, useId, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type FormEvent, type KeyboardEvent, type ReactNode } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { AppWindow, FolderPlus, Pencil, Plus, Trash2, X } from "lucide-react";
+import { AppWindow, ChevronDown, FolderPlus, Pencil, Plus, Settings2, Trash2, X } from "lucide-react";
 
 /** Mirrors `xpando_core::folders`. */
 export type ScopeKind = "all" | "only" | "except" | "nowhere";
@@ -101,8 +101,10 @@ export function useFolderInfo(version: unknown): Record<string, FolderInfo> {
 }
 
 /** The small scope text under a folder's name in the sidebar. */
-export function ScopeLabel({ info }: { info: FolderInfo | undefined }) {
+export function ScopeLabel({ info, showAll = false }: { info: FolderInfo | undefined; showAll?: boolean }) {
   if (!info) return null;
+  // "All apps" is the usual case and says nothing new: only Advanced mode spells it out.
+  if (info.scope.kind === "all" && !showAll) return null;
   const warn = info.scope.kind === "nowhere";
   return (
     <span
@@ -278,8 +280,7 @@ function NewFolderDialog({ onClose, onDone }: { onClose: () => void; onDone: (fi
           aria-describedby={`${fieldId}-help`}
         />
         <p id={`${fieldId}-help`} className="fm-help">
-          Letters, digits, spaces, “-” and “_”. The folder starts empty and applies to all apps; use “Apps…” to
-          limit it.
+          Letters, digits, spaces, “-” and “_”. It applies to all apps until you limit it under Folder options.
         </p>
         {error && <Problem message={error} />}
         <div className="fm-buttons">
@@ -319,35 +320,117 @@ export function FolderToolbar({
   const scopeNote = info?.scope_locked ?? null;
   return (
     <div className="fm-bar">
-      <p className="fm-bar-scope">
-        <AppWindow size={16} aria-hidden="true" />
-        <span>
-          Applies to: <strong>{info ? scopeLabel(info) : "…"}</strong>
-        </span>
-      </p>
-      <div className="fm-bar-buttons" role="group" aria-label={`Folder ${folder.name}`}>
-        <button type="button" className="btn" onClick={() => setWhich("apps")} disabled={!info || !!scopeNote}>
+      {advanced && (
+        <p className="fm-bar-scope">
           <AppWindow size={16} aria-hidden="true" />
-          Apps…
-        </button>
-        <button type="button" className="btn" onClick={() => setWhich("rename")} disabled={!info || !!lockNote}>
-          <Pencil size={16} aria-hidden="true" />
-          Rename
-        </button>
-        <button type="button" className="btn" onClick={() => setWhich("delete")} disabled={!info || !!lockNote}>
-          <Trash2 size={16} aria-hidden="true" />
-          Delete
-        </button>
-      </div>
+          <span>
+            Applies to: <strong>{info ? scopeLabel(info) : "…"}</strong>
+          </span>
+        </p>
+      )}
+      <FolderMenu
+        label={`Folder “${folder.name}”`}
+        items={[
+          { id: "apps", text: "Apps…", icon: <AppWindow size={16} aria-hidden="true" />, disabled: !info || !!scopeNote },
+          { id: "rename", text: "Rename", icon: <Pencil size={16} aria-hidden="true" />, disabled: !info || !!lockNote },
+          { id: "delete", text: "Delete", icon: <Trash2 size={16} aria-hidden="true" />, disabled: !info || !!lockNote },
+        ]}
+        onPick={(id) => setWhich(id)}
+      />
       {(lockNote || scopeNote) && (
         <p className="fm-note">
           {lockNote ? `This folder cannot be renamed or deleted here. ${lockNote}` : `Its apps cannot be changed here. ${scopeNote}`}
         </p>
       )}
       {which === "rename" && <RenameDialog folder={folder} onClose={close} onDone={onDone} advanced={advanced} />}
-      {which === "delete" && <DeleteDialog folder={folder} onClose={close} onDone={onDone} />}
+      {which === "delete" && <DeleteDialog folder={folder} onClose={close} onDone={onDone} advanced={advanced} />}
       {which === "apps" && info && (
         <AppsDialog folder={folder} info={info} advanced={advanced} onClose={close} onDone={onDone} />
+      )}
+    </div>
+  );
+}
+
+/** One compact "Folder options" menu instead of three buttons in a row. */
+function FolderMenu({
+  label,
+  items,
+  onPick,
+}: {
+  label: string;
+  items: { id: Exclude<Which, null>; text: string; icon: ReactNode; disabled: boolean }[];
+  onPick: (id: Exclude<Which, null>) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const wrap = useRef<HTMLDivElement>(null);
+  const button = useRef<HTMLButtonElement>(null);
+  const uid = useId();
+
+  useEffect(() => {
+    if (open) wrap.current?.querySelector<HTMLElement>('[role="menuitem"]:not(:disabled)')?.focus();
+  }, [open]);
+
+  function onKeyDown(e: KeyboardEvent<HTMLDivElement>) {
+    if (!open) return;
+    const els = [...(wrap.current?.querySelectorAll<HTMLElement>('[role="menuitem"]:not(:disabled)') ?? [])];
+    const at = els.indexOf(document.activeElement as HTMLElement);
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      els[(at + 1) % els.length]?.focus();
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      els[(at - 1 + els.length) % els.length]?.focus();
+    } else if (e.key === "Escape") {
+      e.preventDefault();
+      e.stopPropagation();
+      setOpen(false);
+      button.current?.focus();
+    } else if (e.key === "Tab") {
+      setOpen(false);
+    }
+  }
+
+  return (
+    <div
+      className="fm-menu"
+      ref={wrap}
+      onKeyDown={onKeyDown}
+      onBlur={(e) => {
+        if (!wrap.current?.contains(e.relatedTarget as Node | null)) setOpen(false);
+      }}
+    >
+      <button
+        type="button"
+        ref={button}
+        className="btn"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-controls={`${uid}-menu`}
+        onClick={() => setOpen((o) => !o)}
+      >
+        <Settings2 size={16} aria-hidden="true" />
+        Folder options
+        <ChevronDown size={16} aria-hidden="true" />
+      </button>
+      {open && (
+        <div className="fm-menu-list" role="menu" id={`${uid}-menu`} aria-label={label}>
+          {items.map((it) => (
+            <button
+              key={it.id}
+              type="button"
+              role="menuitem"
+              className="fm-menu-item"
+              disabled={it.disabled}
+              onClick={() => {
+                setOpen(false);
+                onPick(it.id);
+              }}
+            >
+              {it.icon}
+              {it.text}
+            </button>
+          ))}
+        </div>
       )}
     </div>
   );
@@ -413,8 +496,7 @@ function RenameDialog({
           onChange={(e) => setName(e.target.value)}
         />
         <p className="fm-help">
-          Phrases and the apps this folder applies to stay as they are. Anything that refers to the
-          folder is updated for you.
+          Phrases and the apps this folder applies to stay as they are.
         </p>
         {advanced && preview.changes && (
           <>
@@ -456,10 +538,12 @@ function RenameDialog({
 
 function DeleteDialog({
   folder,
+  advanced,
   onClose,
   onDone,
 }: {
   folder: FolderRef;
+  advanced: boolean;
   onClose: () => void;
   onDone: (file: string | null) => void;
 }) {
@@ -489,13 +573,19 @@ function DeleteDialog({
     <Dialog title={`Delete folder “${folder.name}”?`} labelId={titleId} dialog={dialog}>
       <p>
         This removes the folder and its {folder.phrases} {folder.phrases === 1 ? "phrase" : "phrases"} from
-        espanso. These files will change:
+        espanso. A backup copy is kept, so it can be restored.
       </p>
-      {preview.changes ? <ChangeList changes={preview.changes} /> : !problem && <p className="fm-help">Checking…</p>}
-      <p className="fm-help">
-        Every file that is deleted is first copied to the backup named above, so the folder can be restored by
-        copying the backup back. Nothing else in your espanso configuration changes.
-      </p>
+      {advanced && (
+        <>
+          <p className="fm-help">These files will change:</p>
+          {preview.changes ? <ChangeList changes={preview.changes} /> : !problem && <p className="fm-help">Checking…</p>}
+          <p className="fm-help">
+            Every file that is deleted is first copied to the backup named above, so the folder can be restored by
+            copying the backup back. Nothing else in your espanso configuration changes.
+          </p>
+        </>
+      )}
+      {!advanced && !preview.changes && !problem && <p className="fm-help">Checking…</p>}
       {problem && (
         <Problem
           message={problem}
@@ -599,8 +689,8 @@ function AppsDialog({
   return (
     <Dialog title={`Apps for “${folder.name}”`} labelId={titleId} dialog={dialog}>
       <p className="fm-help">
-        Choose where the phrases in this folder expand. Phrases in “All apps” folders work everywhere; phrases
-        in an app-specific folder work only while one of its apps is in front.
+        Choose where the phrases in this folder expand. In an app-specific folder they work only while one of its
+        apps is in front.
       </p>
       <fieldset className="fm-radios">
         <legend className="fm-legend">Where should this folder work?</legend>
@@ -655,8 +745,8 @@ function AppsDialog({
             </button>
           </div>
           <p id={`${listId}-exe-help`} className="fm-help">
-            Type the program’s file name, for example winword.exe or firefox. On Windows, open Task Manager, go
-            to the Details tab and look in the Name column while the program is running.
+            The program’s file name, for example winword.exe. Task Manager, Details tab, shows it while the
+            program runs.
           </p>
           {customExec && (
             <label className="fm-check">
@@ -682,8 +772,8 @@ function AppsDialog({
             aria-describedby={`${listId}-title-help`}
           />
           <p id={`${listId}-title-help`} className="fm-help">
-            Narrows the folder to windows whose title has this text, such as one website in a browser. Capital
-            letters do not matter. When you also choose programs, both must match.
+            Only windows whose title has this text, such as one website. Capitals do not matter. With programs
+            chosen, both must match.
           </p>
           {customTitle && (
             <label className="fm-check">

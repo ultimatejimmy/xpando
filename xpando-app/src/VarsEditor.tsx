@@ -315,6 +315,8 @@ interface MacroDef {
   /** Variable to create; null for text that needs none. */
   make: ((name: string) => VarSpec) | null;
   baseName: string;
+  /** Offered only in Advanced mode: technical, or needed only for building other macros. */
+  advanced?: boolean;
 }
 
 const spec = (name: string, type: string, params: VarParam[]): VarSpec => ({ name, type, params, source: null });
@@ -338,6 +340,7 @@ const MACROS: MacroDef[] = [
   },
   {
     id: "shell",
+    advanced: true,
     label: "Command output",
     hint: "Output of a command",
     icon: <Terminal size={16} aria-hidden="true" />,
@@ -347,7 +350,7 @@ const MACROS: MacroDef[] = [
   {
     id: "random",
     label: "Random pick",
-    hint: "One of several, picked at random",
+    hint: "One of several, at random",
     icon: <Shuffle size={16} aria-hidden="true" />,
     baseName: "random",
     make: (n) => spec(n, "random", [{ key: "choices", value: { t: "list", v: ["Option 1", "Option 2"] } }]),
@@ -355,15 +358,16 @@ const MACROS: MacroDef[] = [
   {
     id: "choice",
     label: "Choice list",
-    hint: "Asks you to pick when expanding",
+    hint: "You pick when it expands",
     icon: <ListChecks size={16} aria-hidden="true" />,
     baseName: "choice",
     make: (n) => spec(n, "choice", [{ key: "values", value: { t: "list", v: ["Option 1", "Option 2"] } }]),
   },
   {
     id: "echo",
+    advanced: true,
     label: "Fixed text",
-    hint: "Text you can reuse in other macros",
+    hint: "Text to reuse in other macros",
     icon: <MessageSquare size={16} aria-hidden="true" />,
     baseName: "text",
     make: (n) => spec(n, "echo", [{ key: "echo", value: text("") }]),
@@ -371,24 +375,27 @@ const MACROS: MacroDef[] = [
   {
     // Needs xpando's engine build: stock espanso rejects this variable type.
     id: "set_clipboard",
+    advanced: true,
     label: "Set clipboard",
-    hint: "Fills the clipboard after pasting (xpando only)",
+    hint: "Fills the clipboard (xpando only)",
     icon: <ClipboardCopy size={16} aria-hidden="true" />,
     baseName: "setclip",
     make: (n) => spec(n, "set_clipboard", [{ key: "text", value: text("") }]),
   },
   {
     id: "script",
+    advanced: true,
     label: "Program output",
-    hint: "Output of a program you name",
+    hint: "Output of a program",
     icon: <FileCode2 size={16} aria-hidden="true" />,
     baseName: "script",
     make: (n) => spec(n, "script", [{ key: "args", value: { t: "list", v: [""] } }]),
   },
   {
     id: "form",
+    advanced: true,
     label: "Form",
-    hint: "Asks several questions when expanding",
+    hint: "Asks several questions",
     icon: <ClipboardList size={16} aria-hidden="true" />,
     baseName: "form",
     make: (n) => spec(n, "form", [{ key: "layout", value: text("") }]),
@@ -396,7 +403,7 @@ const MACROS: MacroDef[] = [
   {
     id: "cursor",
     label: "Cursor position",
-    hint: "Where the cursor lands ($|$)",
+    hint: "Where the cursor lands",
     icon: <TextCursorInput size={16} aria-hidden="true" />,
     baseName: "",
     make: null,
@@ -744,7 +751,9 @@ function MacroMenu({
   rich?: boolean;
 }) {
   const label = kind === "insert" ? "Insert macro" : "Add a macro";
-  const list = kind === "insert" ? MACROS : MACROS.filter((m) => m.make);
+  const [advanced] = useAdvanced();
+  // Normal mode offers the everyday macros; the technical ones (commands, programs, forms) are Advanced.
+  const list = (kind === "insert" ? MACROS : MACROS.filter((m) => m.make)).filter((m) => advanced || !m.advanced);
   const [open, setOpen] = useState(false);
   const wrap = useRef<HTMLDivElement>(null);
   const button = useRef<HTMLButtonElement>(null);
@@ -817,6 +826,7 @@ function MacroMenu({
                 role="menuitem"
                 className={`macro-item${off ? " macro-off" : ""}`}
                 aria-disabled={off || undefined}
+                title={off ? "The cursor position does not work in rich text, so it is only offered in plain text." : undefined}
                 onClick={() => {
                   if (off) return;
                   setOpen(false);
@@ -825,7 +835,7 @@ function MacroMenu({
               >
                 {m.icon}
                 <span className="macro-label">{m.label}</span>
-                <span className="macro-hint">{off ? "Plain text only: it doesn't work in rich text" : m.hint}</span>
+                <span className="macro-hint">{off ? "Plain text only" : m.hint}</span>
               </button>
             );
           })}
@@ -910,12 +920,13 @@ function VarsSection(p: SectionProps) {
   const uid = useId();
   const [advanced] = useAdvanced();
   const count = p.items.length;
-  const addRow = (
+  // Adding a macro without putting it in the text is for building macros from macros: Advanced.
+  const addRow = advanced ? (
     <div className="var-add">
       {p.addMenu}
       <span className="var-hint">Adds it without putting it in the text.</span>
     </div>
-  );
+  ) : null;
 
   if (p.state !== "ready") {
     return (
@@ -937,8 +948,9 @@ function VarsSection(p: SectionProps) {
     );
   }
 
-  // No variables: one compact row instead of an empty section.
+  // No macros: normal mode shows nothing (Insert macro above the text adds one), Advanced one compact row.
   if (count === 0) {
+    if (!advanced) return <NoticeBar p={p} />;
     return (
       <div className="editor-group vars-section vars-empty" role="group" aria-labelledby={`${uid}-h`}>
         <span className="editor-legend" id={`${uid}-h`}>
@@ -997,10 +1009,12 @@ function VarsSection(p: SectionProps) {
         hidden={!p.open}
         onFocusCapture={(e) => p.onFocusCapture(e.target as HTMLElement)}
       >
-        <p className="var-hint">
-          <Info size={16} aria-hidden="true" />
-          Macros are applied in the right order automatically: one that uses another goes after it.
-        </p>
+        {advanced && (
+          <p className="var-hint">
+            <Info size={16} aria-hidden="true" />
+            Macros are applied in the right order automatically: one that uses another goes after it.
+          </p>
+        )}
         <ol className="var-cards">
           {p.items.map((it, i) => (
             <VarCard
@@ -1124,6 +1138,15 @@ function VarCard({
   return (
     <li className="var-card" aria-label={`Macro ${label}`} ref={card}>
       <div className="var-head">
+        {!advanced && (
+          // Normal mode: what it is and how it shows in the text. Renaming and retyping are Advanced.
+          <p className="var-title">
+            {MACROS.find((m) => m.id === item.type)?.icon ?? <Braces size={16} aria-hidden="true" />}
+            <span className="var-title-label">{macroLabel(item.type)}</span>
+            <code className="placeholder">{`{{${item.name}}}`}</code>
+          </p>
+        )}
+        {advanced && (
         <div className="var-field var-name">
           <label htmlFor={`${uid}-name`}>Name</label>
           <NameField
@@ -1133,6 +1156,8 @@ function VarCard({
             onRename={onRename}
           />
         </div>
+        )}
+        {advanced && (
         <div className="var-field var-type">
           <label htmlFor={`${uid}-type`}>What it fills in</label>
           <select
@@ -1159,6 +1184,7 @@ function VarCard({
             </span>
           )}
         </div>
+        )}
         <div className="var-buttons">
           <button
             type="button"
@@ -1171,7 +1197,14 @@ function VarCard({
           </button>
         </div>
       </div>
-      {!known && (
+      {!known && !advanced && (
+        <p className="var-hint">
+          <Info size={16} aria-hidden="true" />
+          xpando doesn't know this kind of macro ({item.type || "no type"}), so its settings are shown as name and value
+          pairs.
+        </p>
+      )}
+      {!known && advanced && (
         <div className="var-field">
           <label htmlFor={`${uid}-custom`}>Type name</label>
           <input
@@ -1191,9 +1224,7 @@ function VarCard({
       {unused && (
         <p className="var-unused">
           <Info size={16} aria-hidden="true" />
-          <span>
-            Not used in the text. Type <code>{`{{${item.name}}}`}</code> where it should appear, or
-          </span>
+          <span>Not in the text yet.</span>
           <button type="button" className="btn" onClick={() => onRemove(item.key)}>
             <Trash2 size={16} aria-hidden="true" />
             Remove it
@@ -1408,6 +1439,24 @@ function ListOrRaw({
 /** Common date formats, offered as one-click examples. */
 const DATE_EXAMPLES = ["%Y-%m-%d", "%m/%d/%Y", "%d.%m.%Y", "%B %d, %Y", "%A", "%H:%M", "%Y-%m-%d %H:%M"];
 
+/**
+ * Settings that are rarely changed, behind one "More settings" disclosure. Closed in normal
+ * mode; Advanced mode shows them open, since showing everything is what it is for.
+ */
+function MoreSettings({ children }: { children: ReactNode }) {
+  const advanced = useContext(AdvancedContext);
+  const [open, setOpen] = useState(advanced);
+  useEffect(() => {
+    if (advanced) setOpen(true);
+  }, [advanced]);
+  return (
+    <details className="var-more" open={open} onToggle={(e) => setOpen(e.currentTarget.open)}>
+      <summary>More settings</summary>
+      <div className="var-more-body">{children}</div>
+    </details>
+  );
+}
+
 function DateFields({ item, set, uid }: { item: Item; set: SetItem; uid: string }) {
   const format = textOf(item, "format");
   const offset = textOf(item, "offset");
@@ -1454,6 +1503,7 @@ function DateFields({ item, set, uid }: { item: Item; set: SetItem; uid: string 
           })}
         </div>
       </div>
+      <MoreSettings>
       <details className="var-help">
         <summary>Build your own: what the format codes mean</summary>
         <dl className="token-list">
@@ -1497,6 +1547,7 @@ function DateFields({ item, set, uid }: { item: Item; set: SetItem; uid: string 
         />
       </div>
       <p className="var-hint">The preview is approximate; espanso writes the final result.</p>
+      </MoreSettings>
     </>
   );
 }
@@ -1541,7 +1592,7 @@ function TypeFields({ item, set, uid }: { item: Item; set: SetItem; uid: string 
       return (
         <p className="var-hint">
           <Info size={16} aria-hidden="true" />
-          Inserts whatever text is on the clipboard when the phrase expands. It has no settings.
+          Inserts whatever you last copied. Nothing to set.
         </p>
       );
     case "echo":
@@ -1595,6 +1646,7 @@ function TypeFields({ item, set, uid }: { item: Item; set: SetItem; uid: string 
             onChange={(v) => set((it) => withParam(it, "cmd", text(v)))}
             hint="Its output replaces the macro. Can use other macros."
           />
+          <MoreSettings>
           <div className="var-field">
             <label htmlFor={`${uid}-shell`}>
               Run it with
@@ -1611,6 +1663,7 @@ function TypeFields({ item, set, uid }: { item: Item; set: SetItem; uid: string 
             </select>
           </div>
           <ShellOptions item={item} set={set} uid={uid} ignoreError={false} />
+          </MoreSettings>
         </>
       );
     }
@@ -1628,7 +1681,9 @@ function TypeFields({ item, set, uid }: { item: Item; set: SetItem; uid: string 
             onChange={(l) => set((it) => withParam(it, "args", { t: "list", v: l }))}
           />
           <p className="var-hint">The first line is the program to run, the lines after it are passed to it.</p>
-          <ShellOptions item={item} set={set} uid={uid} ignoreError />
+          <MoreSettings>
+            <ShellOptions item={item} set={set} uid={uid} ignoreError />
+          </MoreSettings>
         </>
       );
     }
@@ -1680,12 +1735,15 @@ function TypeFields({ item, set, uid }: { item: Item; set: SetItem; uid: string 
 
 /** Parameters the type's own form does not show (all of them for unknown types). */
 function ExtraParams({ item, set, uid }: { item: Item; set: SetItem; uid: string }) {
+  const advanced = useContext(AdvancedContext);
   const handled = HANDLED[item.type] ?? [];
   const extras = item.params.map((p, idx) => ({ p, idx })).filter(({ p }) => !handled.includes(p.key));
   const known = isKnown(item.type);
   const setAt = (idx: number, fn: (p: VarParam) => VarParam) =>
     set((it) => ({ ...it, params: it.params.map((p, i) => (i === idx ? fn(p) : p)) }));
-  if (extras.length === 0 && known) return null;
+  // Settings xpando has no field for are a technical matter: Advanced mode, or an unknown type
+  // (where this is the only way to edit it).
+  if (known && (extras.length === 0 || !advanced)) return null;
   return (
     <div className="var-field" role="group" aria-label={known ? "Other settings" : "Settings"}>
       <span className="var-label">{known ? "Other settings" : "Settings"}</span>

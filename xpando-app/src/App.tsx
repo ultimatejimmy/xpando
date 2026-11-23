@@ -26,7 +26,7 @@ import {
 } from "./PhraseEditor";
 import { FolderToolbar, NewFolderButton, ScopeLabel, useFolderInfo } from "./FolderManager";
 import { RichTextView } from "./RichLazy";
-import { VarsAka } from "./VarsEditor";
+import { VarsAka, macroLabel } from "./VarsEditor";
 
 interface MacroInfo {
   name: string;
@@ -112,7 +112,7 @@ const PLACEHOLDER_ONLY = /^(\s*\{\{[^}]+\}\}\s*)+$/;
 function previewText(p: Phrase): string {
   if (p.vars.length > 0 && PLACEHOLDER_ONLY.test(p.content)) {
     const kinds = [...new Set(p.vars.map((v) => v.kind).filter(Boolean))];
-    return `Built from ${kinds.join(", ")}`;
+    return `Made of ${kinds.map(macroLabel).join(", ")}`;
   }
   return p.preview;
 }
@@ -370,7 +370,7 @@ export default function App() {
                   <span className="grow">
                     {f.name}
                     {advanced && <span className="adv-folder-file">{f.file}</span>}
-                    <ScopeLabel info={infos[f.file]} />
+                    <ScopeLabel info={infos[f.file]} showAll={advanced} />
                   </span>
                   <span className="count">{f.phrases.length}</span>
                 </button>
@@ -485,25 +485,45 @@ export default function App() {
                   </span>
                 ))}
               </div>
-              <OptionChips options={current.phrase.options} />
-              <p className="detail-meta">{KIND_LABEL[current.phrase.kind] ?? current.phrase.kind}</p>
+              {advanced && <OptionChips options={current.phrase.options} />}
+              {(advanced || (current.phrase.kind !== "replace" && current.phrase.kind !== "html")) && (
+                <p className="detail-meta">{KIND_LABEL[current.phrase.kind] ?? current.phrase.kind}</p>
+              )}
               {current.phrase.kind === "html" ? (
                 <RichTextView html={current.phrase.content} />
               ) : (
                 <pre className="content-text">{withPlaceholders(current.phrase.content)}</pre>
               )}
-              {current.phrase.vars.length > 0 && (
+              {current.phrase.vars.length > 0 && !advanced && (
                 <>
-                  <h3 className="detail-meta">Macros<VarsAka /></h3>
-                  <ul className="vars">
+                  <h3 className="detail-meta">Macros</h3>
+                  <ul className="dm-chips">
                     {current.phrase.vars.map((v) => (
-                      <li className="var" key={v.name}>
-                        <div className="var-head">
+                      <li key={v.name}>
+                        <span className="placeholder">{`{{${v.name}}}`}</span>
+                        <span className="dm-kind">{macroLabel(v.kind)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              )}
+              {current.phrase.vars.length > 0 && advanced && (
+                <>
+                  <h3 className="detail-meta">
+                    Macros
+                    <VarsAka />
+                  </h3>
+                  <ul className="dm-list">
+                    {current.phrase.vars.map((v) => (
+                      <li className="dm" key={v.name}>
+                        <div className="dm-head">
                           <span className="placeholder">{`{{${v.name}}}`}</span>
-                          <span className="var-kind">{v.kind || "unknown type"}</span>
+                          <span className="dm-kind">
+                            {macroLabel(v.kind)} <code>{v.kind || "unknown type"}</code>
+                          </span>
                         </div>
                         {v.params.length > 0 && (
-                          <dl className="var-params">
+                          <dl className="dm-params">
                             {v.params.map(([k, val]) => (
                               <div key={k}>
                                 <dt>{k}</dt>
