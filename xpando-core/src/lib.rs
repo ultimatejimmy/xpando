@@ -8,7 +8,7 @@ use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_norway::Value;
 
 pub mod edit;
@@ -51,6 +51,32 @@ pub struct Var {
     pub params: Vec<(String, String)>,
 }
 
+/// espanso's per-match options. `None` (or an empty list) means "not set in the file".
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PhraseOptions {
+    /// Only expand when the trigger is a whole word (both sides).
+    #[serde(default)]
+    pub word: Option<bool>,
+    /// Only expand when the trigger starts a word.
+    #[serde(default)]
+    pub left_word: Option<bool>,
+    /// Only expand when the trigger ends a word.
+    #[serde(default)]
+    pub right_word: Option<bool>,
+    /// Match the case of what was typed (`:Hello` gives a capitalised result).
+    #[serde(default)]
+    pub propagate_case: Option<bool>,
+    /// `uppercase`, `capitalize` or `capitalize_words`.
+    #[serde(default)]
+    pub uppercase_style: Option<String>,
+    /// `clipboard` or `keys`.
+    #[serde(default)]
+    pub force_mode: Option<String>,
+    /// Extra words the search finds this phrase by.
+    #[serde(default)]
+    pub search_terms: Vec<String>,
+}
+
 /// One phrase (a single entry of `matches:`), read-only.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Phrase {
@@ -73,6 +99,8 @@ pub struct Phrase {
     pub index: usize,
     /// 1-based line of the entry's `-` in the file, when the line scan was reliable.
     pub line: Option<usize>,
+    /// Per-match options (`word`, `propagate_case`, `force_mode`, ...).
+    pub options: PhraseOptions,
 }
 
 /// A folder is one match file.
@@ -166,7 +194,26 @@ fn parse_entry(entry: &Value) -> Result<Phrase, String> {
         comment: None,
         index: 0,
         line: None,
+        options: parse_options(map),
     })
+}
+
+fn parse_options(map: &serde_norway::Mapping) -> PhraseOptions {
+    let flag = |k: &str| map.get(k).and_then(Value::as_bool);
+    let text = |k: &str| map.get(k).and_then(Value::as_str).map(String::from);
+    PhraseOptions {
+        word: flag("word"),
+        left_word: flag("left_word"),
+        right_word: flag("right_word"),
+        propagate_case: flag("propagate_case"),
+        uppercase_style: text("uppercase_style"),
+        force_mode: text("force_mode"),
+        search_terms: map
+            .get("search_terms")
+            .and_then(Value::as_sequence)
+            .map(|s| s.iter().filter_map(scalar_string).collect())
+            .unwrap_or_default(),
+    }
 }
 
 /// Where one entry of `matches:` sits in the raw file text. All line numbers are 0-based

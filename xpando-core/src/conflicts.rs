@@ -269,6 +269,7 @@ mod tests {
             comment: None,
             index,
             line: None,
+            options: Default::default(),
         }
     }
 

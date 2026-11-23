@@ -21,7 +21,9 @@ use std::path::{Component, Path, PathBuf};
 use serde::{Deserialize, Serialize};
 use serde_norway::Value;
 
-use super::{make_preview, parse_match_text, scan_entries, EntrySpan, Folder, Phrase};
+use super::{
+    make_preview, parse_match_text, scan_entries, EntrySpan, Folder, Phrase, PhraseOptions,
+};
 
 /// Prefix of the error returned when the file changed since it was loaded, so a UI can
 /// offer a reload instead of just showing text.
@@ -62,6 +64,10 @@ pub struct PhraseEdit {
     pub body: Option<String>,
     #[serde(default)]
     pub comment: CommentChange,
+    /// `None` leaves every option as it is. `Some` is the complete wanted set: an option left
+    /// unset in it is removed from the entry, one equal to the current value is not touched.
+    #[serde(default)]
+    pub options: Option<PhraseOptions>,
 }
 
 /// A phrase to append to a file.
@@ -74,6 +80,8 @@ pub struct NewPhrase {
     /// Written as a `# comment` block above the entry.
     #[serde(default)]
     pub comment: Option<String>,
+    #[serde(default)]
+    pub options: PhraseOptions,
 }
 
 // ---------------------------------------------------------------------------------------
@@ -209,6 +217,127 @@ fn render_comment(comment: &str, d: usize, eol: &str) -> Vec<String> {
             }
         })
         .collect()
+}
+
+// ---------------------------------------------------------------------------------------
+// Options
+// ---------------------------------------------------------------------------------------
+
+const UPPERCASE_STYLES: [&str; 3] = ["uppercase", "capitalize", "capitalize_words"];
+const FORCE_MODES: [&str; 2] = ["clipboard", "keys"];
+
+/// Checks the options that differ from `old`. Values already in the file are not judged, so
+/// an entry with an odd value can still have its other fields edited.
+fn validate_options(new: &PhraseOptions, old: &PhraseOptions) -> Result<PhraseOptions, String> {
+    if new.uppercase_style != old.uppercase_style {
+        if let Some(s) = &new.uppercase_style {
+            if !UPPERCASE_STYLES.contains(&s.as_str()) {
+                return Err(format!("\"{s}\" is not a known capitalisation style."));
+            }
+            if new.propagate_case != Some(true) {
+                return Err(
+                    "A capitalisation style only applies when \"match the case you \
+                    type\" is on."
+                        .into(),
+                );
+            }
+        }
+    }
+    if new.force_mode != old.force_mode {
+        if let Some(s) = &new.force_mode {
+            if !FORCE_MODES.contains(&s.as_str()) {
+                return Err(format!("\"{s}\" is not a known insert method."));
+            }
+        }
+    }
+    if new.search_terms != old.search_terms {
+        for (i, t) in new.search_terms.iter().enumerate() {
+            if t.trim().is_empty() || t.contains('\n') {
+                return Err("A search term cannot be empty or span several lines.".into());
+            }
+            if new.search_terms[..i].contains(t) {
+                return Err(format!("The search term \"{t}\" is listed twice."));
+            }
+        }
+    }
+    Ok(new.clone())
+}
+
+/// The scalar options in the order new keys are written.
+fn scalar_options(o: &PhraseOptions) -> [(&'static str, Option<String>); 6] {
+    let b = |v: Option<bool>| v.map(|v| v.to_string());
+    [
+        ("word", b(o.word)),
+        ("left_word", b(o.left_word)),
+        ("right_word", b(o.right_word)),
+        ("propagate_case", b(o.propagate_case)),
+        ("uppercase_style", o.uppercase_style.clone()),
+        ("force_mode", o.force_mode.clone()),
+    ]
+}
+
+fn render_search_terms(terms: &[String], k: usize, step: usize, eol: &str) -> Vec<String> {
+    let pad = " ".repeat(k + step);
+    let mut out = vec![format!("search_terms:{eol}")];
+    for t in terms {
+        out.push(format!("{pad}- {}{eol}", dq(t)));
+    }
+    out
+}
+
+/// Lines of the option keys that are set in `o`, for a new entry.
+fn render_options(o: &PhraseOptions, k: usize, step: usize, eol: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    for (key, v) in scalar_options(o) {
+        if let Some(v) = v {
+            out.push(format!("{key}: {v}{eol}"));
+        }
+    }
+    if !o.search_terms.is_empty() {
+        out.extend(render_search_terms(&o.search_terms, k, step, eol));
+    }
+    out
+}
+
+/// Sets, changes or removes the option keys of `entry` that differ between `old` and `new`.
+/// New keys go after the entry's existing ones; everything else is left alone.
+fn apply_options(
+    entry: &mut EntryText,
+    old: &PhraseOptions,
+    new: &PhraseOptions,
+    eol: &str,
+) -> Result<(), String> {
+    let (k, step) = (entry.k, entry.step());
+    let mut changes: Vec<(&str, Option<Vec<String>>)> = Vec::new();
+    for ((key, o), (_, n)) in scalar_options(old).into_iter().zip(scalar_options(new)) {
+        if o != n {
+            changes.push((key, n.map(|v| vec![format!("{key}: {v}{eol}")])));
+        }
+    }
+    if old.search_terms != new.search_terms {
+        changes.push((
+            "search_terms",
+            (!new.search_terms.is_empty())
+                .then(|| render_search_terms(&new.search_terms, k, step, eol)),
+        ));
+    }
+    for (key, lines) in changes {
+        let pos = entry.position(&[key]);
+        if pos.len() > 1 {
+            return Err(UNSUPPORTED_ENTRY.into());
+        }
+        match (lines, pos.first()) {
+            (Some(own), Some(&p)) => entry.fields[p].own = own,
+            (Some(own), None) => entry.fields.push(Field {
+                key: key.to_string(),
+                own,
+                tail: Vec::new(),
+            }),
+            (None, Some(&p)) => entry.remove_field(p)?,
+            (None, None) => {}
+        }
+    }
+    Ok(())
 }
 
 // ---------------------------------------------------------------------------------------
@@ -599,7 +728,12 @@ pub fn update_phrase(text: &str, index: usize, edit: &PhraseEdit) -> Result<Stri
     let label_changed = label != old.label;
     let body_changed = body.as_ref().is_some_and(|b| *b != old.content);
     let comment_changed = new_comment != old.comment;
-    if !(trig_changed || label_changed || body_changed || comment_changed) {
+    let new_options = match &edit.options {
+        None => old.options.clone(),
+        Some(o) => validate_options(o, &old.options)?,
+    };
+    let options_changed = new_options != old.options;
+    if !(trig_changed || label_changed || body_changed || comment_changed || options_changed) {
         return Ok(text.to_string());
     }
     if trig_changed && old.is_regex {
@@ -668,6 +802,10 @@ pub fn update_phrase(text: &str, index: usize, edit: &PhraseEdit) -> Result<Stri
         }
     }
 
+    if options_changed {
+        apply_options(&mut entry, &old.options, &new_options, eol)?;
+    }
+
     let d = indent(text_of(&ctx.lines[span.start_line]));
     let mut out: Vec<String> = ctx.lines[..span.first_line].to_vec();
     if comment_changed {
@@ -685,6 +823,7 @@ pub fn update_phrase(text: &str, index: usize, edit: &PhraseEdit) -> Result<Stri
     expected.triggers = triggers;
     expected.label = label;
     expected.comment = new_comment;
+    expected.options = new_options;
     if let Some(b) = &body {
         expected.content = b.clone();
         expected.preview = make_preview(b);
@@ -707,6 +846,7 @@ pub fn add_phrase(text: &str, new: &NewPhrase) -> Result<String, String> {
     let label = normalize_label(&new.label);
     let body = normalize_body(&new.body);
     let comment = new.comment.as_deref().and_then(normalize_comment);
+    let options = validate_options(&new.options, &PhraseOptions::default())?;
 
     let count = entry_count(text)?;
     let eol = detect_eol(text);
@@ -785,6 +925,7 @@ pub fn add_phrase(text: &str, new: &NewPhrase) -> Result<String, String> {
     if let Some(l) = &label {
         entry_lines.extend(render_value("label", l, k, step, eol));
     }
+    entry_lines.extend(render_options(&options, k, step, eol));
     let prefix = format!("{}-{}", " ".repeat(d), " ".repeat(offset - 1));
     for (i, l) in entry_lines.into_iter().enumerate() {
         block.push(if i == 0 {
@@ -809,6 +950,7 @@ pub fn add_phrase(text: &str, new: &NewPhrase) -> Result<String, String> {
         comment,
         index: count,
         line: None,
+        options,
     };
     verify(
         text,
@@ -988,6 +1130,7 @@ mod tests {
             label: label.map(String::from),
             body: body.map(String::from),
             comment: CommentChange::Keep,
+            options: None,
         }
     }
 
@@ -997,6 +1140,7 @@ mod tests {
             label: label.map(String::from),
             body: body.into(),
             comment: None,
+            options: PhraseOptions::default(),
         }
     }
 
@@ -1012,6 +1156,7 @@ mod tests {
             label: p.label,
             body: (p.kind == "replace").then_some(p.content),
             comment: CommentChange::Keep,
+            options: None,
         }
     }
 
@@ -1473,5 +1618,154 @@ mod tests {
             assert!(resolve_match_file(&dir, bad).is_err(), "{bad}");
         }
         fs::remove_dir_all(&dir).unwrap();
+    }
+
+    fn opts(f: impl FnOnce(&mut PhraseOptions)) -> Option<PhraseOptions> {
+        let mut o = PhraseOptions::default();
+        f(&mut o);
+        Some(o)
+    }
+
+    fn with_opts(text: &str, index: usize, o: Option<PhraseOptions>) -> Result<String, String> {
+        let mut e = same(text, index);
+        e.options = o;
+        update_phrase(text, index, &e)
+    }
+
+    /// Read-only dry run over real files: `XPANDO_DRYRUN_DIR=<config dir> cargo test -- --ignored`.
+    /// Nothing is written; every entry is "edited" to its current values in memory.
+    #[test]
+    #[ignore]
+    fn dry_run_noop_on_real_files() {
+        let Ok(dir) = std::env::var("XPANDO_DRYRUN_DIR") else {
+            return;
+        };
+        let files = crate::discover_match_files(Path::new(&dir)).unwrap();
+        let mut entries = 0;
+        for f in files {
+            let text = fs::read_to_string(&f).unwrap();
+            for p in parse_match_text(&text).0 {
+                let mut e = same(&text, p.index);
+                e.options = Some(p.options.clone());
+                match update_phrase(&text, p.index, &e) {
+                    Ok(out) => assert_eq!(out, text, "{} #{}", f.display(), p.index),
+                    Err(m) => println!("refused {} #{}: {m}", f.display(), p.index),
+                }
+                // Set an option and clear it again: the text must come back byte for byte.
+                if p.options.word.is_none() && p.options.search_terms.is_empty() {
+                    let mut on = p.options.clone();
+                    on.word = Some(true);
+                    on.search_terms = vec!["t".into()];
+                    if let Ok(with) = with_opts(&text, p.index, Some(on)) {
+                        assert_eq!(
+                            with_opts(&with, p.index, Some(p.options.clone())).unwrap(),
+                            text,
+                            "{} #{}",
+                            f.display(),
+                            p.index
+                        );
+                    }
+                }
+                entries += 1;
+            }
+        }
+        println!("checked {entries} entries");
+    }
+
+    #[test]
+    fn options_are_parsed() {
+        let t = "matches:\n  - trigger: a\n    replace: x\n    word: true\n    propagate_case: true\n    uppercase_style: capitalize\n    force_mode: keys\n    search_terms:\n      - one\n      - two\n";
+        let o = parse_match_text(t).0[0].options.clone();
+        assert_eq!(o.word, Some(true));
+        assert_eq!(o.left_word, None);
+        assert_eq!(o.uppercase_style.as_deref(), Some("capitalize"));
+        assert_eq!(o.force_mode.as_deref(), Some("keys"));
+        assert_eq!(o.search_terms, ["one", "two"]);
+    }
+
+    #[test]
+    fn options_add_change_clear_keep_other_lines() {
+        let base = "matches:\n  # note\n  - trigger: \":a\"\n    replace: x\n    vars: []\n  - trigger: \":b\"\n    replace: y\n";
+        let full = |word: bool| {
+            opts(move |o| {
+                o.word = Some(word);
+                o.propagate_case = Some(true);
+                o.uppercase_style = Some("capitalize_words".into());
+                o.force_mode = Some("clipboard".into());
+                o.search_terms = vec!["hi".into(), "yo".into()];
+            })
+        };
+        let t = with_opts(base, 0, full(true)).unwrap();
+        assert_eq!(
+            t,
+            "matches:\n  # note\n  - trigger: \":a\"\n    replace: x\n    vars: []\n    word: true\n    propagate_case: true\n    uppercase_style: capitalize_words\n    force_mode: clipboard\n    search_terms:\n      - \"hi\"\n      - \"yo\"\n  - trigger: \":b\"\n    replace: y\n"
+        );
+        let t2 = with_opts(&t, 0, full(false)).unwrap();
+        assert_eq!(t2, t.replace("word: true", "word: false"));
+        assert_eq!(with_opts(&t, 0, None).unwrap(), t);
+        assert_eq!(with_opts(&t, 0, opts(|_| {})).unwrap(), base);
+    }
+
+    #[test]
+    fn options_on_last_entry_without_final_newline_and_crlf() {
+        let t = "matches:\r\n  - trigger: a\r\n    replace: x";
+        let o = with_opts(t, 0, opts(|o| o.left_word = Some(true))).unwrap();
+        assert_eq!(
+            o,
+            "matches:\r\n  - trigger: a\r\n    replace: x\r\n    left_word: true"
+        );
+        assert_eq!(with_opts(&o, 0, opts(|_| {})).unwrap(), t);
+    }
+
+    #[test]
+    fn options_flow_list_and_first_key_cases() {
+        let t =
+            "matches:\n  - word: true\n    trigger: a\n    replace: x\n    search_terms: [p, q]\n";
+        let c = with_opts(t, 0, opts(|o| o.word = Some(true))).unwrap();
+        assert_eq!(c, t.replace("    search_terms: [p, q]\n", ""));
+        let c2 = with_opts(
+            t,
+            0,
+            opts(|o| {
+                o.word = Some(true);
+                o.search_terms = vec!["z".into()];
+            }),
+        )
+        .unwrap();
+        assert_eq!(
+            c2,
+            "matches:\n  - word: true\n    trigger: a\n    replace: x\n    search_terms:\n      - \"z\"\n"
+        );
+    }
+
+    #[test]
+    fn options_validation_and_new_phrase() {
+        let t = "matches:\n  - trigger: a\n    replace: x\n";
+        assert!(with_opts(t, 0, opts(|o| o.force_mode = Some("nope".into()))).is_err());
+        assert!(with_opts(
+            t,
+            0,
+            opts(|o| o.uppercase_style = Some("capitalize".into()))
+        )
+        .is_err());
+        assert!(with_opts(
+            t,
+            0,
+            opts(|o| o.search_terms = vec!["a".into(), "a".into()])
+        )
+        .is_err());
+        assert!(with_opts(t, 0, opts(|o| o.search_terms = vec![" ".into()])).is_err());
+        let mut n = np(&[":n"], None, "body");
+        n.comment = Some("About n\nsecond".into());
+        n.options.word = Some(true);
+        n.options.search_terms = vec!["s".into()];
+        let out = add_phrase(t, &n).unwrap();
+        assert!(out.ends_with(
+            "  # About n\n  # second\n  - trigger: \":n\"\n    replace: \"body\"\n    word: true\n    search_terms:\n      - \"s\"\n"
+        ));
+        let odd = "matches:\n  - trigger: a\n    replace: x\n    force_mode: weird\n";
+        let mut e = same(odd, 0);
+        e.label = Some("L".into());
+        assert!(update_phrase(odd, 0, &e).is_ok());
     }
 }
