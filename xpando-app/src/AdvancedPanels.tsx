@@ -102,7 +102,7 @@ interface YamlPaneProps {
   /** Called with the reloaded folder after the YAML was saved. */
   onSaved: (folder: SavedFolder) => void;
   /** Reloads every folder from disk. */
-  onReload: () => Promise<void>;
+  onReload: () => Promise<unknown>;
 }
 
 /** The phrase's exact source text with the file's real line numbers, and its editor. */

@@ -193,7 +193,7 @@ interface Props {
   /** Leaves the editor without saving. */
   onClose: () => void;
   /** Reloads the folders from disk (the draft is kept). */
-  onReload: () => Promise<void>;
+  onReload: () => Promise<unknown>;
 }
 
 export function YamlEditor({
