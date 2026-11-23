@@ -49,13 +49,22 @@ function triggerText(p: Phrase): string {
 const MAX_COMMENT_TITLE = 40;
 
 /**
- * Name shown for a phrase: its label, else the comment above it when that reads like a name
- * (one short line), else its trigger. Longer comments are notes, shown as the description.
+ * A name taken from a comment: the whole comment if it is one short line, else the part before
+ * a " (note)" suffix, e.g. "CR COURSES (assumed TortoiseGit)" -> "CR COURSES". Otherwise none.
+ */
+function commentName(comment: string | null): string | null {
+  if (!comment || comment.includes("\n")) return null;
+  if (comment.length <= MAX_COMMENT_TITLE) return comment;
+  const head = comment.split(" (")[0].trim();
+  return head && head !== comment && head.length <= MAX_COMMENT_TITLE ? head : null;
+}
+
+/**
+ * Name shown for a phrase: its label, else a name read from the comment above it, else its
+ * trigger. Longer comments are notes and are shown as the description instead.
  */
 function title(p: Phrase): string {
-  const c = p.comment;
-  const short = c && !c.includes("\n") && c.length <= MAX_COMMENT_TITLE ? c : null;
-  return p.label || short || p.triggers[0] || "(untitled)";
+  return p.label || commentName(p.comment) || p.triggers[0] || "(untitled)";
 }
 
 const PLACEHOLDER_ONLY = /^(\s*\{\{[^}]+\}\}\s*)+$/;
