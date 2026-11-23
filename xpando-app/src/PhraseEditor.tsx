@@ -1,8 +1,57 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
-import type { FormEvent } from "react";
+import type { KeyboardEvent } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { AlertTriangle, Info, Pencil, Plus, RefreshCw, Save, Trash2, X } from "lucide-react";
+import {
+  AlertTriangle,
+  Check,
+  Copy,
+  Info,
+  Pencil,
+  Plus,
+  RefreshCw,
+  Save,
+  Trash2,
+  X,
+} from "lucide-react";
 import "./editor.css";
+
+/** espanso's per-match options as the backend sends them (`null` = not set in the file). */
+export interface EditorOptions {
+  word: boolean | null;
+  left_word: boolean | null;
+  right_word: boolean | null;
+  propagate_case: boolean | null;
+  uppercase_style: string | null;
+  force_mode: string | null;
+  search_terms: string[];
+}
+
+export const NO_OPTIONS: EditorOptions = {
+  word: null,
+  left_word: null,
+  right_word: null,
+  propagate_case: null,
+  uppercase_style: null,
+  force_mode: null,
+  search_terms: [],
+};
+
+/** Tolerates a backend that predates `options`. */
+export function normalizeOptions(o: Partial<EditorOptions> | null | undefined): EditorOptions {
+  return { ...NO_OPTIONS, ...(o ?? {}), search_terms: o?.search_terms ?? [] };
+}
+
+function optionsKey(o: EditorOptions): string {
+  return JSON.stringify([
+    o.word,
+    o.left_word,
+    o.right_word,
+    o.propagate_case,
+    o.uppercase_style,
+    o.force_mode,
+    o.search_terms,
+  ]);
+}
 
 /** The parts of the browser's phrase and folder types that editing needs. */
 export interface EditorPhrase {
@@ -16,6 +65,7 @@ export interface EditorPhrase {
   comment: string | null;
   index: number;
   line: number | null;
+  options: EditorOptions;
 }
 
 export interface EditorFolder {
@@ -45,6 +95,105 @@ function phraseName(p: EditorPhrase): string {
   return p.label || p.triggers[0] || "(untitled)";
 }
 
+/** Whether two reads of a phrase are the same entry content (the line may move). */
+function samePhrase(a: EditorPhrase, b: EditorPhrase): boolean {
+  return (
+    sameList(a.triggers, b.triggers) &&
+    a.is_regex === b.is_regex &&
+    a.label === b.label &&
+    a.kind === b.kind &&
+    a.content === b.content &&
+    a.comment === b.comment &&
+    JSON.stringify(a.vars) === JSON.stringify(b.vars) &&
+    optionsKey(normalizeOptions(a.options)) === optionsKey(normalizeOptions(b.options))
+  );
+}
+
+// ---------------------------------------------------------------------------------------
+// Option descriptions
+// ---------------------------------------------------------------------------------------
+
+type FlagKey = "word" | "left_word" | "right_word" | "propagate_case";
+
+const FLAGS: { key: FlagKey; label: string; help: string }[] = [
+  {
+    key: "word",
+    label: "Whole word only",
+    help: "Only expand when the trigger is a whole word, with a space or punctuation on both sides.",
+  },
+  {
+    key: "left_word",
+    label: "Start of a word",
+    help: "Only expand when the trigger starts a word, so it does not fire in the middle of one.",
+  },
+  {
+    key: "right_word",
+    label: "End of a word",
+    help: "Only expand when the trigger ends a word, so it does not fire before more letters.",
+  },
+  {
+    key: "propagate_case",
+    label: "Match the case you type",
+    help: "Typing the trigger capitalised or in capitals gives a capitalised or all-capitals result.",
+  },
+];
+
+const UPPERCASE_STYLES: [string, string][] = [
+  ["", "Default (all capitals)"],
+  ["uppercase", "All capitals"],
+  ["capitalize", "First letter only"],
+  ["capitalize_words", "First letter of each word"],
+];
+
+const FORCE_MODES: [string, string][] = [
+  ["", "Automatic"],
+  ["clipboard", "Paste from the clipboard"],
+  ["keys", "Type with the keyboard"],
+];
+
+function optionLabel(list: [string, string][], value: string): string {
+  return list.find(([v]) => v === value)?.[1] ?? value;
+}
+
+/** Short names for the options that are set, for chips in the detail pane. */
+export function optionChipTexts(raw: EditorOptions | null | undefined): string[] {
+  const o = normalizeOptions(raw);
+  const out: string[] = [];
+  if (o.word) out.push("Whole word");
+  if (o.left_word) out.push("Word start");
+  if (o.right_word) out.push("Word end");
+  if (o.propagate_case) {
+    out.push(
+      o.uppercase_style
+        ? `Match case: ${optionLabel(UPPERCASE_STYLES, o.uppercase_style).toLowerCase()}`
+        : "Match case",
+    );
+  }
+  if (o.force_mode) out.push(o.force_mode === "clipboard" ? "Pastes" : o.force_mode === "keys" ? "Types" : `Mode: ${o.force_mode}`);
+  if (o.search_terms.length > 0) {
+    out.push(`${o.search_terms.length} search ${o.search_terms.length === 1 ? "term" : "terms"}`);
+  }
+  return out;
+}
+
+/** The active options as small chips; nothing when none are set. */
+export function OptionChips({ options }: { options: EditorOptions | null | undefined }) {
+  const texts = optionChipTexts(options);
+  if (texts.length === 0) return null;
+  return (
+    <>
+      <p className="detail-meta">Options</p>
+      <div className="chips">
+        {texts.map((t) => (
+          <span className="chip" key={t}>
+            {t}
+          </span>
+        ))}
+      </div>
+    </>
+  );
+}
+
 /** Error text, plus a Reload button when the file changed on disk. */
 function ErrorMessage({ message, onReload }: { message: string; onReload: () => void }) {
   const conflict = isConflict(message);
@@ -71,26 +220,104 @@ export function NewPhraseButton({ onClick, disabled }: { onClick: () => void; di
   );
 }
 
+/** Modal shown when the user tries to leave an editor that has unsaved changes. */
+export function UnsavedChangesDialog({ onKeep, onDiscard }: { onKeep: () => void; onDiscard: () => void }) {
+  const ref = useRef<HTMLDialogElement>(null);
+  const titleId = useId();
+  const discarding = useRef(false);
+
+  useEffect(() => {
+    const dialog = ref.current;
+    if (dialog && !dialog.open) dialog.showModal();
+  }, []);
+
+  return (
+    <dialog
+      ref={ref}
+      className="confirm"
+      aria-labelledby={titleId}
+      onClose={() => {
+        if (!discarding.current) onKeep();
+      }}
+    >
+      <h2 id={titleId} className="confirm-title">
+        Discard your changes?
+      </h2>
+      <p>You have changes to this phrase that are not saved yet. If you leave now they are lost.</p>
+      <div className="editor-buttons">
+        <button type="button" className="btn btn-primary" autoFocus onClick={onKeep}>
+          Keep editing
+        </button>
+        <button
+          type="button"
+          className="btn btn-danger"
+          onClick={() => {
+            discarding.current = true;
+            ref.current?.close();
+            onDiscard();
+          }}
+        >
+          Discard changes
+        </button>
+      </div>
+    </dialog>
+  );
+}
+
+// ---------------------------------------------------------------------------------------
+// The editor
+// ---------------------------------------------------------------------------------------
+
 interface EditorProps {
   folders: EditorFolder[];
   /** The file the phrase lives in, or the file a new phrase is added to. */
   file: string;
-  /** The phrase being edited, or null to create one. */
+  /** The phrase as it was when editing started, or null to create one. Keep it stable. */
   phrase: EditorPhrase | null;
   /** Called with the reloaded folder and the index of the phrase to select. */
   onSaved: (folder: EditorFolder, select: number) => void;
+  /** Leave the editor. The parent decides whether to ask first (see `onDirtyChange`). */
   onCancel: () => void;
-  /** Reloads every folder from disk; the editor is closed afterwards. */
-  onReload: () => Promise<void>;
+  /** Reloads every folder from disk and returns them (null when that failed). */
+  onReload: () => Promise<EditorFolder[] | null>;
+  /** Reports whether the editor holds unsaved changes. */
+  onDirtyChange: (dirty: boolean) => void;
 }
 
-export function PhraseEditor({ folders, file, phrase, onSaved, onCancel, onReload }: EditorProps) {
+type EditorTab = "text" | "options";
+
+/** Plain text of a draft, for the copy button. */
+function draftText(
+  triggers: string[],
+  label: string,
+  description: string,
+  body: string,
+  o: EditorOptions,
+): string {
+  const lines = [`Trigger${triggers.length > 1 ? "s" : ""}: ${triggers.join(", ")}`];
+  if (label) lines.push(`Name: ${label}`);
+  if (description) lines.push(`Description: ${description.replace(/\n/g, "\n  ")}`);
+  const opts = optionChipTexts(o);
+  if (opts.length > 0) lines.push(`Options: ${opts.join(", ")}`);
+  if (o.search_terms.length > 0) lines.push(`Search terms: ${o.search_terms.join(", ")}`);
+  lines.push("Text:", body);
+  return lines.join("\n");
+}
+
+export function PhraseEditor({ folders, file, phrase, onSaved, onCancel, onReload, onDirtyChange }: EditorProps) {
   const folder = folders.find((f) => f.file === file);
+  const baseOptions = useMemo(() => normalizeOptions(phrase?.options), [phrase]);
   const [triggers, setTriggers] = useState<string[]>(phrase ? phrase.triggers : [""]);
   const [label, setLabel] = useState(phrase?.label ?? "");
+  const [description, setDescription] = useState(phrase?.comment ?? "");
   const [body, setBody] = useState(phrase?.content ?? "");
+  const [opts, setOpts] = useState<EditorOptions>(baseOptions);
+  const [termDraft, setTermDraft] = useState("");
+  const [tab, setTab] = useState<EditorTab>("text");
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [stale, setStale] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
   const firstTrigger = useRef<HTMLInputElement>(null);
   const uid = useId();
 
@@ -133,38 +360,93 @@ export function PhraseEditor({ folders, file, phrase, onSaved, onCancel, onReloa
       }
     }
     if (bodyEditable && body.trim() === "") problems.push("Enter the text to insert.");
+    if (termDraft.trim() !== "") {
+      problems.push("Press Add to keep the search term you typed on the Options tab, or clear it.");
+    }
     return { problems, warnings };
-  }, [triggers, body, bodyEditable, triggersEditable, folder, folders, file, phrase]);
+  }, [triggers, body, bodyEditable, triggersEditable, folder, folders, file, phrase, termDraft]);
 
-  const changed =
-    !phrase ||
-    !sameList(triggers, phrase.triggers) ||
-    label !== (phrase.label ?? "") ||
-    (bodyEditable && body !== phrase.content);
+  const optionsChanged = optionsKey(opts) !== optionsKey(baseOptions);
+  const descriptionChanged = description !== (phrase?.comment ?? "");
+  const dirty = phrase
+    ? !sameList(triggers, phrase.triggers) ||
+      label !== (phrase.label ?? "") ||
+      (bodyEditable && body !== phrase.content) ||
+      descriptionChanged ||
+      optionsChanged
+    : triggers.length > 1 ||
+      triggers.some((t) => t !== "") ||
+      label !== "" ||
+      body !== "" ||
+      description !== "" ||
+      optionsChanged;
+
+  useEffect(() => {
+    onDirtyChange(dirty);
+  }, [dirty, onDirtyChange]);
+  useEffect(() => () => onDirtyChange(false), [onDirtyChange]);
+
+  // Close the window or reload the page: the browser asks first while there is a draft.
+  useEffect(() => {
+    if (!dirty) return;
+    const handler = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [dirty]);
 
   function setTrigger(i: number, value: string) {
     setTriggers((ts) => ts.map((t, j) => (j === i ? value : t)));
   }
 
-  async function save(e: FormEvent) {
-    e.preventDefault();
-    if (!folder || problems.length > 0 || saving) return;
+  function patchOptions(p: Partial<EditorOptions>) {
+    setOpts((o) => ({ ...o, ...p }));
+  }
+
+  function addTerm() {
+    const t = termDraft.trim();
+    if (t === "") return;
+    if (!opts.search_terms.includes(t)) patchOptions({ search_terms: [...opts.search_terms, t] });
+    setTermDraft("");
+  }
+
+  async function save() {
+    if (!folder || problems.length > 0 || saving || stale) return;
     setSaving(true);
     setError(null);
     const labelOut = label === (phrase?.label ?? "") ? (phrase?.label ?? null) : label.trim() || null;
     try {
       if (phrase) {
+        const comment = !descriptionChanged
+          ? "Keep"
+          : description.trim() === ""
+            ? "Clear"
+            : { Set: description };
         const saved = await invoke<EditorFolder>("save_phrase", {
           file,
           index: phrase.index,
-          edit: { triggers, label: labelOut, body: bodyEditable ? body : null },
+          edit: {
+            triggers,
+            label: labelOut,
+            body: bodyEditable ? body : null,
+            comment,
+            options: optionsChanged ? opts : null,
+          },
           expectedHash: folder.hash,
         });
         onSaved(saved, phrase.index);
       } else {
         const saved = await invoke<EditorFolder>("create_phrase", {
           file,
-          phrase: { triggers, label: labelOut, body },
+          phrase: {
+            triggers,
+            label: labelOut,
+            body,
+            comment: description.trim() === "" ? null : description,
+            options: opts,
+          },
           expectedHash: folder.hash,
         });
         onSaved(saved, Math.max(...saved.phrases.map((p) => p.index)));
@@ -175,18 +457,114 @@ export function PhraseEditor({ folders, file, phrase, onSaved, onCancel, onReloa
     }
   }
 
+  // Ctrl+S saves from anywhere in the window while no dialog is open.
+  const saveRef = useRef(save);
+  saveRef.current = save;
+  useEffect(() => {
+    const handler = (e: globalThis.KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key.toLowerCase() === "s") {
+        e.preventDefault();
+        if (!document.querySelector("dialog[open]")) void saveRef.current();
+      }
+    };
+    document.addEventListener("keydown", handler);
+    return () => document.removeEventListener("keydown", handler);
+  }, []);
+
+  /** Reload after a conflict, keeping the draft. */
   async function reload() {
-    await onReload();
-    onCancel();
+    const fresh = await onReload();
+    if (!fresh) return;
+    setError(null);
+    setSaving(false);
+    const f = fresh.find((x) => x.file === file);
+    if (!f) {
+      setStale("The file this phrase belongs to is gone.");
+      return;
+    }
+    if (phrase) {
+      const live = f.phrases.find((p) => p.index === phrase.index);
+      if (!live) {
+        setStale("This phrase is no longer in the file.");
+      } else if (!samePhrase(live, phrase)) {
+        setStale("This phrase was changed in the file after you started editing.");
+      }
+    }
+    // Otherwise the entry is unchanged on disk: the draft stays and can be saved again.
+  }
+
+  async function copyDraft() {
+    try {
+      await navigator.clipboard.writeText(draftText(triggers, label, description, body, opts));
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 2000);
+    } catch {
+      setError("Could not copy. Select the text above and copy it by hand.");
+    }
+  }
+
+  function onFormKeyDown(e: KeyboardEvent<HTMLFormElement>) {
+    if (e.key === "Escape") {
+      e.preventDefault();
+      onCancel();
+    } else if (e.key === "Enter" && e.target instanceof HTMLInputElement) {
+      // Enter in a single-line field never saves; Ctrl+S or the Save button does.
+      e.preventDefault();
+    }
+  }
+
+  function onTabKeyDown(e: KeyboardEvent<HTMLButtonElement>) {
+    if (e.key === "ArrowRight" || e.key === "ArrowLeft" || e.key === "Home" || e.key === "End") {
+      e.preventDefault();
+      const next: EditorTab = e.key === "Home" ? "text" : e.key === "End" ? "options" : tab === "text" ? "options" : "text";
+      setTab(next);
+      document.getElementById(`${uid}-tab-${next}`)?.focus();
+    }
+  }
+
+  const staleView = stale !== null;
+
+  if (staleView) {
+    return (
+      <div className="editor" role="region" aria-label="Unsaved draft">
+        <h2 className="detail-title">{phrase ? `Draft for “${phraseName(phrase)}”` : "Draft for a new phrase"}</h2>
+        <div className="editor-error" role="alert">
+          <AlertTriangle size={16} aria-hidden="true" />
+          <span className="grow">
+            {stale} Your unsaved draft is kept below, read-only, so nothing you typed is lost. Copy it, then close
+            this to see the current version.
+          </span>
+        </div>
+        <div className="draft-copy">
+          <pre aria-label="Your draft">{draftText(triggers, label, description, body, opts)}</pre>
+          <div className="editor-buttons">
+            <button type="button" className="btn btn-primary" onClick={() => void copyDraft()}>
+              {copied ? <Check size={16} aria-hidden="true" /> : <Copy size={16} aria-hidden="true" />}
+              {copied ? "Copied" : "Copy draft"}
+            </button>
+            <button type="button" className="btn" onClick={onCancel}>
+              Close draft
+            </button>
+          </div>
+          {error && (
+            <p className="editor-note" role="alert">
+              <Info size={16} aria-hidden="true" />
+              {error}
+            </p>
+          )}
+        </div>
+      </div>
+    );
   }
 
   return (
     <form
       className="editor"
-      onSubmit={save}
-      onKeyDown={(e) => {
-        if (e.key === "Escape") onCancel();
+      onSubmit={(e) => {
+        e.preventDefault();
+        void save();
       }}
+      onKeyDown={onFormKeyDown}
       aria-label={phrase ? "Edit phrase" : "New phrase"}
     >
       <h2 className="detail-title">{phrase ? `Edit “${phraseName(phrase)}”` : "New phrase"}</h2>
@@ -194,92 +572,256 @@ export function PhraseEditor({ folders, file, phrase, onSaved, onCancel, onReloa
         {phrase ? `In ${folder?.file ?? file}` : `Will be added to the end of ${folder?.file ?? file}`}
       </p>
 
-      <div className="editor-group" role="group" aria-labelledby={`${uid}-triggers`}>
-        <span className="editor-legend" id={`${uid}-triggers`}>
-          {phrase?.is_regex ? "Regex trigger" : triggers.length > 1 ? "Triggers" : "Trigger"}
-        </span>
-        {triggers.map((t, i) => (
-          <div className="trigger-row" key={i}>
-            <input
-              ref={i === 0 ? firstTrigger : undefined}
-              className="field mono"
-              aria-label={`Trigger ${i + 1}`}
-              value={t}
-              readOnly={!triggersEditable}
-              spellCheck={false}
-              autoComplete="off"
-              onChange={(e) => setTrigger(i, e.target.value)}
-            />
-            {triggersEditable && (
-              <button
-                type="button"
-                className="btn btn-icon"
-                aria-label={`Remove trigger ${i + 1}`}
-                title="Remove trigger"
-                disabled={triggers.length === 1}
-                onClick={() => setTriggers((ts) => ts.filter((_, j) => j !== i))}
-              >
-                <X size={16} aria-hidden="true" />
-              </button>
-            )}
-          </div>
-        ))}
-        {triggersEditable ? (
-          <button type="button" className="btn" onClick={() => setTriggers((ts) => [...ts, ""])}>
-            <Plus size={16} aria-hidden="true" />
-            Add trigger
+      <div className="editor-tabs" role="tablist" aria-label="Phrase settings">
+        {(["text", "options"] as const).map((t) => (
+          <button
+            key={t}
+            type="button"
+            role="tab"
+            id={`${uid}-tab-${t}`}
+            className="editor-tab"
+            aria-selected={tab === t}
+            aria-controls={`${uid}-panel-${t}`}
+            tabIndex={tab === t ? 0 : -1}
+            onClick={() => setTab(t)}
+            onKeyDown={onTabKeyDown}
+          >
+            {t === "text" ? "Text" : "Options"}
           </button>
-        ) : (
-          <p className="editor-note">
-            <Info size={16} aria-hidden="true" />
-            Regex triggers can't be edited here yet.
-          </p>
-        )}
+        ))}
       </div>
 
-      <div className="editor-group">
-        <label htmlFor={`${uid}-label`}>Name (label)</label>
-        <input
-          id={`${uid}-label`}
-          className="field"
-          value={label}
-          autoComplete="off"
-          onChange={(e) => setLabel(e.target.value)}
-        />
-      </div>
+      <div
+        className="editor-panel"
+        role="tabpanel"
+        id={`${uid}-panel-text`}
+        aria-labelledby={`${uid}-tab-text`}
+        hidden={tab !== "text"}
+      >
+        <div className="editor-group" role="group" aria-labelledby={`${uid}-triggers`}>
+          <span className="editor-legend" id={`${uid}-triggers`}>
+            {phrase?.is_regex ? "Regex trigger" : triggers.length > 1 ? "Triggers" : "Trigger"}
+          </span>
+          {triggers.map((t, i) => (
+            <div className="trigger-row" key={i}>
+              <input
+                ref={i === 0 ? firstTrigger : undefined}
+                className="field mono"
+                aria-label={`Trigger ${i + 1}`}
+                value={t}
+                readOnly={!triggersEditable}
+                spellCheck={false}
+                autoComplete="off"
+                onChange={(e) => setTrigger(i, e.target.value)}
+              />
+              {triggersEditable && (
+                <button
+                  type="button"
+                  className="btn btn-icon"
+                  aria-label={`Remove trigger ${i + 1}`}
+                  title="Remove trigger"
+                  disabled={triggers.length === 1}
+                  onClick={() => setTriggers((ts) => ts.filter((_, j) => j !== i))}
+                >
+                  <X size={16} aria-hidden="true" />
+                </button>
+              )}
+            </div>
+          ))}
+          {triggersEditable ? (
+            <button type="button" className="btn" onClick={() => setTriggers((ts) => [...ts, ""])}>
+              <Plus size={16} aria-hidden="true" />
+              Add trigger
+            </button>
+          ) : (
+            <p className="editor-note">
+              <Info size={16} aria-hidden="true" />
+              Regex triggers can't be edited here yet.
+            </p>
+          )}
+        </div>
 
-      <div className="editor-group">
-        <label htmlFor={`${uid}-body`}>Text</label>
-        {bodyEditable ? (
-          <textarea
-            id={`${uid}-body`}
-            className="field mono"
-            rows={10}
-            value={body}
-            spellCheck={false}
-            onChange={(e) => setBody(e.target.value)}
+        <div className="editor-group">
+          <label htmlFor={`${uid}-label`}>Name (label)</label>
+          <input
+            id={`${uid}-label`}
+            className="field"
+            value={label}
+            autoComplete="off"
+            onChange={(e) => setLabel(e.target.value)}
           />
-        ) : (
-          <>
-            <pre className="content-text" id={`${uid}-body`}>
-              {phrase?.content}
-            </pre>
-            {bodyNote && (
-              <p className="editor-note">
-                <Info size={16} aria-hidden="true" />
-                {bodyNote}
-              </p>
-            )}
-          </>
-        )}
+        </div>
+
+        <div className="editor-group">
+          <label htmlFor={`${uid}-desc`}>Description</label>
+          <textarea
+            id={`${uid}-desc`}
+            className="field"
+            rows={3}
+            value={description}
+            aria-describedby={`${uid}-desc-help`}
+            onChange={(e) => setDescription(e.target.value)}
+          />
+          <p className="editor-note" id={`${uid}-desc-help`}>
+            <Info size={16} aria-hidden="true" />
+            Notes for yourself. Saved as a # comment above the phrase in the file.
+          </p>
+        </div>
+
+        <div className="editor-group">
+          <label htmlFor={`${uid}-body`}>Text</label>
+          {bodyEditable ? (
+            <textarea
+              id={`${uid}-body`}
+              className="field mono"
+              rows={10}
+              value={body}
+              spellCheck={false}
+              onChange={(e) => setBody(e.target.value)}
+            />
+          ) : (
+            <>
+              <pre className="content-text" id={`${uid}-body`}>
+                {phrase?.content}
+              </pre>
+              {bodyNote && (
+                <p className="editor-note">
+                  <Info size={16} aria-hidden="true" />
+                  {bodyNote}
+                </p>
+              )}
+            </>
+          )}
+        </div>
       </div>
 
-      {phrase?.comment && (
-        <p className="editor-note">
-          <Info size={16} aria-hidden="true" />
-          The comment above this phrase in the file is kept as it is.
-        </p>
-      )}
+      <div
+        className="editor-panel"
+        role="tabpanel"
+        id={`${uid}-panel-options`}
+        aria-labelledby={`${uid}-tab-options`}
+        hidden={tab !== "options"}
+      >
+        <div className="editor-group" role="group" aria-labelledby={`${uid}-when`}>
+          <span className="editor-legend" id={`${uid}-when`}>
+            When it expands
+          </span>
+          {FLAGS.map(({ key, label: text, help }) => (
+            <div className="opt-row" key={key}>
+              <input
+                type="checkbox"
+                id={`${uid}-${key}`}
+                aria-describedby={`${uid}-${key}-help`}
+                checked={opts[key] === true}
+                onChange={(e) => {
+                  const on = e.target.checked;
+                  const off = baseOptions[key] === false ? false : null;
+                  if (key === "propagate_case") {
+                    patchOptions({ propagate_case: on ? true : off, ...(on ? {} : { uppercase_style: null }) });
+                  } else {
+                    patchOptions({ [key]: on ? true : off });
+                  }
+                }}
+              />
+              <label htmlFor={`${uid}-${key}`}>{text}</label>
+              <p className="opt-help" id={`${uid}-${key}-help`}>
+                {help}
+              </p>
+            </div>
+          ))}
+        </div>
+
+        <div className="opt-select opt-indent">
+          <label htmlFor={`${uid}-upper`}>Capitals style</label>
+          <select
+            id={`${uid}-upper`}
+            className="field"
+            value={opts.uppercase_style ?? ""}
+            disabled={opts.propagate_case !== true}
+            aria-describedby={`${uid}-upper-help`}
+            onChange={(e) => patchOptions({ uppercase_style: e.target.value || null })}
+          >
+            {opts.uppercase_style && !UPPERCASE_STYLES.some(([v]) => v === opts.uppercase_style) && (
+              <option value={opts.uppercase_style}>{opts.uppercase_style} (not recognised)</option>
+            )}
+            {UPPERCASE_STYLES.map(([v, text]) => (
+              <option key={v} value={v}>
+                {text}
+              </option>
+            ))}
+          </select>
+          <p className="opt-help" id={`${uid}-upper-help`}>
+            How the text is capitalised when you type the trigger in capitals. Needs “Match the case you type”.
+          </p>
+        </div>
+
+        <div className="opt-select">
+          <label htmlFor={`${uid}-mode`}>How the text is inserted</label>
+          <select
+            id={`${uid}-mode`}
+            className="field"
+            value={opts.force_mode ?? ""}
+            aria-describedby={`${uid}-mode-help`}
+            onChange={(e) => patchOptions({ force_mode: e.target.value || null })}
+          >
+            {opts.force_mode && !FORCE_MODES.some(([v]) => v === opts.force_mode) && (
+              <option value={opts.force_mode}>{opts.force_mode} (not recognised)</option>
+            )}
+            {FORCE_MODES.map(([v, text]) => (
+              <option key={v} value={v}>
+                {text}
+              </option>
+            ))}
+          </select>
+          <p className="opt-help" id={`${uid}-mode-help`}>
+            Automatic is best. Choose paste if typing drops characters, or typing if an app blocks paste.
+          </p>
+        </div>
+
+        <div className="editor-group" role="group" aria-labelledby={`${uid}-terms`}>
+          <span className="editor-legend" id={`${uid}-terms`}>
+            Search terms
+          </span>
+          <p className="opt-help">Extra words that help you find this phrase when searching. They do not change expansion.</p>
+          {opts.search_terms.length > 0 && (
+            <ul className="term-list">
+              {opts.search_terms.map((t) => (
+                <li key={t}>
+                  <span className="chip grow">{t}</span>
+                  <button
+                    type="button"
+                    className="btn btn-icon"
+                    aria-label={`Remove search term ${t}`}
+                    title="Remove search term"
+                    onClick={() => patchOptions({ search_terms: opts.search_terms.filter((x) => x !== t) })}
+                  >
+                    <X size={16} aria-hidden="true" />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+          <div className="term-row">
+            <input
+              className="field"
+              aria-label="New search term"
+              value={termDraft}
+              autoComplete="off"
+              onChange={(e) => setTermDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  addTerm();
+                }
+              }}
+            />
+            <button type="button" className="btn" onClick={addTerm} disabled={termDraft.trim() === ""}>
+              <Plus size={16} aria-hidden="true" />
+              Add
+            </button>
+          </div>
+        </div>
+      </div>
 
       {problems.length > 0 && (
         <ul className="editor-problems" aria-live="polite">
@@ -298,14 +840,19 @@ export function PhraseEditor({ folders, file, phrase, onSaved, onCancel, onReloa
           ))}
         </ul>
       )}
-      {error && <ErrorMessage message={error} onReload={reload} />}
+      {error && <ErrorMessage message={error} onReload={() => void reload()} />}
 
       <div className="editor-buttons">
-        <button type="submit" className="btn btn-primary" disabled={saving || problems.length > 0 || !changed}>
+        <button
+          type="submit"
+          className="btn btn-primary"
+          disabled={saving || problems.length > 0 || (!!phrase && !dirty)}
+          title="Save (Ctrl+S)"
+        >
           <Save size={16} aria-hidden="true" />
           {saving ? "Saving…" : "Save"}
         </button>
-        <button type="button" className="btn" onClick={onCancel} disabled={saving}>
+        <button type="button" className="btn" onClick={onCancel} disabled={saving} title="Cancel (Esc)">
           Cancel
         </button>
       </div>
@@ -319,7 +866,7 @@ interface ActionsProps {
   onEdit: () => void;
   /** Called with the reloaded folder after the phrase was deleted. */
   onDeleted: (folder: EditorFolder) => void;
-  onReload: () => Promise<void>;
+  onReload: () => Promise<unknown>;
 }
 
 /** Edit and Delete buttons for the selected phrase, and the delete confirmation. */
@@ -359,7 +906,7 @@ function ConfirmDelete({
   phrase: EditorPhrase;
   onClose: () => void;
   onDeleted: (folder: EditorFolder) => void;
-  onReload: () => Promise<void>;
+  onReload: () => Promise<unknown>;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
   const [error, setError] = useState<string | null>(null);

@@ -242,3 +242,140 @@ textarea.field {
 .confirm .editor-error {
   margin-bottom: 12px;
 }
+
+/* Editor tabs (Text / Options) */
+.editor-tabs {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid var(--border);
+}
+
+.editor-tab {
+  padding: 6px 14px;
+  border: 0;
+  border-bottom: 3px solid transparent;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.editor-tab[aria-selected="true"] {
+  border-bottom-color: var(--accent);
+  color: var(--ink);
+}
+
+.editor-tab:hover {
+  color: var(--ink);
+}
+
+.editor-tab:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.editor-panel {
+  display: grid;
+  gap: 22px;
+}
+
+.editor-panel[hidden] {
+  display: none;
+}
+
+/* Options */
+.opt-row {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  column-gap: 10px;
+  row-gap: 2px;
+  align-items: start;
+}
+
+.opt-row input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  margin: 2px 0 0;
+  accent-color: var(--accent);
+}
+
+.opt-row input[type="checkbox"]:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.opt-row > label {
+  font-weight: 600;
+}
+
+.opt-help {
+  grid-column: 2;
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.opt-select {
+  display: grid;
+  gap: 6px;
+}
+
+.opt-select > label {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.opt-select select {
+  max-width: 320px;
+}
+
+.opt-select .opt-help {
+  grid-column: auto;
+}
+
+.opt-indent {
+  margin-left: 28px;
+}
+
+.term-row {
+  display: flex;
+  gap: 6px;
+}
+
+.term-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.term-list li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.term-list .grow {
+  overflow-wrap: anywhere;
+}
+
+/* Draft kept after the file changed on disk */
+.draft-copy {
+  display: grid;
+  gap: 10px;
+}
+
+.draft-copy pre {
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--ink);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-family: "Cascadia Mono", Consolas, monospace;
+  font-size: 13px;
+}
