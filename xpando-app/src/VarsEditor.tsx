@@ -1,10 +1,8 @@
-import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { KeyboardEvent, ReactNode } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import {
   AlertTriangle,
-  ArrowDown,
-  ArrowUp,
   Braces,
   Calendar,
   ChevronDown,
@@ -21,6 +19,7 @@ import {
   Trash2,
   X,
 } from "lucide-react";
+import { placeholders, renameInText, sortByDependency } from "./varorder";
 import "./vars.css";
 
 // ---------------------------------------------------------------------------------------
@@ -110,17 +109,7 @@ const HANDLED: Record<string, string[]> = {
 // Placeholders, validation, rename (mirrors of the Rust helpers)
 // ---------------------------------------------------------------------------------------
 
-const PLACEHOLDER_RE = /\{\{\s*(\w+)(?:\.\w+)?\s*\}\}/g;
-
-export function placeholders(s: string): string[] {
-  return [...s.matchAll(PLACEHOLDER_RE)].map((m) => m[1]);
-}
-
-export function renameInText(s: string, from: string, to: string): string {
-  return s.replace(/\{\{(\s*)(\w+)((?:\.\w+)?\s*\}\})/g, (all, a: string, name: string, rest: string) =>
-    name === from ? `{{${a}${to}${rest}` : all,
-  );
-}
+export { placeholders, renameInText };
 
 function renameInValue(v: ParamValue, from: string, to: string): ParamValue {
   if (v.t === "text") return { t: "text", v: renameInText(v.v, from, to) };
@@ -130,6 +119,16 @@ function renameInValue(v: ParamValue, from: string, to: string): ParamValue {
 
 function paramStrings(v: ParamValue): string[] {
   return v.t === "list" ? v.v : [v.v];
+}
+
+/** The names of other variables a variable's parameters use, e.g. `{{date}}` in an echo. */
+function usesOf(s: VarSpec): string[] {
+  return s.params.flatMap((p) => paramStrings(p.value).flatMap((t) => placeholders(t)));
+}
+
+/** Variables in the order espanso needs: each after the ones it uses (see varorder.ts). */
+function orderSpecs<T extends VarSpec>(list: T[]) {
+  return sortByDependency(list, usesOf);
 }
 
 /** Per-variable error text (null when fine), same rules as the backend. */
@@ -435,14 +434,28 @@ export function useVars(opts: UseVarsOptions): VarsApi {
   }, [file, index, hasVars]);
 
   const editable = state === "ready";
-  const specs = useMemo<VarSpec[]>(() => items.map(({ key: _k, ...s }) => s), [items]);
-  const dirty = editable && JSON.stringify(specs) !== JSON.stringify(original);
+  // `items` is the order the user made them in; what is shown and saved is the order
+  // espanso needs (each variable after the ones it uses).
+  const ordered = useMemo(() => orderSpecs(items), [items]);
+  const shown = ordered.items;
+  const specs = useMemo<VarSpec[]>(() => shown.map(({ key: _k, ...s }) => s), [shown]);
+  const originalOrdered = useMemo(() => orderSpecs(original).items, [original]);
+  const dirty = editable && JSON.stringify(specs) !== JSON.stringify(originalOrdered);
   const errors = useMemo(() => validateItems(specs), [specs]);
 
   const problems = useMemo(() => {
     if (!editable) return [];
-    return errors.flatMap((e, i) => (e ? [`${items[i].name || `Variable ${i + 1}`}: ${e}`] : []));
-  }, [errors, items, editable]);
+    const own = errors.flatMap((e, i) => (e ? [`${shown[i].name || `Variable ${i + 1}`}: ${e}`] : []));
+    return [...own, ...ordered.problems];
+  }, [errors, shown, ordered.problems, editable]);
+
+  // A card that moves because of a new reference must not lose the cursor.
+  const lastFocus = useRef<HTMLElement | null>(null);
+  const orderKey = shown.map((it) => it.key).join(",");
+  useLayoutEffect(() => {
+    const el = lastFocus.current;
+    if (el && el.isConnected && document.activeElement !== el && document.activeElement === document.body) el.focus();
+  }, [orderKey]);
   const warnings = useMemo(() => (editable ? analyzeItems(specs, body) : []), [editable, specs, body]);
 
   const hasProblem = problems.length > 0;
@@ -520,15 +533,6 @@ export function useVars(opts: UseVarsOptions): VarsApi {
     setAnnounce(`Inserted {{${name}}} and added a ${m.label} variable named ${name}.`);
   }
 
-  const move = (i: number, d: -1 | 1) =>
-    setItems((all) => {
-      const j = i + d;
-      if (j < 0 || j >= all.length) return all;
-      const next = [...all];
-      [next[i], next[j]] = [next[j], next[i]];
-      return next;
-    });
-
   const menu =
     editable && bodyEditable ? <MacroMenu onPick={insertMacro} announce={announce} /> : null;
 
@@ -536,15 +540,15 @@ export function useVars(opts: UseVarsOptions): VarsApi {
     <VarsSection
       state={state}
       loadError={loadError}
-      items={items}
+      items={shown}
       errors={errors}
+      onFocusCapture={(el) => (lastFocus.current = el)}
       open={open}
       onToggle={toggleOpen}
       problemCount={problems.length}
       warningCount={warnings.length}
       onUpdate={update}
       onRename={rename}
-      onMove={move}
       onRemove={(key) => setItems((all) => all.filter((it) => it.key !== key))}
       onAdd={(type) => {
         const m = MACROS.find((x) => x.id === type);
@@ -665,8 +669,8 @@ interface SectionProps {
   warningCount: number;
   onUpdate: (key: number, fn: (it: Item) => Item) => void;
   onRename: (key: number, name: string) => void;
-  onMove: (index: number, dir: -1 | 1) => void;
   onRemove: (key: number) => void;
+  onFocusCapture: (el: HTMLElement | null) => void;
   onAdd: (type: string) => void;
 }
 
@@ -764,18 +768,25 @@ function VarsSection(p: SectionProps) {
           )}
         </p>
       )}
-      <div id={`${uid}-body`} className="vars-body" hidden={!p.open}>
+      <div
+        id={`${uid}-body`}
+        className="vars-body"
+        hidden={!p.open}
+        onFocusCapture={(e) => p.onFocusCapture(e.target as HTMLElement)}
+      >
+        <p className="var-hint">
+          <Info size={16} aria-hidden="true" />
+          Variables are applied in the right order automatically: one that uses another goes after it.
+        </p>
         <ol className="var-cards">
           {p.items.map((it, i) => (
             <VarCard
               key={it.key}
               item={it}
               index={i}
-              count={count}
               error={p.errors[i]}
               onUpdate={p.onUpdate}
               onRename={p.onRename}
-              onMove={p.onMove}
               onRemove={p.onRemove}
             />
           ))}
@@ -789,20 +800,16 @@ function VarsSection(p: SectionProps) {
 function VarCard({
   item,
   index,
-  count,
   error,
   onUpdate,
   onRename,
-  onMove,
   onRemove,
 }: {
   item: Item;
   index: number;
-  count: number;
   error: string | null;
   onUpdate: (key: number, fn: (it: Item) => Item) => void;
   onRename: (key: number, name: string) => void;
-  onMove: (index: number, dir: -1 | 1) => void;
   onRemove: (key: number) => void;
 }) {
   const uid = useId();
@@ -844,26 +851,6 @@ function VarCard({
           </select>
         </div>
         <div className="var-buttons">
-          <button
-            type="button"
-            className="btn btn-icon"
-            aria-label={`Move ${label} up`}
-            title="Move up"
-            disabled={index === 0}
-            onClick={() => onMove(index, -1)}
-          >
-            <ArrowUp size={16} aria-hidden="true" />
-          </button>
-          <button
-            type="button"
-            className="btn btn-icon"
-            aria-label={`Move ${label} down`}
-            title="Move down"
-            disabled={index === count - 1}
-            onClick={() => onMove(index, 1)}
-          >
-            <ArrowDown size={16} aria-hidden="true" />
-          </button>
           <button
             type="button"
             className="btn btn-icon"
