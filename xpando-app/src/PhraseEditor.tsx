@@ -3,6 +3,7 @@ import type { FormEvent } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { AlertTriangle, Info, Pencil, Plus, RefreshCw, Save, Trash2, X } from "lucide-react";
 import "./editor.css";
+import { useVars } from "./VarsEditor"; // xpando:vars
 
 /** The parts of the browser's phrase and folder types that editing needs. */
 export interface EditorPhrase {
@@ -99,14 +100,22 @@ export function PhraseEditor({ folders, file, phrase, onSaved, onCancel, onReloa
   }, []);
 
   const triggersEditable = !phrase || !phrase.is_regex;
-  const bodyEditable = !phrase || (phrase.kind === "replace" && phrase.vars.length === 0);
+  const bodyEditable = !phrase || phrase.kind === "replace"; // xpando:vars (variables no longer lock the text)
   const bodyNote = !phrase
     ? null
     : phrase.kind !== "replace"
       ? `This phrase's text is stored as ${phrase.kind}. It can't be edited here yet; the text is shown read-only.`
-      : phrase.vars.length > 0
-        ? "This phrase uses variables. Its text can't be edited here yet, so the variables stay intact."
-        : null;
+      : null;
+  // xpando:vars — the Variables editor and Insert macro menu (see VarsEditor.tsx).
+  const vars = useVars({
+    file,
+    index: phrase ? phrase.index : null,
+    hasVars: (phrase?.vars.length ?? 0) > 0,
+    body,
+    setBody,
+    bodyId: `${uid}-body`,
+    bodyEditable,
+  });
 
   const { problems, warnings } = useMemo(() => {
     const problems: string[] = [];
@@ -133,11 +142,16 @@ export function PhraseEditor({ folders, file, phrase, onSaved, onCancel, onReloa
       }
     }
     if (bodyEditable && body.trim() === "") problems.push("Enter the text to insert.");
-    return { problems, warnings };
-  }, [triggers, body, bodyEditable, triggersEditable, folder, folders, file, phrase]);
+    // xpando:vars
+    return {
+      problems: [...problems, ...vars.problems],
+      warnings: [...warnings, ...vars.warnings],
+    };
+  }, [triggers, body, bodyEditable, triggersEditable, folder, folders, file, phrase, vars.problems, vars.warnings]);
 
   const changed =
     !phrase ||
+    vars.dirty || // xpando:vars
     !sameList(triggers, phrase.triggers) ||
     label !== (phrase.label ?? "") ||
     (bodyEditable && body !== phrase.content);
@@ -154,19 +168,36 @@ export function PhraseEditor({ folders, file, phrase, onSaved, onCancel, onReloa
     const labelOut = label === (phrase?.label ?? "") ? (phrase?.label ?? null) : label.trim() || null;
     try {
       if (phrase) {
-        const saved = await invoke<EditorFolder>("save_phrase", {
-          file,
-          index: phrase.index,
-          edit: { triggers, label: labelOut, body: bodyEditable ? body : null },
-          expectedHash: folder.hash,
-        });
+        // xpando:vars — when the variables changed, text and variables go in one write.
+        const saved = vars.dirty
+          ? await invoke<EditorFolder>("save_phrase_vars", {
+              file,
+              index: phrase.index,
+              change: { vars: vars.specs, body: bodyEditable ? body : null },
+              edit: { triggers, label: labelOut, body: null },
+              expectedHash: folder.hash,
+            })
+          : await invoke<EditorFolder>("save_phrase", {
+              file,
+              index: phrase.index,
+              edit: { triggers, label: labelOut, body: bodyEditable ? body : null },
+              expectedHash: folder.hash,
+            });
         onSaved(saved, phrase.index);
       } else {
-        const saved = await invoke<EditorFolder>("create_phrase", {
-          file,
-          phrase: { triggers, label: labelOut, body },
-          expectedHash: folder.hash,
-        });
+        const saved =
+          vars.dirty && vars.specs
+            ? await invoke<EditorFolder>("create_phrase_with_vars", {
+                file,
+                phrase: { triggers, label: labelOut, body },
+                variables: vars.specs,
+                expectedHash: folder.hash,
+              })
+            : await invoke<EditorFolder>("create_phrase", {
+                file,
+                phrase: { triggers, label: labelOut, body },
+                expectedHash: folder.hash,
+              });
         onSaved(saved, Math.max(...saved.phrases.map((p) => p.index)));
       }
     } catch (err) {
@@ -250,6 +281,7 @@ export function PhraseEditor({ folders, file, phrase, onSaved, onCancel, onReloa
 
       <div className="editor-group">
         <label htmlFor={`${uid}-body`}>Text</label>
+        {vars.menu /* xpando:vars */}
         {bodyEditable ? (
           <textarea
             id={`${uid}-body`}
@@ -273,6 +305,8 @@ export function PhraseEditor({ folders, file, phrase, onSaved, onCancel, onReloa
           </>
         )}
       </div>
+
+      {vars.section /* xpando:vars */}
 
       {phrase?.comment && (
         <p className="editor-note">
