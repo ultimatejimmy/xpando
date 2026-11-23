@@ -1,3 +1,5 @@
+mod advanced;
+
 use std::path::PathBuf;
 
 use tauri::{AppHandle, Manager};
@@ -21,7 +23,12 @@ fn list_phrases(app: AppHandle) -> Result<Vec<xpando_core::Folder>, String> {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
-        .invoke_handler(tauri::generate_handler![list_phrases])
+        .invoke_handler(tauri::generate_handler![
+            list_phrases,
+            advanced::get_entry_source,
+            advanced::list_conflicts,
+            advanced::config_path
+        ])
         .run(tauri::generate_context!())
         .expect("error while running xpando");
 }
