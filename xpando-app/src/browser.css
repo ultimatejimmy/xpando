@@ -170,14 +170,14 @@ button {
 }
 
 .detail-title {
-  margin: 0 0 12px;
+  margin: 8px 0 16px;
   font-size: 20px;
   font-weight: 600;
   overflow-wrap: anywhere;
 }
 
 .detail-meta {
-  margin: 12px 0 6px;
+  margin: 20px 0 8px;
   color: var(--muted);
   font-size: 12px;
 }
@@ -189,8 +189,9 @@ button {
 }
 
 .content-text {
-  margin: 0;
-  padding: 12px;
+  margin: 12px 0 0;
+  padding: 14px 16px;
+  line-height: 1.5;
   background: var(--bg);
   border: 1px solid var(--border);
   border-radius: 6px;
@@ -319,7 +320,7 @@ button {
 
 /* The # comment above a phrase, shown as its description */
 .detail-comment {
-  margin: -4px 0 12px;
+  margin: -8px 0 16px;
   color: var(--muted);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
