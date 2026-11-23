@@ -1,5 +1,6 @@
 mod advanced;
 mod edit;
+mod vars;
 mod yamledit;
 
 use std::path::PathBuf;
@@ -37,7 +38,10 @@ pub fn run() {
             yamledit::validate_file_yaml,
             yamledit::save_entry_yaml,
             yamledit::save_file_yaml,
-            yamledit::get_file_source
+            yamledit::get_file_source,
+            vars::get_phrase_vars,
+            vars::save_phrase_vars,
+            vars::create_phrase_with_vars
         ])
         .run(tauri::generate_context!())
         .expect("error while running xpando");
