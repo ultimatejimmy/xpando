@@ -103,11 +103,14 @@
 
 /* Normal mode: the card's title is what it is and how it shows in the text */
 .var-head:has(.var-title) {
+  flex-wrap: nowrap;
   align-items: center;
   justify-content: space-between;
 }
 
 .var-title {
+  flex: 1 1 0;
+  min-width: 0;
   display: flex;
   flex-wrap: wrap;
   align-items: center;

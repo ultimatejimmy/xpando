@@ -488,6 +488,7 @@ export function useVars(opts: UseVarsOptions): VarsApi {
   const [focusKey, setFocusKey] = useState<number | null>(null);
   const [open, setOpenState] = useState(sectionOpenMemory);
   const sectionId = useId();
+  const focusUndoNext = useRef(false);
 
   useEffect(() => {
     if (index === null || !hasVars) return;
@@ -627,7 +628,7 @@ export function useVars(opts: UseVarsOptions): VarsApi {
       undo: { kind: "remove", item, index: at, bodyBefore: body, bodyAfter: r.text },
     });
     // The card (and the focus in it) is gone: move to Undo, which also announces what happened.
-    requestAnimationFrame(() => document.getElementById(`${sectionId}-undo`)?.focus());
+    focusUndoNext.current = true;
   }
 
   /** Changes what a macro fills in. That clears its settings, so the old ones are kept for Undo. */
@@ -663,6 +664,14 @@ export function useVars(opts: UseVarsOptions): VarsApi {
     if (u.bodyBefore !== u.bodyAfter) replaceBody(u.bodyBefore);
     setNotice({ tone: "info", text: `Brought back {{${u.item.name}}}.` });
   }
+
+  // After a removal the card (and the focus in it) is gone: move to Undo, which also reads out what happened.
+  useEffect(() => {
+    if (focusUndoNext.current && notice?.undo) {
+      focusUndoNext.current = false;
+      document.getElementById(`${sectionId}-undo`)?.focus();
+    }
+  }, [notice, sectionId]);
 
   // Undo only while it can restore things exactly: for a removal the text is as it was left and
   // the name is free; for a type change the macro still has the type it was changed to.
