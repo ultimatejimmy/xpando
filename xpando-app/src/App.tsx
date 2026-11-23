@@ -1,6 +1,19 @@
 import { useEffect, useMemo, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { AlertTriangle, Folder as FolderIcon, Library, Panda, Search } from "lucide-react";
+import {
+  AdvancedSwitch,
+  ConflictsPanel,
+  DetailTabs,
+  FileMeta,
+  SearchHint,
+  StatusBar,
+  YamlPane,
+  useAdvanced,
+  type Conflict,
+  type DetailTab,
+} from "./AdvancedPanels";
+import { matchesTerms, parseQuery } from "./search";
 
 interface Variable {
   name: string;
@@ -31,6 +44,7 @@ interface FolderData {
 interface Row {
   id: string;
   folder: string;
+  folderName: string;
   phrase: Phrase;
 }
 
@@ -93,12 +107,18 @@ function withPlaceholders(text: string) {
   );
 }
 
-function matches(row: Row, query: string): boolean {
-  const q = query.trim().toLowerCase();
-  if (!q) return true;
+function matches(row: Row, terms: ReturnType<typeof parseQuery>): boolean {
   const p = row.phrase;
-  return [...p.triggers, p.label ?? "", p.comment ?? "", p.content].some((s) =>
-    s.toLowerCase().includes(q),
+  return matchesTerms(
+    {
+      triggers: p.triggers,
+      label: title(p),
+      comment: p.comment ?? "",
+      body: p.content,
+      folder: row.folderName,
+      file: row.folder,
+    },
+    terms,
   );
 }
 
@@ -109,6 +129,11 @@ export default function App() {
   const [scope, setScope] = useState<string>(ALL);
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<string | null>(null);
+  const [advanced, setAdvanced] = useAdvanced();
+  const [tab, setTab] = useState<DetailTab>("content");
+  const [searchFocused, setSearchFocused] = useState(false);
+  const [conflicts, setConflicts] = useState<Conflict[]>([]);
+  const [configPath, setConfigPath] = useState<string | null>(null);
 
   useEffect(() => {
     invoke<FolderData[]>("list_phrases")
@@ -122,17 +147,40 @@ export default function App() {
       .finally(() => setLoaded(true));
   }, []);
 
+  useEffect(() => {
+    if (!advanced) return;
+    invoke<Conflict[]>("list_conflicts")
+      .then(setConflicts)
+      .catch(() => setConflicts([]));
+    invoke<string>("config_path")
+      .then(setConfigPath)
+      .catch(() => setConfigPath(null));
+  }, [advanced, folders]);
+
   const rows = useMemo<Row[]>(
     () =>
       folders.flatMap((f) =>
-        f.phrases.map((phrase, i) => ({ id: `${f.file}#${i}`, folder: f.file, phrase })),
+        f.phrases.map((phrase, i) => ({
+          id: `${f.file}#${i}`,
+          folder: f.file,
+          folderName: f.name,
+          phrase,
+        })),
       ),
     [folders],
   );
+  const terms = useMemo(() => parseQuery(query, advanced), [query, advanced]);
   const visible = useMemo(
-    () => rows.filter((r) => (scope === ALL || r.folder === scope) && matches(r, query)),
-    [rows, scope, query],
+    () => rows.filter((r) => (scope === ALL || r.folder === scope) && matches(r, terms)),
+    [rows, scope, terms],
   );
+  const jumpTo = (file: string, index: number) => {
+    const row = rows.find((r) => r.folder === file && r.phrase.index === index);
+    if (!row) return;
+    setScope(ALL);
+    setQuery("");
+    setSelected(row.id);
+  };
   const current = visible.find((r) => r.id === selected) ?? null;
   const scopeFolder = folders.find((f) => f.file === scope);
   const scopeName = scope === ALL ? "All phrases" : (scopeFolder?.name ?? "");
@@ -153,9 +201,14 @@ export default function App() {
             placeholder="Search triggers, names and text"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
+            onFocus={() => setSearchFocused(true)}
+            onBlur={() => setSearchFocused(false)}
+            aria-describedby={advanced ? "search-hint" : undefined}
           />
         </div>
+        <AdvancedSwitch on={advanced} onChange={setAdvanced} />
       </header>
+      {advanced && (searchFocused || !query) && <SearchHint />}
 
       {error && (
         <p className="error" role="alert">
@@ -201,12 +254,16 @@ export default function App() {
                   onClick={() => setScope(f.file)}
                 >
                   <FolderIcon size={16} aria-hidden="true" />
-                  <span className="grow">{f.name}</span>
+                  <span className="grow">
+                    {f.name}
+                    {advanced && <span className="adv-folder-file">{f.file}</span>}
+                  </span>
                   <span className="count">{f.phrases.length}</span>
                 </button>
               </li>
             ))}
           </ul>
+          {advanced && <ConflictsPanel conflicts={conflicts} onJump={jumpTo} />}
         </nav>
 
         <section className="pane list" aria-label={`${scopeName} phrases`}>
@@ -244,9 +301,17 @@ export default function App() {
           {current ? (
             <>
               <h2 className="detail-title">{title(current.phrase)}</h2>
+              {advanced && <FileMeta file={current.folder} line={current.phrase.line} />}
               {current.phrase.comment && current.phrase.comment !== title(current.phrase) && (
                 <p className="detail-comment">{current.phrase.comment}</p>
               )}
+              {advanced && <DetailTabs tab={tab} onChange={setTab} />}
+              {advanced && tab === "yaml" ? (
+                <div role="tabpanel" id="detail-tabpanel" aria-labelledby="detail-tab-yaml">
+                  <YamlPane file={current.folder} index={current.phrase.index} />
+                </div>
+              ) : (
+              <div role={advanced ? "tabpanel" : undefined} id={advanced ? "detail-tabpanel" : undefined}>
               <p className="detail-meta">
                 {current.phrase.is_regex ? "Regex trigger" : "Trigger"}
                 {current.phrase.triggers.length > 1 ? "s" : ""}
@@ -285,12 +350,15 @@ export default function App() {
                   </ul>
                 </>
               )}
+              </div>
+              )}
             </>
           ) : (
             <p className="empty">Select a phrase to see its details.</p>
           )}
         </section>
       </div>
+      {advanced && <StatusBar configPath={configPath} phrases={rows.length} files={folders.length} />}
     </div>
   );
 }
