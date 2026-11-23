@@ -1,3 +1,12 @@
+/* Fredoka (SIL OFL 1.1, see public/fonts/Fredoka-OFL.txt), used for the wordmark only. */
+@font-face {
+  font-family: "Fredoka";
+  src: url("/fonts/Fredoka.ttf") format("truetype");
+  font-weight: 300 700;
+  font-stretch: 75% 125%;
+  font-display: swap;
+}
+
 :root {
   --accent: #107c10;
   --ink: #1b1b1b;
