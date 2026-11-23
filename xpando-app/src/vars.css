@@ -1,4 +1,4 @@
-/* Variables editor and Insert macro menu. Uses the variables from styles.css and editor.css. */
+/* Macros editor and Insert macro menu. Uses the variables from styles.css and editor.css. */
 
 .sr-only {
   position: absolute;
@@ -68,7 +68,7 @@
   text-align: right;
 }
 
-/* Variables section */
+/* Macros section */
 .var-cards {
   display: grid;
   gap: 12px;
@@ -235,7 +235,7 @@
   gap: 8px;
 }
 
-/* Collapsible Variables section */
+/* Collapsible Macros section */
 .vars-heading {
   margin: 0;
   font-size: 13px;
@@ -306,7 +306,7 @@
   display: none;
 }
 
-/* Notices (removed, renamed, blocked) and unused variables */
+/* Notices (removed, renamed, blocked) and unused macros */
 .var-notice {
   display: flex;
   align-items: center;
@@ -351,6 +351,17 @@
   font-family: "Cascadia Mono", Consolas, monospace;
   font-size: 12px;
   font-weight: 400;
+}
+
+/* "(vars: in the YAML)" beside the Macros heading, Advanced mode only */
+.var-aka {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.var-aka code {
+  font-family: "Cascadia Mono", Consolas, monospace;
 }
 
 .date-examples {

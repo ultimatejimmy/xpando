@@ -22,7 +22,7 @@ const UNSUPPORTED_FILE: &str = "This file's layout is not one xpando can edit sa
     example a flow-style list). Edit it in a text editor.";
 const UNSUPPORTED_ENTRY: &str = "This entry's layout is not one xpando can edit safely. \
     Edit it in a text editor.";
-const UNSUPPORTED_VARS: &str = "The variables of this phrase use a layout xpando can not edit \
+const UNSUPPORTED_VARS: &str = "The macros of this phrase use a layout xpando can not edit \
     safely (for example flow-style lists). Edit them in a text editor.";
 
 /// Variable types xpando knows the parameters of. Others are edited as generic key/value pairs.
@@ -208,7 +208,7 @@ fn is_ident(s: &str) -> bool {
 /// Checks a variable name on its own: letters, digits and `_`, not starting with a digit.
 pub fn validate_name(name: &str) -> Result<(), String> {
     if name.is_empty() {
-        return Err("A variable needs a name.".into());
+        return Err("A macro needs a name.".into());
     }
     if !is_ident(name) {
         return Err(format!(
@@ -231,7 +231,7 @@ pub fn validate_specs(specs: &[VarSpec]) -> Result<(), String> {
     for (i, s) in specs.iter().enumerate() {
         validate_name(&s.name)?;
         if specs[..i].iter().any(|o| o.name == s.name) {
-            return Err(format!("The variable name “{}” is used twice.", s.name));
+            return Err(format!("The macro name “{}” is used twice.", s.name));
         }
         if s.kind.is_empty()
             || !s
@@ -252,13 +252,13 @@ pub fn validate_specs(specs: &[VarSpec]) -> Result<(), String> {
                     .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
             {
                 return Err(format!(
-                    "“{}”: parameter names need letters, digits, - or _ only.",
+                    "“{}”: setting names need letters, digits, - or _ only.",
                     s.name
                 ));
             }
             if s.params[..j].iter().any(|o| o.key == p.key) {
                 return Err(format!(
-                    "“{}”: the parameter “{}” is listed twice.",
+                    "“{}”: the setting “{}” is listed twice.",
                     s.name, p.key
                 ));
             }
@@ -364,8 +364,8 @@ pub fn analyze(specs: &[VarSpec], body: &str) -> Vec<String> {
     for name in placeholders(body) {
         if !specs.iter().any(|s| s.name == name) && !seen.contains(&name) {
             warnings.push(format!(
-                "The text uses {{{{{name}}}}}, but this phrase has no variable with that name. \
-                 That only works if a global variable provides it."
+                "The text uses {{{{{name}}}}}, but this phrase has no macro with that name. \
+                 That only works if a global macro provides it."
             ));
             seen.push(name);
         }
@@ -381,7 +381,7 @@ pub fn analyze(specs: &[VarSpec], body: &str) -> Vec<String> {
         });
         if !used_in_body && !used_by_var {
             warnings.push(format!(
-                "The variable “{}” is not used by the text or by another variable.",
+                "The macro “{}” is not used by the text or by another macro.",
                 s.name
             ));
         }
@@ -415,7 +415,7 @@ pub fn rename_var(
 ) -> Result<(Vec<VarSpec>, String), String> {
     validate_name(new)?;
     if old != new && specs.iter().any(|s| s.name == new) {
-        return Err(format!("The variable name “{new}” is used twice."));
+        return Err(format!("The macro name “{new}” is used twice."));
     }
     let fix = |t: &str| rename_in_text(t, old, new);
     let out = specs
@@ -831,7 +831,7 @@ fn modify_params(
     step: usize,
     eol: &str,
 ) -> Result<(), String> {
-    let what = "A variable's parameters";
+    let what = "A macro's settings";
     let header = text_of(&seg.own[0]).trim_end();
     if header.trim() != "params:" && !header.starts_with("params: #") {
         return Err(UNSUPPORTED_VARS.into());
@@ -943,8 +943,8 @@ fn modify_item(
         return Err(UNSUPPORTED_VARS.into());
     }
     let prefix = first[..ik].to_string();
-    let mut segs = split_map(lines, ik, "A variable")?;
-    dup_keys(&segs, "A variable")?;
+    let mut segs = split_map(lines, ik, "A macro")?;
+    dup_keys(&segs, "A macro")?;
     if segs
         .iter()
         .any(|s| !matches!(s.key.as_str(), "name" | "type" | "params"))
@@ -1310,7 +1310,7 @@ pub fn update_entry(text: &str, index: usize, change: &VarsChange) -> Result<Str
             if let Some(i) = n.source {
                 if i >= seen.len() || seen[i] {
                     return Err(
-                        "The variable list does not match the file any more. Reload and try again."
+                        "The macro list does not match the file any more. Reload and try again."
                             .into(),
                     );
                 }

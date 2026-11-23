@@ -26,8 +26,9 @@ import {
 } from "./PhraseEditor";
 import { FolderToolbar, NewFolderButton, ScopeLabel, useFolderInfo } from "./FolderManager";
 import { RichTextView } from "./RichLazy";
+import { VarsAka } from "./VarsEditor";
 
-interface Variable {
+interface MacroInfo {
   name: string;
   kind: string;
   params: [string, string][];
@@ -40,7 +41,7 @@ interface Phrase {
   kind: string;
   content: string;
   preview: string;
-  vars: Variable[];
+  vars: MacroInfo[];
   comment: string | null;
   index: number;
   line: number | null;
@@ -493,7 +494,7 @@ export default function App() {
               )}
               {current.phrase.vars.length > 0 && (
                 <>
-                  <h3 className="detail-meta">Variables</h3>
+                  <h3 className="detail-meta">Macros<VarsAka /></h3>
                   <ul className="vars">
                     {current.phrase.vars.map((v) => (
                       <li className="var" key={v.name}>

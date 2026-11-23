@@ -726,7 +726,7 @@ export function PhraseEditor({ folders, file, phrase, onSaved, onCancel, onReloa
         {error && saveFrom === "top" && <ErrorMessage message={error} onReload={() => void reload()} />}
       </div>
 
-      <div className="editor-tabs" role="tablist" aria-label="Phrase settings">
+      <div className="editor-tabs" role="tablist" aria-label="Phrase sections">
         {(["text", "options"] as const).map((t) => (
           <button
             key={t}

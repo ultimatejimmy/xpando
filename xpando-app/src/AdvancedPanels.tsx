@@ -1,4 +1,4 @@
-import { useEffect, useState, type CSSProperties } from "react";
+import { useEffect, useState, useSyncExternalStore, type CSSProperties } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { AlertTriangle, CheckCircle2, ChevronDown, ChevronRight, FileCode2, Pencil } from "lucide-react";
 import { OPERATORS } from "./search";
@@ -6,24 +6,44 @@ import { YamlEditor, hasDraft, type SavedFolder } from "./YamlEditor";
 
 const STORAGE_KEY = "xpando.advanced";
 
-/** Advanced mode on/off, remembered in localStorage when it is available. */
-export function useAdvanced(): [boolean, (on: boolean) => void] {
-  const [on, setOn] = useState<boolean>(() => {
+const advancedListeners = new Set<() => void>();
+let advancedValue: boolean | null = null;
+
+function readAdvanced(): boolean {
+  if (advancedValue === null) {
     try {
-      return localStorage.getItem(STORAGE_KEY) === "1";
+      advancedValue = localStorage.getItem(STORAGE_KEY) === "1";
     } catch {
-      return false;
+      advancedValue = false;
     }
-  });
-  const set = (value: boolean) => {
-    setOn(value);
-    try {
-      localStorage.setItem(STORAGE_KEY, value ? "1" : "0");
-    } catch {
-      // Storage unavailable: the setting just lasts for this session.
-    }
+  }
+  return advancedValue;
+}
+
+function setAdvancedValue(value: boolean) {
+  advancedValue = value;
+  try {
+    localStorage.setItem(STORAGE_KEY, value ? "1" : "0");
+  } catch {
+    // Storage unavailable: the setting just lasts for this session.
+  }
+  advancedListeners.forEach((l) => l());
+}
+
+function subscribeAdvanced(listener: () => void) {
+  advancedListeners.add(listener);
+  return () => {
+    advancedListeners.delete(listener);
   };
-  return [on, set];
+}
+
+/**
+ * Advanced mode on/off, remembered in localStorage when it is available. One shared value:
+ * every component that asks sees the switch change at once, even inside an open editor.
+ */
+export function useAdvanced(): [boolean, (on: boolean) => void] {
+  const on = useSyncExternalStore(subscribeAdvanced, readAdvanced, () => false);
+  return [on, setAdvancedValue];
 }
 
 export function AdvancedSwitch({ on, onChange }: { on: boolean; onChange: (on: boolean) => void }) {

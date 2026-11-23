@@ -107,7 +107,7 @@ export function ScopeLabel({ info }: { info: FolderInfo | undefined }) {
   return (
     <span
       className={warn ? "fm-scope fm-scope-warn" : "fm-scope"}
-      title={warn ? "No settings file loads this folder, so its phrases never expand." : undefined}
+      title={warn ? "No config file loads this folder, so its phrases never expand." : undefined}
     >
       {scopeLabel(info)}
     </span>
@@ -413,8 +413,8 @@ function RenameDialog({
           onChange={(e) => setName(e.target.value)}
         />
         <p className="fm-help">
-          Phrases and the apps this folder applies to stay as they are. Any settings that point to the
-          folder are updated for you.
+          Phrases and the apps this folder applies to stay as they are. Anything that refers to the
+          folder is updated for you.
         </p>
         {advanced && preview.changes && (
           <>
@@ -494,7 +494,7 @@ function DeleteDialog({
       {preview.changes ? <ChangeList changes={preview.changes} /> : !problem && <p className="fm-help">Checking…</p>}
       <p className="fm-help">
         Every file that is deleted is first copied to the backup named above, so the folder can be restored by
-        copying the backup back. Nothing else in your settings changes.
+        copying the backup back. Nothing else in your espanso configuration changes.
       </p>
       {problem && (
         <Problem
@@ -699,7 +699,7 @@ function AppsDialog({
           )}
           {advanced && apps.length > 0 && (
             <p className="fm-help">
-              Settings {apps.length > 1 ? "files" : "file"}:{" "}
+              Config {apps.length > 1 ? "files" : "file"}:{" "}
               {apps.map((a, i) => (
                 <span key={a.config}>
                   {i > 0 && ", "}
@@ -719,7 +719,7 @@ function AppsDialog({
         </>
       )}
       {!advanced && preview.changes && preview.changes.length > 0 && (
-        <p className="fm-help">xpando will update the settings that decide which apps use this folder.</p>
+        <p className="fm-help">xpando will update the configuration that decides which apps use this folder.</p>
       )}
       {problem && (
         <Problem

@@ -71,6 +71,22 @@ function KeyTag({ name }: { name: string }) {
   const advanced = useContext(AdvancedContext);
   return advanced ? <code className="var-key">{name}</code> : null;
 }
+/** Advanced mode only: what a macro is called in the file, next to the plain word. */
+export function VarsAka() {
+  const [advanced] = useAdvanced();
+  return advanced ? (
+    <span className="var-aka">
+      {" "}
+      (<code>vars:</code> in the YAML)
+    </span>
+  ) : null;
+}
+
+/** The plain-language name of a macro's type, for lists and summaries. */
+export function macroLabel(type: string): string {
+  return TYPE_LABELS[type] ?? (type || "Unknown macro");
+}
+
 const SHELLS = ["bash", "cmd", "powershell", "pwsh", "sh", "zsh", "fish", "nu", "wsl", "wsl2"];
 const NAME_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
@@ -149,19 +165,19 @@ function orderSpecs<T extends VarSpec>(list: T[]) {
 /** Per-variable error text (null when fine), same rules as the backend. */
 export function validateItems(items: VarSpec[]): (string | null)[] {
   return items.map((s, i) => {
-    if (s.name === "") return "Give the variable a name.";
+    if (s.name === "") return "Give the macro a name.";
     if (!NAME_RE.test(s.name))
       return "Names can use letters, digits and _, and can't start with a digit.";
-    if (items.some((o, j) => j !== i && o.name === s.name)) return "Another variable already has this name.";
+    if (items.some((o, j) => j !== i && o.name === s.name)) return "Another macro already has this name.";
     if (!/^[A-Za-z0-9_-]+$/.test(s.type)) return "The type needs letters, digits, - or _ only.";
     const keys = s.params.map((p) => p.key);
-    if (keys.some((k) => !/^[A-Za-z0-9_-]+$/.test(k))) return "Every parameter needs a name (letters, digits, - or _).";
-    if (new Set(keys).size !== keys.length) return "A parameter name is used twice.";
+    if (keys.some((k) => !/^[A-Za-z0-9_-]+$/.test(k))) return "Every setting needs a name (letters, digits, - or _).";
+    if (new Set(keys).size !== keys.length) return "A setting name is used twice.";
     const blank = (k: string) => textOf(s, k).trim() === "";
     const noList = (k: string) => listOf(s, k).every((x) => x.trim() === "") && getParam(s, k)?.t !== "raw";
     switch (s.type) {
       case "echo":
-        return getParam(s, "echo") === undefined ? "Enter the text for this variable." : null;
+        return getParam(s, "echo") === undefined ? "Enter the text for this macro." : null;
       case "shell":
         return blank("cmd") ? "Enter the command to run." : null;
       case "random":
@@ -186,7 +202,7 @@ export function analyzeItems(items: VarSpec[], body: string): string[] {
     if (!items.some((s) => s.name === n) && !seen.has(n)) {
       seen.add(n);
       out.push(
-        `The text uses {{${n}}}, but this phrase has no variable with that name. That only works if a global variable provides it.`,
+        `The text uses {{${n}}}, but this phrase has no macro with that name. That only works if a global macro provides it.`,
       );
     }
   }
@@ -197,7 +213,7 @@ export function analyzeItems(items: VarSpec[], body: string): string[] {
         o.params.some((p) => paramStrings(p.value).some((t) => placeholders(t).includes(s.name))),
     );
     if (!inBody.includes(s.name) && !byVar) {
-      out.push(`The variable “${s.name}” is not used by the text or by another variable.`);
+      out.push(`The macro “${s.name}” is not used by the text or by another macro.`);
     }
   }
   return out;
@@ -346,7 +362,7 @@ const MACROS: MacroDef[] = [
   {
     id: "echo",
     label: "Fixed text",
-    hint: "Text you can reuse in other variables",
+    hint: "Text you can reuse in other macros",
     icon: <MessageSquare size={16} aria-hidden="true" />,
     baseName: "text",
     make: (n) => spec(n, "echo", [{ key: "echo", value: text("") }]),
@@ -494,7 +510,7 @@ export function useVars(opts: UseVarsOptions): VarsApi {
 
   const problems = useMemo(() => {
     if (!editable) return [];
-    const own = errors.flatMap((e, i) => (e ? [`Variable “${shown[i].name || i + 1}”: ${e}`] : []));
+    const own = errors.flatMap((e, i) => (e ? [`Macro “${shown[i].name || i + 1}”: ${e}`] : []));
     return [...own, ...ordered.problems];
   }, [errors, shown, ordered.problems, editable]);
 
@@ -539,11 +555,11 @@ export function useVars(opts: UseVarsOptions): VarsApi {
   function renameItem(key: number, name: string): string | null {
     const item = items.find((it) => it.key === key);
     if (!item || name === item.name) return null;
-    if (name === "") return "A variable needs a name.";
+    if (name === "") return "A macro needs a name.";
     if (!NAME_RE.test(name)) {
       return `“${name}” can't be a name: use letters, digits and _, and don't start with a digit.`;
     }
-    if (items.some((o) => o.key !== key && o.name === name)) return `Another variable is already called “${name}”.`;
+    if (items.some((o) => o.key !== key && o.name === name)) return `Another macro is already called “${name}”.`;
     const prev = item.name;
     const users = usedBy(items, prev, usesOf);
     const inText = bodyEditable && placeholders(body).includes(prev);
@@ -580,7 +596,7 @@ export function useVars(opts: UseVarsOptions): VarsApi {
     if (r.count > 0) replaceBody(r.text);
     setNotice({
       tone: "info",
-      text: r.count > 0 ? `Removed {{${item.name}}} from the text too.` : `Removed the variable “${item.name}”.`,
+      text: r.count > 0 ? `Removed {{${item.name}}} from the text too.` : `Removed the macro “${item.name}”.`,
       undo: { item, index: at, bodyBefore: body, bodyAfter: r.text },
     });
   }
@@ -646,7 +662,7 @@ export function useVars(opts: UseVarsOptions): VarsApi {
     }
     const name = addItem(m.make, m.baseName);
     insertAtCursor(`{{${name}}}`);
-    setAnnounce(`Inserted {{${name}}} and added a ${m.label} variable named ${name}.`);
+    setAnnounce(`Inserted {{${name}}} and added a ${m.label} macro named ${name}.`);
   }
 
   /** The section's Add menu: makes the variable without putting it in the text. */
@@ -654,7 +670,7 @@ export function useVars(opts: UseVarsOptions): VarsApi {
     if (!m.make) return;
     const name = addItem(m.make, m.baseName);
     setFocusKey(nextKey - 1);
-    setAnnounceAdd(`Added a ${m.label} variable named ${name}. Open below.`);
+    setAnnounceAdd(`Added a ${m.label} macro named ${name}. Open below.`);
   }
 
   const menu =
@@ -700,7 +716,7 @@ function MacroMenu({
   onPick: (m: MacroDef) => void;
   announce: string;
 }) {
-  const label = kind === "insert" ? "Insert macro" : "Add a variable";
+  const label = kind === "insert" ? "Insert macro" : "Add a macro";
   const list = kind === "insert" ? MACROS : MACROS.filter((m) => m.make);
   const [open, setOpen] = useState(false);
   const wrap = useRef<HTMLDivElement>(null);
@@ -754,7 +770,7 @@ function MacroMenu({
         aria-haspopup="menu"
         aria-expanded={open}
         aria-controls={`${uid}-menu`}
-        title={kind === "insert" ? "Adds a variable and puts it in the text at the cursor" : "Adds a variable without putting it in the text"}
+        title={kind === "insert" ? "Adds a macro and puts it in the text at the cursor" : "Adds a macro without putting it in the text"}
         onClick={() => setOpen((o) => !o)}
       >
         {kind === "insert" ? <Braces size={16} aria-hidden="true" /> : <Plus size={16} aria-hidden="true" />}
@@ -809,7 +825,7 @@ interface SectionProps {
   onUndo: () => void;
   onDismissNotice: () => void;
   onFocusCapture: (el: HTMLElement | null) => void;
-  /** The "Add a variable" menu. */
+  /** The "Add a macro" menu. */
   addMenu: ReactNode;
   /** The card of this variable gets the focus when it appears (it was just added). */
   focusKey: number | null;
@@ -869,14 +885,14 @@ function VarsSection(p: SectionProps) {
     return (
       <div className="editor-group vars-section" role="group" aria-labelledby={`${uid}-h`}>
         <span className="editor-legend" id={`${uid}-h`}>
-          Variables
+          Macros<VarsAka />
         </span>
-        {p.state === "loading" && <p className="editor-note">Loading variables…</p>}
+        {p.state === "loading" && <p className="editor-note">Loading macros…</p>}
         {p.state === "error" && (
           <p className="editor-note" role="alert">
             <AlertTriangle size={16} aria-hidden="true" />
             <span>
-              These variables use a layout xpando can't edit safely, so they are left as they are. Edit them in
+              These macros use a layout xpando can't edit safely, so they are left as they are. Edit them in
               Advanced mode or a text editor. ({p.loadError})
             </span>
           </p>
@@ -890,12 +906,12 @@ function VarsSection(p: SectionProps) {
     return (
       <div className="editor-group vars-section vars-empty" role="group" aria-labelledby={`${uid}-h`}>
         <span className="editor-legend" id={`${uid}-h`}>
-          Variables
+          Macros<VarsAka />
         </span>
         <p className="editor-note">
           <Info size={16} aria-hidden="true" />
           <span>
-            None yet. A variable fills in something when the phrase expands, like today's date.
+            None yet. A macro fills in something when the phrase expands, like today's date.
             {p.canInsert && " Use Insert macro above the text to put one in."}
           </span>
         </p>
@@ -919,7 +935,7 @@ function VarsSection(p: SectionProps) {
           onClick={p.onToggle}
         >
           <ChevronRight size={16} aria-hidden="true" className="vars-chevron" />
-          Variables ({count})
+          Macros ({count})<VarsAka />
         </button>
       </h3>
       {!p.open && (
@@ -947,7 +963,7 @@ function VarsSection(p: SectionProps) {
       >
         <p className="var-hint">
           <Info size={16} aria-hidden="true" />
-          Variables are applied in the right order automatically: one that uses another goes after it.
+          Macros are applied in the right order automatically: one that uses another goes after it.
         </p>
         <ol className="var-cards">
           {p.items.map((it, i) => (
@@ -1057,10 +1073,10 @@ function VarCard({
   const advanced = useContext(AdvancedContext);
   const known = isKnown(item.type);
   const set = (fn: (it: Item) => Item) => onUpdate(item.key, fn);
-  const label = item.name || `variable ${index + 1}`;
+  const label = item.name || `macro ${index + 1}`;
   const card = useRef<HTMLLIElement>(null);
   useEffect(() => {
-    // A variable that was just added: go to its first setting (or its name), ready to fill in.
+    // A macro that was just added: go to its first setting (or its name), ready to fill in.
     if (!autoFocus || !card.current) return;
     const first =
       card.current.querySelector<HTMLElement>(".var-head ~ .var-field input:not([type=checkbox]), .var-head ~ .var-field textarea") ??
@@ -1070,7 +1086,7 @@ function VarCard({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   return (
-    <li className="var-card" aria-label={`Variable ${label}`} ref={card}>
+    <li className="var-card" aria-label={`Macro ${label}`} ref={card}>
       <div className="var-head">
         <div className="var-field var-name">
           <label htmlFor={`${uid}-name`}>Name</label>
@@ -1112,7 +1128,7 @@ function VarCard({
             type="button"
             className="btn btn-icon"
             aria-label={`Remove ${label}`}
-            title="Remove variable"
+            title="Remove macro"
             onClick={() => onRemove(item.key)}
           >
             <Trash2 size={16} aria-hidden="true" />
@@ -1502,7 +1518,7 @@ function TypeFields({ item, set, uid }: { item: Item; set: SetItem; uid: string 
           mono={false}
           value={textOf(item, "echo")}
           onChange={(v) => set((it) => withParam(it, "echo", text(v)))}
-          hint={<>Can use other variables, for example {"{{date}}"}_{"{{clipboard}}"}.</>}
+          hint={<>Can use other macros, for example {"{{date}}"}_{"{{clipboard}}"}.</>}
         />
       );
     case "random":
@@ -1541,7 +1557,7 @@ function TypeFields({ item, set, uid }: { item: Item; set: SetItem; uid: string 
             rows={3}
             value={textOf(item, "cmd")}
             onChange={(v) => set((it) => withParam(it, "cmd", text(v)))}
-            hint="Its output replaces the variable. Can use other variables."
+            hint="Its output replaces the macro. Can use other macros."
           />
           <div className="var-field">
             <label htmlFor={`${uid}-shell`}>
@@ -1618,7 +1634,7 @@ function TypeFields({ item, set, uid }: { item: Item; set: SetItem; uid: string 
           mono={false}
           value={textOf(item, "text")}
           onChange={(v) => set((it) => withParam(it, "text", text(v)))}
-          hint="Needs xpando's own engine; stock espanso rejects this type. The variable itself inserts nothing."
+          hint="Needs xpando's own engine; stock espanso rejects this type. The macro itself inserts nothing."
         />
       );
     default:
