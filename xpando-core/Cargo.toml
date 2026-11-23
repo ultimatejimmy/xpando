@@ -6,3 +6,5 @@ edition = "2021"
 license = "GPL-3.0"
 
 [dependencies]
+serde = { version = "=1.0.229", features = ["derive"] }
+serde_norway = "=0.9.42"

@@ -11,22 +11,17 @@ fn espanso_config_dir(app: &AppHandle) -> Result<PathBuf, String> {
         .map_err(|e| e.to_string())
 }
 
-/// Lists espanso match files, relative to the config directory.
+/// Reads every espanso match file into folders of phrases (read-only).
 #[tauri::command]
-fn list_match_files(app: AppHandle) -> Result<Vec<String>, String> {
+fn list_phrases(app: AppHandle) -> Result<Vec<xpando_core::Folder>, String> {
     let dir = espanso_config_dir(&app)?;
-    let files = xpando_core::discover_match_files(&dir).map_err(|e| e.to_string())?;
-    Ok(files
-        .iter()
-        .filter_map(|p| p.strip_prefix(&dir).ok())
-        .map(|p| p.to_string_lossy().replace('\\', "/"))
-        .collect())
+    xpando_core::load_folders(&dir).map_err(|e| e.to_string())
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
-        .invoke_handler(tauri::generate_handler![list_match_files])
+        .invoke_handler(tauri::generate_handler![list_phrases])
         .run(tauri::generate_context!())
         .expect("error while running xpando");
 }
