@@ -9,6 +9,7 @@ import {
   Calendar,
   ChevronDown,
   Clipboard,
+  ClipboardCopy,
   Info,
   ListChecks,
   MessageSquare,
@@ -334,6 +335,15 @@ const MACROS: MacroDef[] = [
     icon: <MessageSquare size={16} aria-hidden="true" />,
     baseName: "text",
     make: (n) => spec(n, "echo", [{ key: "echo", value: text("") }]),
+  },
+  {
+    // Needs xpando's engine build: stock espanso rejects this variable type.
+    id: "set_clipboard",
+    label: "Set clipboard",
+    hint: "Fills the clipboard after pasting (xpando only)",
+    icon: <ClipboardCopy size={16} aria-hidden="true" />,
+    baseName: "setclip",
+    make: (n) => spec(n, "set_clipboard", [{ key: "text", value: text("") }]),
   },
   {
     id: "cursor",

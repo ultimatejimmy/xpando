@@ -130,9 +130,9 @@ Key principles:
       (duplicate triggers, prefix collisions such as `:ad` vs `:addr`).
 - [ ] Undo/redo; external-change detection (file edited outside the app → reload/merge prompt).
 - [x] First editor: triggers, label, plain-text body; create and delete; hash check, atomic save, `.bak`.
-- [ ] M2b: match options (`word`, `propagate_case`, `force_mode`, ...), editable description comment,
+- [x] M2b: match options (`word`, `propagate_case`, `force_mode`, ...), editable description comment,
       unsaved-changes guard, draft kept across a reload conflict, per-folder app scope.
-- [ ] **M2c: edit the YAML directly (Advanced mode).** In the YAML tab an Edit button turns the
+- [x] **M2c: edit the YAML directly (Advanced mode).** In the YAML tab an Edit button turns the
       entry's source into an editable monospace text area (line numbers, tab/indent handling).
       Rules: the text must parse as exactly ONE entry; the result is re-parsed and every other phrase
       must be unchanged; invalid YAML is shown inline with line and column and cannot be saved; the file
@@ -176,6 +176,11 @@ is invisible as a feature. Replace it with a built-in action that works the same
 - **UI:** "Set clipboard" in the Insert-macro menu (M4), shown in the Variables list with its text.
 - **Tests:** unit tests for the extension, plus a manual per-OS matrix (paste vs type injection,
   clipboard restore on/off, empty and multi-line text, images on the clipboard beforehand).
+
+### Status of M4b (native set clipboard)
+Implemented in the engine as variable type `set_clipboard` (see [SET-CLIPBOARD.md](SET-CLIPBOARD.md)) and offered in the
+Insert macro menu. Still open: the per-OS manual test matrix (macOS, Linux, real clipboards), bundling xpando's engine
+build with the app (stock espanso rejects the type), and a one-click "convert the PowerShell hack" action.
 
 ### M5 — Release polish (≈2 weeks)
 - [ ] First-run onboarding (permissions on macOS, start-at-login, import existing espanso config).
