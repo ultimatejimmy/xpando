@@ -305,3 +305,38 @@
 .vars-body[hidden] {
   display: none;
 }
+
+/* Notices (removed, renamed, blocked) and unused variables */
+.var-notice {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  font-size: 13px;
+}
+
+.var-notice > svg {
+  flex: none;
+}
+
+.var-notice-error {
+  border-color: var(--danger-text);
+  color: var(--danger-text);
+}
+
+.var-unused {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  color: var(--warn-text);
+  font-size: 13px;
+}
+
+.var-unused svg {
+  flex: none;
+}

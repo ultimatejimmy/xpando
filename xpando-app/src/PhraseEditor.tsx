@@ -351,6 +351,8 @@ export function PhraseEditor({ folders, file, phrase, onSaved, onCancel, onReloa
     setBody,
     bodyId: `${uid}-body`,
     bodyEditable,
+    bodyIsHtml: mode === "rich",
+    onBodyReplaced: () => setSwitches((n) => n + 1), // the rich text editor starts again from the new body
   });
 
   const { problems, warnings } = useMemo(() => {

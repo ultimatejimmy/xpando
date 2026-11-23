@@ -17,9 +17,10 @@ import {
   Terminal,
   TextCursorInput,
   Trash2,
+  Undo2,
   X,
 } from "lucide-react";
-import { placeholders, renameInText, sortByDependency } from "./varorder";
+import { placeholders, removePlaceholders, renameInText, sortByDependency, usedBy } from "./varorder";
 import "./vars.css";
 
 // ---------------------------------------------------------------------------------------
@@ -365,6 +366,19 @@ function uniqueName(base: string, items: VarSpec[]): string {
 // Hook
 // ---------------------------------------------------------------------------------------
 
+/** `{{a}}`, `{{a}} and {{b}}`, `{{a}}, {{b}} and {{c}}`. */
+function listNames(names: string[]): string {
+  const q = names.map((n) => `{{${n}}}`);
+  return q.length <= 1 ? q.join("") : `${q.slice(0, -1).join(", ")} and ${q[q.length - 1]}`;
+}
+
+/** A message under the cards. `undo` restores a removed variable and the text it was cut from. */
+interface Notice {
+  tone: "info" | "error";
+  text: string;
+  undo?: { item: Item; index: number; bodyBefore: string; bodyAfter: string };
+}
+
 interface UseVarsOptions {
   file: string;
   /** Index of the phrase in its file, or null for a new phrase. */
@@ -377,6 +391,10 @@ interface UseVarsOptions {
   bodyId: string;
   /** False when the body is not plain text: macros can't be inserted. */
   bodyEditable: boolean;
+  /** The body is HTML (rich text): placeholders are removed from it without touching tags. */
+  bodyIsHtml?: boolean;
+  /** Called after the body was changed from here, so a rich text editor can show the new text. */
+  onBodyReplaced?: () => void;
 }
 
 export interface VarsApi {
@@ -402,7 +420,8 @@ let nextKey = 1;
 let sectionOpenMemory = false;
 
 export function useVars(opts: UseVarsOptions): VarsApi {
-  const { index, hasVars, body, setBody, bodyId, bodyEditable, file } = opts;
+  const { index, hasVars, body, setBody, bodyId, bodyEditable, bodyIsHtml = false, onBodyReplaced, file } = opts;
+  const [notice, setNotice] = useState<Notice | null>(null);
   const [items, setItems] = useState<Item[]>([]);
   const [original, setOriginal] = useState<VarSpec[]>([]);
   const [state, setState] = useState<"loading" | "ready" | "error">(index !== null && hasVars ? "loading" : "ready");
@@ -499,6 +518,65 @@ export function useVars(opts: UseVarsOptions): VarsApi {
     [items, body, setBody, update],
   );
 
+  /** Changes the body from here; a rich text editor is told to show it. */
+  function replaceBody(next: string) {
+    setBody(next);
+    if (bodyIsHtml) onBodyReplaced?.();
+  }
+
+  function removeItem(key: number) {
+    const at = items.findIndex((it) => it.key === key);
+    if (at < 0) return;
+    const item = items[at];
+    const users = usedBy(items, item.name, usesOf);
+    if (users.length > 0) {
+      setNotice({
+        tone: "error",
+        text: `{{${item.name}}} is used by ${listNames(users)}; change that first.`,
+      });
+      return;
+    }
+    const r = bodyEditable ? removePlaceholders(body, item.name, bodyIsHtml) : { text: body, count: 0 };
+    setItems((all) => all.filter((it) => it.key !== key));
+    if (r.count > 0) replaceBody(r.text);
+    setNotice({
+      tone: "info",
+      text: r.count > 0 ? `Removed {{${item.name}}} from the text too.` : `Removed the variable “${item.name}”.`,
+      undo: { item, index: at, bodyBefore: body, bodyAfter: r.text },
+    });
+  }
+
+  function undoRemove() {
+    const u = notice?.undo;
+    if (!u) return;
+    setItems((all) => {
+      const next = [...all];
+      next.splice(Math.min(u.index, next.length), 0, u.item);
+      return next;
+    });
+    if (u.bodyBefore !== u.bodyAfter) replaceBody(u.bodyBefore);
+    setNotice({ tone: "info", text: `Brought back {{${u.item.name}}}.` });
+  }
+
+  // Undo only while it can restore things exactly: the text is as it was left, the name is free.
+  useEffect(() => {
+    const u = notice?.undo;
+    if (!u) return;
+    if ((u.bodyBefore !== u.bodyAfter && body !== u.bodyAfter) || items.some((o) => o.name === u.item.name)) {
+      setNotice(null);
+    }
+  }, [notice, body, items]);
+
+  // Variables that nothing uses: not the text, not another variable's settings.
+  const unusedKeys = useMemo(() => {
+    const inBody = new Set(placeholders(body));
+    return new Set(
+      shown
+        .filter((it) => it.name !== "" && !inBody.has(it.name) && usedBy(shown, it.name, usesOf).length === 0)
+        .map((it) => it.key),
+    );
+  }, [shown, body]);
+
   const addItem = useCallback((make: (name: string) => VarSpec, base: string): string => {
     const name = uniqueName(base, items);
     const item: Item = { ...make(name), key: nextKey++ };
@@ -549,7 +627,11 @@ export function useVars(opts: UseVarsOptions): VarsApi {
       warningCount={warnings.length}
       onUpdate={update}
       onRename={rename}
-      onRemove={(key) => setItems((all) => all.filter((it) => it.key !== key))}
+      onRemove={removeItem}
+      unusedKeys={unusedKeys}
+      notice={notice}
+      onUndo={undoRemove}
+      onDismissNotice={() => setNotice(null)}
       onAdd={(type) => {
         const m = MACROS.find((x) => x.id === type);
         const name = addItem(
@@ -670,8 +752,49 @@ interface SectionProps {
   onUpdate: (key: number, fn: (it: Item) => Item) => void;
   onRename: (key: number, name: string) => void;
   onRemove: (key: number) => void;
+  unusedKeys: Set<number>;
+  notice: Notice | null;
+  onUndo: () => void;
+  onDismissNotice: () => void;
   onFocusCapture: (el: HTMLElement | null) => void;
   onAdd: (type: string) => void;
+}
+
+/** The notice under the cards, with Undo when a removal can still be taken back. */
+function NoticeBar({ p }: { p: SectionProps }) {
+  const n = p.notice;
+  return (
+    <>
+      {/* Always-mounted live regions, so the text is announced when it appears. */}
+      <span className="sr-only" role="status">
+        {n && n.tone === "info" ? `${n.text}${n.undo ? " Undo is available." : ""}` : ""}
+      </span>
+      <span className="sr-only" role="alert">
+        {n && n.tone === "error" ? n.text : ""}
+      </span>
+      {n && (
+        <div className={`var-notice${n.tone === "error" ? " var-notice-error" : ""}`}>
+          {n.tone === "error" ? <AlertTriangle size={16} aria-hidden="true" /> : <Info size={16} aria-hidden="true" />}
+          <span className="grow">{n.text}</span>
+          {n.undo && (
+            <button type="button" className="btn" onClick={p.onUndo}>
+              <Undo2 size={16} aria-hidden="true" />
+              Undo
+            </button>
+          )}
+          <button
+            type="button"
+            className="btn btn-icon"
+            aria-label="Dismiss this message"
+            title="Dismiss"
+            onClick={p.onDismissNotice}
+          >
+            <X size={16} aria-hidden="true" />
+          </button>
+        </div>
+      )}
+    </>
+  );
 }
 
 function VarsSection(p: SectionProps) {
@@ -730,6 +853,7 @@ function VarsSection(p: SectionProps) {
           <Info size={16} aria-hidden="true" />
           None yet. A variable fills in something when the phrase expands, like today's date.
         </p>
+        <NoticeBar p={p} />
         {addRow}
       </div>
     );
@@ -788,9 +912,11 @@ function VarsSection(p: SectionProps) {
               onUpdate={p.onUpdate}
               onRename={p.onRename}
               onRemove={p.onRemove}
+              unused={p.unusedKeys.has(it.key)}
             />
           ))}
         </ol>
+        <NoticeBar p={p} />
         {addRow}
       </div>
     </div>
@@ -804,6 +930,7 @@ function VarCard({
   onUpdate,
   onRename,
   onRemove,
+  unused,
 }: {
   item: Item;
   index: number;
@@ -811,6 +938,7 @@ function VarCard({
   onUpdate: (key: number, fn: (it: Item) => Item) => void;
   onRename: (key: number, name: string) => void;
   onRemove: (key: number) => void;
+  unused: boolean;
 }) {
   const uid = useId();
   const known = isKnown(item.type);
@@ -878,6 +1006,18 @@ function VarCard({
             xpando doesn't know this type, so its parameters are edited as plain name and value pairs.
           </p>
         </div>
+      )}
+      {unused && (
+        <p className="var-unused">
+          <Info size={16} aria-hidden="true" />
+          <span>
+            Not used in the text. Type <code>{`{{${item.name}}}`}</code> where it should appear, or
+          </span>
+          <button type="button" className="btn" onClick={() => onRemove(item.key)}>
+            <Trash2 size={16} aria-hidden="true" />
+            Remove it
+          </button>
+        </p>
       )}
       <TypeFields item={item} set={set} uid={uid} />
       <ExtraParams item={item} set={set} uid={uid} />
