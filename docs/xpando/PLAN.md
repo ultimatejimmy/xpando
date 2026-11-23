@@ -44,7 +44,8 @@ folders → phrase list → editor with tabs **Content · Options · Apps**. YAM
 Advanced on (persisted setting, also toggleable from the header) adds:
 
 - **YAML tab** — the phrase's exact YAML with line numbers, validation status, "Show whole file",
-  and "Open in editor" (external editor). Read-only in M2; editable with round-trip validation later.
+  and "Open in editor" (external editor). **Editable** (M2c below): the YAML tab has an Edit mode for
+  the selected entry, with live validation, and saves through the same safety net as the form editor.
 - **Variables tab** — table view of `vars` (name, type, params) for direct editing.
 - **File awareness** — backing file names next to folders, `file · line` under the phrase title.
 - **Hotkey badges** in the phrase list next to trigger chips.
@@ -128,6 +129,18 @@ Key principles:
 - [ ] Plain-text editor with live preview; trigger validation and **conflict detection**
       (duplicate triggers, prefix collisions such as `:ad` vs `:addr`).
 - [ ] Undo/redo; external-change detection (file edited outside the app → reload/merge prompt).
+- [x] First editor: triggers, label, plain-text body; create and delete; hash check, atomic save, `.bak`.
+- [ ] M2b: match options (`word`, `propagate_case`, `force_mode`, ...), editable description comment,
+      unsaved-changes guard, draft kept across a reload conflict, per-folder app scope.
+- [ ] **M2c: edit the YAML directly (Advanced mode).** In the YAML tab an Edit button turns the
+      entry's source into an editable monospace text area (line numbers, tab/indent handling).
+      Rules: the text must parse as exactly ONE entry; the result is re-parsed and every other phrase
+      must be unchanged; invalid YAML is shown inline with line and column and cannot be saved; the file
+      hash check, atomic write and `.bak` backup apply as for form edits. The comment block above the
+      entry is part of the editable text. A second step offers editing the whole file (all entries,
+      top-level keys such as `imports`/`global_vars`) with the same validation, for power users.
+      Without a code-editor library at first (plain text area); CodeMirror can be evaluated later,
+      subject to the package approval rules.
 
 ### M3 — WYSIWYG rich text (≈3–4 weeks)
 - [ ] Editor component (evaluate TipTap/ProseMirror vs Lexical) limited to formatting espanso
