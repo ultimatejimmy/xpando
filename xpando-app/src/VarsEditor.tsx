@@ -61,7 +61,7 @@ const TYPE_LABELS: Record<string, string> = {
   shell: "Output of a command",
   script: "Output of a program",
   form: "Form (asks several questions)",
-  set_clipboard: "Set the clipboard (xpando only)",
+  set_clipboard: "Set the clipboard",
 };
 
 /** Whether to show the file's own names (YAML keys, type names) next to the plain labels. */
@@ -368,7 +368,7 @@ const MACROS: MacroDef[] = [
     id: "set_clipboard",
     advanced: true,
     label: "Set clipboard",
-    hint: "Fills the clipboard (xpando only)",
+    hint: "Fills the clipboard",
     icon: <ClipboardCopy size={16} aria-hidden="true" />,
     baseName: "setclip",
     make: (n) => spec(n, "set_clipboard", [{ key: "text", value: text("") }]),
