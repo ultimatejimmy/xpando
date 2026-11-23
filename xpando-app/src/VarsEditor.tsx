@@ -8,6 +8,7 @@ import {
   Braces,
   Calendar,
   ChevronDown,
+  ChevronRight,
   Clipboard,
   ClipboardCopy,
   Info,
@@ -398,6 +399,9 @@ export interface VarsApi {
 
 let nextKey = 1;
 
+/** Whether the Variables section was left open; remembered until the app is closed. */
+let sectionOpenMemory = false;
+
 export function useVars(opts: UseVarsOptions): VarsApi {
   const { index, hasVars, body, setBody, bodyId, bodyEditable, file } = opts;
   const [items, setItems] = useState<Item[]>([]);
@@ -406,6 +410,7 @@ export function useVars(opts: UseVarsOptions): VarsApi {
   const [loadError, setLoadError] = useState("");
   const [announce, setAnnounce] = useState("");
   const lastValid = useRef(new Map<number, string>());
+  const [open, setOpenState] = useState(sectionOpenMemory);
 
   useEffect(() => {
     if (index === null || !hasVars) return;
@@ -440,6 +445,21 @@ export function useVars(opts: UseVarsOptions): VarsApi {
   }, [errors, items, editable]);
   const warnings = useMemo(() => (editable ? analyzeItems(specs, body) : []), [editable, specs, body]);
 
+  const hasProblem = problems.length > 0;
+  const hadProblem = useRef(false);
+  useEffect(() => {
+    // A problem inside the section opens it, so it can be seen and fixed.
+    if (hasProblem && !hadProblem.current) setOpenState(true);
+    hadProblem.current = hasProblem;
+  }, [hasProblem]);
+
+  const toggleOpen = useCallback(() => {
+    setOpenState((o) => {
+      sectionOpenMemory = !o;
+      return !o;
+    });
+  }, []);
+
   const update = useCallback((key: number, fn: (it: Item) => Item) => {
     setItems((all) => all.map((it) => (it.key === key ? fn(it) : it)));
   }, []);
@@ -471,6 +491,7 @@ export function useVars(opts: UseVarsOptions): VarsApi {
     const item: Item = { ...make(name), key: nextKey++ };
     lastValid.current.set(item.key, name);
     setItems([...items, item]);
+    setOpenState(true);
     return name;
   }, [items]);
 
@@ -517,6 +538,10 @@ export function useVars(opts: UseVarsOptions): VarsApi {
       loadError={loadError}
       items={items}
       errors={errors}
+      open={open}
+      onToggle={toggleOpen}
+      problemCount={problems.length}
+      warningCount={warnings.length}
       onUpdate={update}
       onRename={rename}
       onMove={move}
@@ -634,6 +659,10 @@ interface SectionProps {
   loadError: string;
   items: Item[];
   errors: (string | null)[];
+  open: boolean;
+  onToggle: () => void;
+  problemCount: number;
+  warningCount: number;
   onUpdate: (key: number, fn: (it: Item) => Item) => void;
   onRename: (key: number, name: string) => void;
   onMove: (index: number, dir: -1 | 1) => void;
@@ -644,65 +673,115 @@ interface SectionProps {
 function VarsSection(p: SectionProps) {
   const uid = useId();
   const [newType, setNewType] = useState("echo");
+  const count = p.items.length;
+  const addRow = (
+    <div className="var-add">
+      <select
+        className="field"
+        aria-label="Type of the new variable"
+        value={newType}
+        onChange={(e) => setNewType(e.target.value)}
+      >
+        {KNOWN_TYPES.map((t) => (
+          <option key={t} value={t}>
+            {TYPE_LABELS[t]}
+          </option>
+        ))}
+      </select>
+      <button type="button" className="btn" onClick={() => p.onAdd(newType)}>
+        <Plus size={16} aria-hidden="true" />
+        Add variable
+      </button>
+    </div>
+  );
+
+  if (p.state !== "ready") {
+    return (
+      <div className="editor-group vars-section" role="group" aria-labelledby={`${uid}-h`}>
+        <span className="editor-legend" id={`${uid}-h`}>
+          Variables
+        </span>
+        {p.state === "loading" && <p className="editor-note">Loading variables…</p>}
+        {p.state === "error" && (
+          <p className="editor-note" role="alert">
+            <AlertTriangle size={16} aria-hidden="true" />
+            <span>
+              These variables use a layout xpando can't edit safely, so they are left as they are. Edit them in
+              Advanced mode or a text editor. ({p.loadError})
+            </span>
+          </p>
+        )}
+      </div>
+    );
+  }
+
+  // No variables: one compact row instead of an empty section.
+  if (count === 0) {
+    return (
+      <div className="editor-group vars-section vars-empty" role="group" aria-labelledby={`${uid}-h`}>
+        <span className="editor-legend" id={`${uid}-h`}>
+          Variables
+        </span>
+        <p className="editor-note">
+          <Info size={16} aria-hidden="true" />
+          None yet. A variable fills in something when the phrase expands, like today's date.
+        </p>
+        {addRow}
+      </div>
+    );
+  }
+
+  const issues = p.problemCount + p.warningCount;
   return (
     <div className="editor-group vars-section" role="group" aria-labelledby={`${uid}-h`}>
-      <span className="editor-legend" id={`${uid}-h`}>
-        Variables
-      </span>
-      {p.state === "loading" && <p className="editor-note">Loading variables…</p>}
-      {p.state === "error" && (
-        <p className="editor-note" role="alert">
-          <AlertTriangle size={16} aria-hidden="true" />
-          <span>
-            These variables use a layout xpando can't edit safely, so they are left as they are. Edit them in
-            Advanced mode or a text editor. ({p.loadError})
-          </span>
+      <h3 className="vars-heading" id={`${uid}-h`}>
+        <button
+          type="button"
+          className="vars-toggle"
+          aria-expanded={p.open}
+          aria-controls={`${uid}-body`}
+          aria-describedby={p.open ? undefined : `${uid}-sum`}
+          onClick={p.onToggle}
+        >
+          <ChevronRight size={16} aria-hidden="true" className="vars-chevron" />
+          Variables ({count})
+        </button>
+      </h3>
+      {!p.open && (
+        <p className="vars-summary" id={`${uid}-sum`}>
+          {p.items.map((it) => (
+            <span className="chip mono" key={it.key}>
+              {it.name || "(no name)"}
+            </span>
+          ))}
+          {issues > 0 && (
+            <span className={`vars-badge${p.problemCount > 0 ? " vars-badge-problem" : ""}`}>
+              <AlertTriangle size={14} aria-hidden="true" />
+              {p.problemCount > 0
+                ? `${p.problemCount} ${p.problemCount === 1 ? "problem" : "problems"}`
+                : `${p.warningCount} ${p.warningCount === 1 ? "warning" : "warnings"}`}
+            </span>
+          )}
         </p>
       )}
-      {p.state === "ready" && (
-        <>
-          {p.items.length === 0 && (
-            <p className="editor-note">
-              <Info size={16} aria-hidden="true" />
-              No variables yet. Use Insert macro above the text, or add one here, then use{" "}
-              <code>{"{{name}}"}</code> in the text.
-            </p>
-          )}
-          <ol className="var-cards">
-            {p.items.map((it, i) => (
-              <VarCard
-                key={it.key}
-                item={it}
-                index={i}
-                count={p.items.length}
-                error={p.errors[i]}
-                onUpdate={p.onUpdate}
-                onRename={p.onRename}
-                onMove={p.onMove}
-                onRemove={p.onRemove}
-              />
-            ))}
-          </ol>
-          <div className="var-add">
-            <select
-              className="field"
-              aria-label="Type of the new variable"
-              value={newType}
-              onChange={(e) => setNewType(e.target.value)}
-            >
-              {KNOWN_TYPES.map((t) => (
-                <option key={t} value={t}>
-                  {TYPE_LABELS[t]}
-                </option>
-              ))}
-            </select>
-            <button type="button" className="btn" onClick={() => p.onAdd(newType)}>
-              <Plus size={16} aria-hidden="true" />
-              Add variable
-            </button>
-          </div>
-        </>
-      )}
+      <div id={`${uid}-body`} className="vars-body" hidden={!p.open}>
+        <ol className="var-cards">
+          {p.items.map((it, i) => (
+            <VarCard
+              key={it.key}
+              item={it}
+              index={i}
+              count={count}
+              error={p.errors[i]}
+              onUpdate={p.onUpdate}
+              onRename={p.onRename}
+              onMove={p.onMove}
+              onRemove={p.onRemove}
+            />
+          ))}
+        </ol>
+        {addRow}
+      </div>
     </div>
   );
 }
