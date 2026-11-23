@@ -29,11 +29,10 @@ Rules:
 Ordering, oldest to newest, for one day: `2026.11.23-beta` < `2026.11.23-beta2` < `2026.11.23` <
 `2026.11.23.1` < `2026.11.23.2`. The next day's versions sort after all of these.
 
-Open question to confirm: month and day are written **without zero padding** (`2026.1.5`, not
-`2026.01.05`) so they match the numbers tools compare. Your examples (`2026.11.23`) don't show a
-single-digit month or day. Say if you prefer padding.
+Month and day are written **without zero padding** (`2026.1.5`, not `2026.01.05`); this is the
+default until changed, since the examples (`2026.11.23`) don't show a single-digit month or day.
 
-## Matching the version to the build tools (needs a decision)
+## Matching the version to the build tools (decided; internal only)
 
 Cargo, Tauri, npm and the Tauri updater require
 [semantic versioning](https://semver.org): exactly `MAJOR.MINOR.PATCH`, optional `-prerelease`, no
@@ -43,7 +42,7 @@ leading zeros. The scheme above is not valid semver in two places:
 2. Windows MSI installers limit the first two parts to 255 (`2026` and `1123` are too large), so
    **use the NSIS installer for Windows, not MSI**. (NSIS has no such limit.)
 
-Proposed solution: keep the human version above for tags, release names, the README and the
+Decision: keep the human version above for tags, release names, the README and the
 "About" screen, and **derive** a semver for `Cargo.toml`, `tauri.conf.json` and `package.json`.
 The updater compares the semver, so the derived value must sort the same way.
 
@@ -64,8 +63,7 @@ script (`scripts/version.*`) converts in both directions and the release workflo
 tag, the three manifests and the changelog agree before building. Because it is reversible,
 the UI always shows the human version.
 
-If you would rather use plain semver everywhere (for example `2026.11.23` as `2026.11.23` and
-accept no fourth part), say so and this section changes.
+Users never see the derived value; it only exists so the build tools and the updater work.
 
 ## Release process (to be automated)
 
