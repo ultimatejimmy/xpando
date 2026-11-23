@@ -180,9 +180,33 @@ is invisible as a feature. Replace it with a built-in action that works the same
 ### M5 — Release polish (≈2 weeks)
 - [ ] First-run onboarding (permissions on macOS, start-at-login, import existing espanso config).
 - [ ] Settings UI for `config/default.yml` (backend, toggle key, search shortcut, etc.).
-- [ ] Installers: MSI/NSIS (Windows), DMG (macOS, signing + notarization needs Apple Developer
-      account), AppImage/deb (Linux). Tauri updater for auto-update.
-- [ ] Docs site + screenshots; v0.1.0 public release.
+- [ ] Installers: **NSIS** (Windows; MSI can't hold date-based versions, see RELEASING.md), DMG (macOS,
+      signing + notarization needs Apple Developer account), AppImage/deb (Linux). Tauri updater for
+      auto-update, with a stable channel and an opt-in beta channel.
+- [ ] **Date-based versioning and releases** as described in [RELEASING.md](RELEASING.md): tags like
+      `2026.11.23`, patches `2026.11.23.1`, betas `2026.11.23-beta`, `-beta2`; betas are GitHub
+      **pre-releases**. Build a `scripts/version` tool that maps the human version to a valid semver for
+      the manifests, and a release workflow that validates tag, manifests and changelog agree.
+- [ ] **GitHub Wiki** (M5b below).
+- [ ] First public release after the wiki and docs are in place.
+
+### M5b — GitHub Wiki
+The user-facing documentation lives in the repository's GitHub Wiki.
+- **Setup:** enable the Wiki on `ultimatejimmy/xpando` (Settings > Features) and create the first
+  page in the browser once; GitHub only creates `xpando.wiki.git` after that.
+- **Source of truth:** write the pages as Markdown in `docs/wiki/` so changes are reviewed in pull
+  requests, and publish them to the wiki with a small GitHub Actions workflow (needs
+  `contents: write`) on every merge to `dev`. Nobody edits the wiki by hand, so it can't drift.
+- **Pages:** Home; Getting started; Install (Windows, macOS, Linux); A tour of the app; Phrases and
+  triggers; Match options; Variables and macros (dates, clipboard, shell, set clipboard, choices);
+  Rich text; Folders and per-app scope; Advanced mode and editing YAML; Search operators; Trigger
+  conflicts; Using an existing espanso setup (shared config folder, backups, what the app changes);
+  Migrating from PhraseExpress; Troubleshooting; FAQ; Differences from espanso; Building from
+  source; Contributing; Versioning and releases; Release notes.
+- **Screenshots:** captured from the app on each OS, stored in the repo (`docs/wiki/images/`), light
+  and dark where it matters. Re-shot when the UI changes.
+- **Quality bar:** every feature merged from now on gets a wiki page or section in the same PR,
+  and the wiki links to RELEASING.md for the version scheme.
 
 ### Later (post-0.1)
 - Modern hotkey popup / search bar replacing espanso-modulo's wxWidgets search UI.
