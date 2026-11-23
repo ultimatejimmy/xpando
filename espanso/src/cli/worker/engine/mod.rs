@@ -72,6 +72,7 @@ use crate::{
 use super::secure_input::SecureInputEvent;
 
 mod caches;
+mod deferred_clipboard;
 pub mod dispatch;
 pub mod funnel;
 mod keyboard_layout_util;
@@ -213,6 +214,11 @@ pub fn initialize_and_spawn(
             let choice_adapter = ChoiceSelectorAdapter::new(&modulo_search_ui);
             let choice_extension =
                 espanso_render::extension::choice::ChoiceExtension::new(&choice_adapter);
+            let deferred_clipboard = deferred_clipboard::DeferredClipboard::new();
+            let set_clipboard_extension =
+                espanso_render::extension::set_clipboard::SetClipboardExtension::new(
+                    &deferred_clipboard,
+                );
             let renderer = espanso_render::create(vec![
                 &clipboard_extension,
                 &date_extension,
@@ -222,8 +228,13 @@ pub fn initialize_and_spawn(
                 &shell_extension,
                 &form_extension,
                 &choice_extension,
+                &set_clipboard_extension,
             ]);
             let renderer_adapter = RendererAdapter::new(&match_cache, &config_manager, &renderer);
+            let deferred_renderer = deferred_clipboard::DeferredClipboardRenderer::new(
+                &renderer_adapter,
+                &deferred_clipboard,
+            );
             let path_provider = PathProviderAdapter::new(&paths);
             let config_path_provider = ConfigPathProviderAdapter::new(&paths);
 
@@ -237,7 +248,7 @@ pub fn initialize_and_spawn(
                 &config_manager,
                 &selector,
                 &multiplexer,
-                &renderer_adapter,
+                &deferred_renderer,
                 &match_cache,
                 &modifier_state_store,
                 &sequencer,
@@ -262,7 +273,7 @@ pub fn initialize_and_spawn(
             let icon_adapter = IconHandlerAdapter::new(&*ui_remote);
             let secure_input_adapter = SecureInputManagerAdapter::new();
             let text_ui_adapter = TextUIHandlerAdapter::new(&modulo_text_ui, &paths);
-            let dispatcher = espanso_engine::dispatch::default(
+            let inner_dispatcher = espanso_engine::dispatch::default(
                 &event_injector,
                 &clipboard_injector,
                 &config_manager,
@@ -273,6 +284,12 @@ pub fn initialize_and_spawn(
                 &icon_adapter,
                 &secure_input_adapter,
                 &text_ui_adapter,
+            );
+            let dispatcher = deferred_clipboard::DeferredClipboardDispatcher::new(
+                &inner_dispatcher,
+                &deferred_clipboard,
+                &*clipboard,
+                &config_manager,
             );
 
             // Disable previously granted linux capabilities if not needed anymore
