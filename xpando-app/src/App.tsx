@@ -17,6 +17,8 @@ interface Phrase {
   preview: string;
   vars: Variable[];
   comment: string | null;
+  index: number;
+  line: number | null;
 }
 
 interface FolderData {

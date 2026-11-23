@@ -63,6 +63,11 @@ pub struct Phrase {
     pub vars: Vec<Var>,
     /// The `# comment` lines directly above the entry, joined with newlines.
     pub comment: Option<String>,
+    /// Position of this entry in the file's `matches:` list, counting entries that were
+    /// skipped as unparseable. Use it, not the list position, to address the entry.
+    pub index: usize,
+    /// 1-based line of the entry's `-` in the file, when the line scan was reliable.
+    pub line: Option<usize>,
 }
 
 /// A folder is one match file.
@@ -152,15 +157,33 @@ fn parse_entry(entry: &Value) -> Result<Phrase, String> {
         content,
         vars: get("vars").map(parse_vars).unwrap_or_default(),
         comment: None,
+        index: 0,
+        line: None,
     })
 }
 
-/// Finds the `# comment` block directly above each entry of `matches:`.
+/// Where one entry of `matches:` sits in the raw file text. All line numbers are 0-based
+/// indexes into `text.lines()`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EntrySpan {
+    /// First line of the entry's own comment block, or `start_line` when it has none.
+    pub first_line: usize,
+    /// The line holding the entry's `-`.
+    pub start_line: usize,
+    /// One past the entry's last line: the next entry's `first_line`, or the end of the
+    /// `matches:` block for the last entry.
+    pub end_line: usize,
+    /// The `# comment` lines directly above the entry, joined with newlines.
+    pub comment: Option<String>,
+}
+
+/// Locates every entry of `matches:` in the raw text of a match file.
 ///
-/// YAML parsers drop comments, so this scans the raw lines. It returns one slot per
-/// entry, or `None` when the number of entries it finds differs from `expected`
-/// (unusual layout), so a comment is never attached to the wrong phrase.
-fn entry_comments(text: &str, expected: usize) -> Option<Vec<Option<String>>> {
+/// YAML parsers drop comments and positions, so this scans the raw lines. It returns
+/// `None` when it cannot find a plain block list (flow-style lists, no `matches:` key).
+/// Callers must compare `len()` with the parsed entry count before trusting it, so a
+/// comment or edit is never applied to the wrong phrase.
+pub fn scan_entries(text: &str) -> Option<Vec<EntrySpan>> {
     let lines: Vec<&str> = text.lines().collect();
     let start = lines.iter().position(|l| l.trim_end() == "matches:")? + 1;
     let indent_of = |l: &str| l.len() - l.trim_start().len();
@@ -168,6 +191,7 @@ fn entry_comments(text: &str, expected: usize) -> Option<Vec<Option<String>>> {
 
     let mut entry_indent = None;
     let mut starts = Vec::new();
+    let mut block_end = lines.len();
     for (i, line) in lines.iter().enumerate().skip(start) {
         let t = line.trim_start();
         if t.is_empty() || t.starts_with('#') {
@@ -175,38 +199,44 @@ fn entry_comments(text: &str, expected: usize) -> Option<Vec<Option<String>>> {
         }
         let indent = indent_of(line);
         if indent == 0 && !t.starts_with('-') {
-            break; // next top-level key
+            block_end = i; // next top-level key
+            break;
         }
         let base = *entry_indent.get_or_insert(indent);
         if indent == base && is_entry(line) {
             starts.push(i);
         }
     }
-    if starts.len() != expected {
-        return None;
+
+    let mut spans: Vec<EntrySpan> = starts
+        .iter()
+        .map(|&s| {
+            let mut block = Vec::new();
+            let mut j = s;
+            let entry_indent = indent_of(lines[s]);
+            // Only comments at or left of the entry's own indent describe it; a deeper
+            // comment sits inside the previous entry's body.
+            while j > 0
+                && lines[j - 1].trim_start().starts_with('#')
+                && indent_of(lines[j - 1]) <= entry_indent
+            {
+                j -= 1;
+                let c = lines[j].trim_start().trim_start_matches('#');
+                block.push(c.strip_prefix(' ').unwrap_or(c).trim_end().to_string());
+            }
+            block.reverse();
+            EntrySpan {
+                first_line: j,
+                start_line: s,
+                end_line: 0,
+                comment: (!block.is_empty()).then(|| block.join("\n")),
+            }
+        })
+        .collect();
+    for i in 0..spans.len() {
+        spans[i].end_line = spans.get(i + 1).map_or(block_end, |n| n.first_line);
     }
-    Some(
-        starts
-            .into_iter()
-            .map(|s| {
-                let mut block = Vec::new();
-                let mut j = s;
-                let entry_indent = indent_of(lines[s]);
-                // Only comments at or left of the entry's own indent describe it; a deeper
-                // comment sits inside the previous entry's body.
-                while j > 0
-                    && lines[j - 1].trim_start().starts_with('#')
-                    && indent_of(lines[j - 1]) <= entry_indent
-                {
-                    j -= 1;
-                    let c = lines[j].trim_start().trim_start_matches('#');
-                    block.push(c.strip_prefix(' ').unwrap_or(c).trim_end().to_string());
-                }
-                block.reverse();
-                (!block.is_empty()).then(|| block.join("\n"))
-            })
-            .collect(),
-    )
+    Some(spans)
 }
 
 /// Text form of a YAML value: scalars as-is, lists and maps as trimmed YAML.
@@ -262,14 +292,18 @@ pub fn parse_match_text(text: &str) -> (Vec<Phrase>, Vec<String>) {
         },
         _ => return (phrases, vec!["file is not a YAML mapping".into()]),
     };
-    let mut comments = entry_comments(text, entries.len())
-        .unwrap_or_default()
-        .into_iter();
+    // Only trust the line scan when it found exactly as many entries as the YAML parser.
+    let spans = scan_entries(text)
+        .filter(|s| s.len() == entries.len())
+        .unwrap_or_default();
     for (i, entry) in entries.iter().enumerate() {
-        let comment = comments.next().flatten();
         match parse_entry(entry) {
             Ok(mut p) => {
-                p.comment = comment;
+                p.index = i;
+                if let Some(span) = spans.get(i) {
+                    p.line = Some(span.start_line + 1);
+                    p.comment = span.comment.clone();
+                }
                 phrases.push(p);
             }
             Err(e) => warnings.push(format!("match #{}: {e}", i + 1)),
@@ -446,6 +480,28 @@ mod tests {
         assert_eq!(p.len(), 2);
         assert_eq!(p[0].comment.as_deref(), Some("first"));
         assert_eq!(p[1].comment.as_deref(), Some("third"));
+    }
+
+    #[test]
+    fn entries_know_their_index_line_and_span() {
+        // Entry 1 is unparseable and skipped, so list position and entry index differ.
+        let text = "matches:\n  # first\n  - trigger: a\n    replace: x\n  - just text\n\n  - trigger: c\n    replace: z\nglobal_vars: []\n";
+        let (p, w) = parse_match_text(text);
+        assert_eq!(w.len(), 1);
+        assert_eq!((p[0].index, p[0].line), (0, Some(3)));
+        assert_eq!((p[1].index, p[1].line), (2, Some(7)));
+
+        let spans = scan_entries(text).unwrap();
+        assert_eq!(spans.len(), 3);
+        // Entry 0 spans its comment line through the line before entry 1.
+        assert_eq!(
+            (spans[0].first_line, spans[0].start_line, spans[0].end_line),
+            (1, 2, 4)
+        );
+        // The last entry ends where the next top-level key starts.
+        assert_eq!(spans[2].end_line, 8);
+        let lines: Vec<_> = text.lines().collect();
+        assert_eq!(lines[spans[2].end_line], "global_vars: []");
     }
 
     #[test]
