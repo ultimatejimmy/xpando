@@ -1,4 +1,5 @@
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useImperativeHandle, useRef, useState } from "react";
+import type { Ref } from "react";
 import type { KeyboardEvent, ReactNode } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { EditorContent, Extension, useEditor, useEditorState } from "@tiptap/react";
@@ -26,6 +27,7 @@ import {
   Unlink,
 } from "lucide-react";
 import { findPlaceholders, listWords, normalizeImageUrl, normalizeLinkUrl } from "./richtextUtil";
+import type { RichHandle } from "./richtextUtil";
 import "./richtext.css";
 
 /** What the backend sanitiser returns: the canonical HTML and what it had to drop. */
@@ -391,10 +393,12 @@ interface RichTextEditorProps {
   onChange: (html: string) => void;
   /** Id of the element that names the editor, for assistive technology. */
   labelledBy?: string;
+  /** Lets the Insert macro menu put text at the cursor. */
+  handleRef?: Ref<RichHandle>;
 }
 
 /** The WYSIWYG editor: toolbar plus editable content. */
-export function RichTextEditor({ initialHtml, onChange, labelledBy }: RichTextEditorProps) {
+export function RichTextEditor({ initialHtml, onChange, labelledBy, handleRef }: RichTextEditorProps) {
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
   const editor = useEditor({
@@ -410,6 +414,18 @@ export function RichTextEditor({ initialHtml, onChange, labelledBy }: RichTextEd
     },
     onUpdate: ({ editor: e }) => onChangeRef.current(e.getHTML()),
   });
+  useImperativeHandle(
+    handleRef,
+    () => ({
+      insertText(text: string) {
+        if (!editor || editor.isDestroyed) return;
+        // A text node, not a string: `<` in the snippet must stay text. The selection the
+        // editor had when the menu was opened is used, and the caret ends after the text.
+        editor.chain().focus().insertContent({ type: "text", text }).run();
+      },
+    }),
+    [editor],
+  );
   if (!editor) return null;
   return (
     <div className="rt-editor">
@@ -440,7 +456,17 @@ function useSanitized(html: string): { result: Sanitized | null; failed: boolean
  * editor only ever sees the allowed subset. `onChange` fires only when the user edits, so
  * opening a phrase and saving without changes never rewrites it.
  */
-export function RichBodyEditor({ html, onChange, labelledBy }: { html: string; onChange: (html: string) => void; labelledBy?: string }) {
+export function RichBodyEditor({
+  html,
+  onChange,
+  labelledBy,
+  handleRef,
+}: {
+  html: string;
+  onChange: (html: string) => void;
+  labelledBy?: string;
+  handleRef?: Ref<RichHandle>;
+}) {
   // The editor owns the content once it is running, so only the body it started with is checked.
   const [initial] = useState(html);
   const { result: start, failed } = useSanitized(initial);
@@ -456,7 +482,7 @@ export function RichBodyEditor({ html, onChange, labelledBy }: { html: string; o
   if (!start) return <p className="rt-hint">Loading the editor…</p>;
   return (
     <>
-      <RichTextEditor initialHtml={start.html} onChange={onChange} labelledBy={labelledBy} />
+      <RichTextEditor initialHtml={start.html} onChange={onChange} labelledBy={labelledBy} handleRef={handleRef} />
       {start.dropped.length > 0 && (
         <p className="rt-hint" role="status">
           <Info size={16} aria-hidden="true" />

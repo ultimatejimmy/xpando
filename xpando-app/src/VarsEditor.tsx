@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
-import type { KeyboardEvent, ReactNode } from "react";
+import type { KeyboardEvent, ReactNode, RefObject } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import {
   AlertTriangle,
@@ -23,6 +23,7 @@ import {
   X,
 } from "lucide-react";
 import { useAdvanced } from "./AdvancedPanels";
+import type { RichHandle } from "./richtextUtil";
 import { placeholders, removePlaceholders, renameInText, sortByDependency, usedBy } from "./varorder";
 import "./vars.css";
 
@@ -433,9 +434,11 @@ interface UseVarsOptions {
   hasVars: boolean;
   body: string;
   setBody: (body: string) => void;
-  /** `id` of the body text area, used to insert at the cursor. */
+  /** `id` of the plain text area, used to insert at the cursor in plain mode. */
   bodyId: string;
-  /** False when the body is not plain text: macros can't be inserted. */
+  /** The rich text editor's handle, used to insert at the cursor in rich mode. */
+  richRef?: RefObject<RichHandle | null>;
+  /** False when the body is not text xpando edits (markdown, image): macros can't be inserted. */
   bodyEditable: boolean;
   /** The body is HTML (rich text): placeholders are removed from it without touching tags. */
   bodyIsHtml?: boolean;
@@ -466,7 +469,7 @@ let nextKey = 1;
 let sectionOpenMemory = false;
 
 export function useVars(opts: UseVarsOptions): VarsApi {
-  const { index, hasVars, body, setBody, bodyId, bodyEditable, bodyIsHtml = false, onBodyReplaced, file } = opts;
+  const { index, hasVars, body, setBody, bodyId, richRef, bodyEditable, bodyIsHtml = false, onBodyReplaced, file } = opts;
   const [notice, setNotice] = useState<Notice | null>(null);
   const [items, setItems] = useState<Item[]>([]);
   const [original, setOriginal] = useState<VarSpec[]>([]);
@@ -476,6 +479,7 @@ export function useVars(opts: UseVarsOptions): VarsApi {
   const [announceAdd, setAnnounceAdd] = useState("");
   const [focusKey, setFocusKey] = useState<number | null>(null);
   const [open, setOpenState] = useState(sectionOpenMemory);
+  const sectionId = useId();
 
   useEffect(() => {
     if (index === null || !hasVars) return;
@@ -599,6 +603,8 @@ export function useVars(opts: UseVarsOptions): VarsApi {
       text: r.count > 0 ? `Removed {{${item.name}}} from the text too.` : `Removed the macro “${item.name}”.`,
       undo: { item, index: at, bodyBefore: body, bodyAfter: r.text },
     });
+    // The card (and the focus in it) is gone: move to Undo, which also announces what happened.
+    requestAnimationFrame(() => document.getElementById(`${sectionId}-undo`)?.focus());
   }
 
   function undoRemove() {
@@ -640,7 +646,17 @@ export function useVars(opts: UseVarsOptions): VarsApi {
     return name;
   }, [items]);
 
+  /** Whether text can be put at the cursor right now (the rich editor may still be loading). */
+  function canInsertNow(): boolean {
+    return !bodyIsHtml || !!richRef?.current;
+  }
+
   function insertAtCursor(snippet: string) {
+    if (bodyIsHtml) {
+      // The rich editor keeps focus and the caret after the text, and reports the new HTML.
+      richRef?.current?.insertText(snippet);
+      return;
+    }
     const el = document.getElementById(bodyId) as HTMLTextAreaElement | null;
     const start = el ? el.selectionStart : body.length;
     const end = el ? el.selectionEnd : body.length;
@@ -655,7 +671,12 @@ export function useVars(opts: UseVarsOptions): VarsApi {
   }
 
   function insertMacro(m: MacroDef) {
+    if (!canInsertNow()) {
+      setAnnounce("The text editor is still loading. Try again in a moment.");
+      return;
+    }
     if (!m.make) {
+      if (bodyIsHtml) return; // the cursor position is offered in plain text only
       insertAtCursor("$|$");
       setAnnounce("Inserted the cursor position marker.");
       return;
@@ -674,7 +695,9 @@ export function useVars(opts: UseVarsOptions): VarsApi {
   }
 
   const menu =
-    editable && bodyEditable ? <MacroMenu kind="insert" onPick={insertMacro} announce={announce} /> : null;
+    editable && bodyEditable ? (
+      <MacroMenu kind="insert" onPick={insertMacro} announce={announce} rich={bodyIsHtml} />
+    ) : null;
 
   const section = (
     <VarsSection
@@ -697,6 +720,7 @@ export function useVars(opts: UseVarsOptions): VarsApi {
       addMenu={<MacroMenu kind="add" onPick={addMacro} announce={announceAdd} />}
       focusKey={focusKey}
       canInsert={menu !== null}
+      sectionId={sectionId}
     />
   );
 
@@ -711,10 +735,13 @@ function MacroMenu({
   kind,
   onPick,
   announce,
+  rich = false,
 }: {
   kind: "insert" | "add";
   onPick: (m: MacroDef) => void;
   announce: string;
+  /** The text is rich text: the cursor position marker is not offered. */
+  rich?: boolean;
 }) {
   const label = kind === "insert" ? "Insert macro" : "Add a macro";
   const list = kind === "insert" ? MACROS : MACROS.filter((m) => m.make);
@@ -779,22 +806,29 @@ function MacroMenu({
       </button>
       {open && (
         <div className={`macro-list${kind === "add" ? " macro-up" : ""}`} role="menu" id={`${uid}-menu`} aria-label={label}>
-          {list.map((m) => (
-            <button
-              key={m.id}
-              type="button"
-              role="menuitem"
-              className="macro-item"
-              onClick={() => {
-                setOpen(false);
-                onPick(m);
-              }}
-            >
-              {m.icon}
-              <span className="macro-label">{m.label}</span>
-              <span className="macro-hint">{m.hint}</span>
-            </button>
-          ))}
+          {list.map((m) => {
+            // espanso moves the cursor by counting characters in the HTML source, which is wrong
+            // once markup is involved, so the cursor position is for plain text only.
+            const off = rich && !m.make;
+            return (
+              <button
+                key={m.id}
+                type="button"
+                role="menuitem"
+                className={`macro-item${off ? " macro-off" : ""}`}
+                aria-disabled={off || undefined}
+                onClick={() => {
+                  if (off) return;
+                  setOpen(false);
+                  onPick(m);
+                }}
+              >
+                {m.icon}
+                <span className="macro-label">{m.label}</span>
+                <span className="macro-hint">{off ? "Plain text only: it doesn't work in rich text" : m.hint}</span>
+              </button>
+            );
+          })}
         </div>
       )}
       <span className="sr-only" role="status" aria-live="polite">
@@ -831,6 +865,8 @@ interface SectionProps {
   focusKey: number | null;
   /** The Insert macro menu is available above the text. */
   canInsert: boolean;
+  /** Prefix for ids the hook needs to find (the Undo button). */
+  sectionId: string;
 }
 
 /** The notice under the cards, with Undo when a removal can still be taken back. */
@@ -850,7 +886,7 @@ function NoticeBar({ p }: { p: SectionProps }) {
           {n.tone === "error" ? <AlertTriangle size={16} aria-hidden="true" /> : <Info size={16} aria-hidden="true" />}
           <span className="grow">{n.text}</span>
           {n.undo && (
-            <button type="button" className="btn" onClick={p.onUndo}>
+            <button type="button" className="btn" id={`${p.sectionId}-undo`} onClick={p.onUndo}>
               <Undo2 size={16} aria-hidden="true" />
               Undo
             </button>

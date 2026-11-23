@@ -18,6 +18,7 @@ import { useVars } from "./VarsEditor"; // xpando:vars
 import { BodyModeSwitch, RichBodyEditor } from "./RichLazy"; // xpando:richtext
 import type { BodyMode } from "./RichLazy"; // xpando:richtext
 import { isBlankHtml } from "./richtextUtil"; // xpando:richtext
+import type { RichHandle } from "./richtextUtil"; // xpando:richtext
 
 /** espanso's per-match options as the backend sends them (`null` = not set in the file). */
 export interface EditorOptions {
@@ -330,6 +331,7 @@ export function PhraseEditor({ folders, file, phrase, onSaved, onCancel, onReloa
   const [copied, setCopied] = useState(false);
   const firstTrigger = useRef<HTMLInputElement>(null);
   const uid = useId();
+  const richRef = useRef<RichHandle | null>(null); // xpando:richtext — insert at the cursor
 
   useEffect(() => {
     firstTrigger.current?.focus();
@@ -350,6 +352,7 @@ export function PhraseEditor({ folders, file, phrase, onSaved, onCancel, onReloa
     body,
     setBody,
     bodyId: `${uid}-body`,
+    richRef,
     bodyEditable,
     bodyIsHtml: mode === "rich",
     onBodyReplaced: () => setSwitches((n) => n + 1), // the rich text editor starts again from the new body
@@ -839,7 +842,7 @@ export function PhraseEditor({ folders, file, phrase, onSaved, onCancel, onReloa
               />
             )}
           </div>
-          {mode === "plain" && vars.menu /* xpando:vars (macros insert into the plain text box) */}
+          {vars.menu /* xpando:vars (inserts into whichever editor is showing) */}
           {mode === "rich" ? (
             <RichBodyEditor
               // A new editor after each switch, so it starts from the converted body.
@@ -847,6 +850,7 @@ export function PhraseEditor({ folders, file, phrase, onSaved, onCancel, onReloa
               html={body}
               onChange={setBody}
               labelledBy={`${uid}-body-label`}
+              handleRef={richRef}
             />
           ) : bodyEditable ? (
             <textarea

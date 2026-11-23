@@ -57,6 +57,12 @@ export function normalizeImageUrl(input: string): UrlResult {
   return r;
 }
 
+/** What the rich text editor offers the rest of the app (the Insert macro menu). */
+export interface RichHandle {
+  /** Puts `text` at the cursor (replacing a selection), keeps focus, caret after the text. */
+  insertText: (text: string) => void;
+}
+
 export interface Span {
   from: number;
   to: number;

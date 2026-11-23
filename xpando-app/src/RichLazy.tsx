@@ -3,12 +3,19 @@
  * is loaded on first use instead of with the app; phrases without rich text never pay for it.
  */
 import { lazy, Suspense } from "react";
+import type { Ref } from "react";
+import type { RichHandle } from "./richtextUtil";
 
 const Editor = lazy(() => import("./RichTextEditor").then((m) => ({ default: m.RichBodyEditor })));
 const View = lazy(() => import("./RichTextEditor").then((m) => ({ default: m.RichTextView })));
 
 /** WYSIWYG editor for an `html:` body; `onChange` fires only when the user edits. */
-export function RichBodyEditor(props: { html: string; onChange: (html: string) => void; labelledBy?: string }) {
+export function RichBodyEditor(props: {
+  html: string;
+  onChange: (html: string) => void;
+  labelledBy?: string;
+  handleRef?: Ref<RichHandle>;
+}) {
   return (
     <Suspense fallback={<p className="rt-hint">Loading the editor…</p>}>
       <Editor {...props} />
