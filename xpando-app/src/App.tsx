@@ -46,9 +46,16 @@ function triggerText(p: Phrase): string {
   return p.is_regex ? "regex" : p.triggers.join("  ");
 }
 
-/** Name shown for a phrase: its label, else the comment above it, else its trigger. */
+const MAX_COMMENT_TITLE = 40;
+
+/**
+ * Name shown for a phrase: its label, else the comment above it when that reads like a name
+ * (one short line), else its trigger. Longer comments are notes, shown as the description.
+ */
 function title(p: Phrase): string {
-  return p.label || p.comment?.split("\n")[0] || p.triggers[0] || "(untitled)";
+  const c = p.comment;
+  const short = c && !c.includes("\n") && c.length <= MAX_COMMENT_TITLE ? c : null;
+  return p.label || short || p.triggers[0] || "(untitled)";
 }
 
 const PLACEHOLDER_ONLY = /^(\s*\{\{[^}]+\}\}\s*)+$/;
@@ -211,7 +218,9 @@ export default function App() {
                 >
                   <span className="phrase-top">
                     <span className="phrase-name">{title(r.phrase)}</span>
-                    <span className="chip">{triggerText(r.phrase)}</span>
+                    {title(r.phrase) !== triggerText(r.phrase) && (
+                      <span className="chip">{triggerText(r.phrase)}</span>
+                    )}
                   </span>
                   <span className="preview">{previewText(r.phrase)}</span>
                 </button>
