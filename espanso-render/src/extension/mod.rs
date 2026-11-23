@@ -25,5 +25,6 @@ mod exec_util;
 pub mod form;
 pub mod random;
 pub mod script;
+pub mod set_clipboard;
 pub mod shell;
 mod util;
