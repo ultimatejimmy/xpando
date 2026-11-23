@@ -1,6 +1,9 @@
 //! Core logic for xpando: discovers espanso match files and reads phrases
 //! (read-only) while keeping the YAML files as the single source of truth.
 
+pub mod advanced;
+pub mod conflicts;
+
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
