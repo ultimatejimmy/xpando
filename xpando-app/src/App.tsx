@@ -14,7 +14,16 @@ import {
   type DetailTab,
 } from "./AdvancedPanels";
 import { matchesTerms, parseQuery } from "./search";
-import { NewPhraseButton, PhraseActions, PhraseEditor } from "./PhraseEditor";
+import {
+  NewPhraseButton,
+  NO_OPTIONS,
+  OptionChips,
+  PhraseActions,
+  PhraseEditor,
+  UnsavedChangesDialog,
+  normalizeOptions,
+  type EditorOptions,
+} from "./PhraseEditor";
 
 interface Variable {
   name: string;
@@ -33,6 +42,7 @@ interface Phrase {
   comment: string | null;
   index: number;
   line: number | null;
+  options: EditorOptions;
 }
 
 interface FolderData {
@@ -45,7 +55,10 @@ interface FolderData {
 
 /** Tolerate a backend that predates the `vars` field instead of crashing the page. */
 function normalizeFolder(f: FolderData): FolderData {
-  return { ...f, phrases: f.phrases.map((p) => ({ ...p, vars: p.vars ?? [] })) };
+  return {
+    ...f,
+    phrases: f.phrases.map((p) => ({ ...p, vars: p.vars ?? [], options: normalizeOptions(p.options ?? NO_OPTIONS) })),
+  };
 }
 
 interface Row {
@@ -143,15 +156,31 @@ export default function App() {
   const [configPath, setConfigPath] = useState<string | null>(null);
 
   // Editing: an existing phrase (by row id) or a new phrase in a file.
-  const [editing, setEditing] = useState<{ id: string } | { newIn: string } | null>(null);
+  // The phrase is a snapshot taken when editing started; the editor compares it with the file.
+  const [editing, setEditing] = useState<
+    { id: string; file: string; base: Phrase } | { newIn: string; n: number } | null
+  >(null);
+  // Unsaved-changes guard: the editor reports `dirty`; a blocked action waits in `pendingLeave`.
+  const [dirty, setDirty] = useState(false);
+  const [pendingLeave, setPendingLeave] = useState<(() => void) | null>(null);
+  const guard = (action: () => void) => {
+    if (editing && dirty) setPendingLeave(() => action);
+    else action();
+  };
+  const closeEditor = () => setEditing(null);
 
-  const load = () =>
+  const load = (): Promise<FolderData[] | null> =>
     invoke<FolderData[]>("list_phrases")
       .then((data) => {
-        setFolders(data.map(normalizeFolder));
+        const fresh = data.map(normalizeFolder);
+        setFolders(fresh);
         setError(null);
+        return fresh;
       })
-      .catch((e) => setError(String(e)))
+      .catch((e) => {
+        setError(String(e));
+        return null;
+      })
       .finally(() => setLoaded(true));
 
   useEffect(() => {
@@ -197,9 +226,35 @@ export default function App() {
   const jumpTo = (file: string, index: number) => {
     const row = rows.find((r) => r.folder === file && r.phrase.index === index);
     if (!row) return;
-    setScope(ALL);
-    setQuery("");
-    setSelected(row.id);
+    guard(() => {
+      setEditing(null);
+      setScope(ALL);
+      setQuery("");
+      setSelected(row.id);
+    });
+  };
+  const changeScope = (next: string) => {
+    if (next !== scope) guard(() => {
+      setEditing(null);
+      setScope(next);
+    });
+  };
+  // Typing in the search box is guarded only when the new text would hide the phrase being edited.
+  const changeQuery = (next: string) => {
+    if (editing && "id" in editing) {
+      const t = parseQuery(next, advanced);
+      const stillShown = rows.some(
+        (r) => r.id === editing.id && (scope === ALL || r.folder === scope) && matches(r, t),
+      );
+      if (!stillShown) {
+        guard(() => {
+          setEditing(null);
+          setQuery(next);
+        });
+        return;
+      }
+    }
+    setQuery(next);
   };
   const current = visible.find((r) => r.id === selected) ?? null;
   const scopeFolder = folders.find((f) => f.file === scope);
@@ -207,23 +262,25 @@ export default function App() {
   const editorPane =
     editing && "newIn" in editing ? (
       <PhraseEditor
-        key={`new:${editing.newIn}`}
+        key={`new:${editing.newIn}:${editing.n}`}
         folders={folders}
         file={editing.newIn}
         phrase={null}
         onSaved={saved}
-        onCancel={() => setEditing(null)}
+        onCancel={() => guard(closeEditor)}
         onReload={load}
+        onDirtyChange={setDirty}
       />
-    ) : editing && current && current.id === editing.id ? (
+    ) : editing ? (
       <PhraseEditor
-        key={current.id}
+        key={editing.id}
         folders={folders}
-        file={current.folder}
-        phrase={current.phrase}
+        file={editing.file}
+        phrase={editing.base}
         onSaved={saved}
-        onCancel={() => setEditing(null)}
+        onCancel={() => guard(closeEditor)}
         onReload={load}
+        onDirtyChange={setDirty}
       />
     ) : null;
   const warnings = folders.flatMap((f) => f.warnings.map((w) => `${f.file}: ${w}`));
@@ -242,7 +299,7 @@ export default function App() {
             aria-label="Search phrases"
             placeholder="Search triggers, names and text"
             value={query}
-            onChange={(e) => setQuery(e.target.value)}
+            onChange={(e) => changeQuery(e.target.value)}
             onFocus={() => setSearchFocused(true)}
             onBlur={() => setSearchFocused(false)}
             aria-describedby={advanced ? "search-hint" : undefined}
@@ -279,7 +336,7 @@ export default function App() {
                 type="button"
                 className="folder"
                 aria-current={scope === ALL}
-                onClick={() => setScope(ALL)}
+                onClick={() => changeScope(ALL)}
               >
                 <Library size={16} aria-hidden="true" />
                 <span className="grow">All phrases</span>
@@ -293,7 +350,7 @@ export default function App() {
                   className="folder"
                   aria-current={scope === f.file}
                   title={f.file}
-                  onClick={() => setScope(f.file)}
+                  onClick={() => changeScope(f.file)}
                 >
                   <FolderIcon size={16} aria-hidden="true" />
                   <span className="grow">
@@ -314,7 +371,9 @@ export default function App() {
           </h2>
           <NewPhraseButton
             disabled={folders.length === 0}
-            onClick={() => setEditing({ newIn: scopeFolder?.file ?? folders[0].file })}
+            onClick={() =>
+              guard(() => setEditing({ newIn: scopeFolder?.file ?? folders[0].file, n: Date.now() }))
+            }
           />
           {loaded && visible.length === 0 && (
             <p className="empty">
@@ -328,10 +387,12 @@ export default function App() {
                   type="button"
                   className="phrase"
                   aria-current={r.id === selected}
-                  onClick={() => {
-                    setSelected(r.id);
-                    setEditing(null);
-                  }}
+                  onClick={() =>
+                    guard(() => {
+                      setSelected(r.id);
+                      setEditing(null);
+                    })
+                  }
                 >
                   <span className="phrase-top">
                     <span className="phrase-name">{title(r.phrase)}</span>
@@ -352,7 +413,7 @@ export default function App() {
               <PhraseActions
                 folder={folders.find((f) => f.file === current.folder)!}
                 phrase={current.phrase}
-                onEdit={() => setEditing({ id: current.id })}
+                onEdit={() => setEditing({ id: current.id, file: current.folder, base: current.phrase })}
                 onDeleted={(f) => saved(f, null)}
                 onReload={load}
               />
@@ -383,6 +444,7 @@ export default function App() {
                   </span>
                 ))}
               </div>
+              <OptionChips options={current.phrase.options} />
               <p className="detail-meta">{KIND_LABEL[current.phrase.kind] ?? current.phrase.kind}</p>
               <pre className="content-text">{withPlaceholders(current.phrase.content)}</pre>
               {current.phrase.vars.length > 0 && (
@@ -418,6 +480,17 @@ export default function App() {
           ))}
         </section>
       </div>
+      {pendingLeave && (
+        <UnsavedChangesDialog
+          onKeep={() => setPendingLeave(null)}
+          onDiscard={() => {
+            const action = pendingLeave;
+            setPendingLeave(null);
+            setDirty(false);
+            action();
+          }}
+        />
+      )}
       {advanced && <StatusBar configPath={configPath} phrases={rows.length} files={folders.length} />}
     </div>
   );
