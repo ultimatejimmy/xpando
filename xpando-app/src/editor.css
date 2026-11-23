@@ -201,6 +201,52 @@ textarea.field {
   gap: 8px;
 }
 
+/* Sticky Save / Cancel bar at the top of the editor */
+.editor-topbar {
+  position: sticky;
+  top: -8px;
+  z-index: 4;
+  display: grid;
+  gap: 8px;
+  margin: -8px -8px 0;
+  padding: 8px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.editor-topbar .editor-buttons {
+  align-items: center;
+}
+
+.editor-unsaved {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.editor-unsaved-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--warn-text);
+}
+
+.editor-topbar-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0;
+  color: var(--danger-text);
+  font-size: 13px;
+}
+
+.editor-topbar-note svg {
+  flex: none;
+  margin-top: 2px;
+}
+
 /* Delete confirmation */
 .confirm {
   max-width: min(480px, calc(100vw - 32px));

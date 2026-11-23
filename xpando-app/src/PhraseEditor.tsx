@@ -324,6 +324,8 @@ export function PhraseEditor({ folders, file, phrase, onSaved, onCancel, onReloa
   const [tab, setTab] = useState<EditorTab>("text");
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  // Which Save button was used last, so the save error appears next to it.
+  const [saveFrom, setSaveFrom] = useState<"top" | "bottom">("top");
   const [stale, setStale] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const firstTrigger = useRef<HTMLInputElement>(null);
@@ -451,8 +453,9 @@ export function PhraseEditor({ folders, file, phrase, onSaved, onCancel, onReloa
     setTermDraft("");
   }
 
-  async function save() {
+  async function save(from: "top" | "bottom" = "top") {
     if (!folder || problems.length > 0 || saving || stale) return;
+    setSaveFrom(from);
     setSaving(true);
     setError(null);
     const labelOut = label === (phrase?.label ?? "") ? (phrase?.label ?? null) : label.trim() || null;
@@ -635,6 +638,7 @@ export function PhraseEditor({ folders, file, phrase, onSaved, onCancel, onReloa
   }
 
   const staleView = stale !== null;
+  const saveDisabled = saving || problems.length > 0 || (!!phrase && !dirty);
 
   if (staleView) {
     return (
@@ -674,7 +678,8 @@ export function PhraseEditor({ folders, file, phrase, onSaved, onCancel, onReloa
       className="editor"
       onSubmit={(e) => {
         e.preventDefault();
-        void save();
+        const submitter = (e.nativeEvent as SubmitEvent).submitter as HTMLElement | null;
+        void save(submitter?.dataset.where === "bottom" ? "bottom" : "top");
       }}
       onKeyDown={onFormKeyDown}
       aria-label={phrase ? "Edit phrase" : "New phrase"}
@@ -683,6 +688,41 @@ export function PhraseEditor({ folders, file, phrase, onSaved, onCancel, onReloa
       <p className="detail-meta editor-where">
         {phrase ? `In ${folder?.file ?? file}` : `Will be added to the end of ${folder?.file ?? file}`}
       </p>
+
+      <div className="editor-topbar" role="toolbar" aria-label="Save or cancel this phrase">
+        <div className="editor-buttons">
+          <button
+            type="submit"
+            className="btn btn-primary"
+            data-where="top"
+            disabled={saveDisabled}
+            aria-describedby={problems.length > 0 ? `${uid}-topbar-note` : undefined}
+            title="Save (Ctrl+S)"
+          >
+            <Save size={16} aria-hidden="true" />
+            {saving ? "Saving…" : "Save"}
+          </button>
+          <button type="button" className="btn" onClick={onCancel} disabled={saving} title="Cancel (Esc)">
+            Cancel
+          </button>
+          {dirty && (
+            <span className="editor-unsaved">
+              <span className="editor-unsaved-dot" aria-hidden="true" />
+              Unsaved changes
+            </span>
+          )}
+        </div>
+        {problems.length > 0 && (
+          <p className="editor-topbar-note" id={`${uid}-topbar-note`}>
+            <AlertTriangle size={16} aria-hidden="true" />
+            <span>
+              Can't save yet: {problems[0]}
+              {problems.length > 1 ? ` (and ${problems.length - 1} more below)` : ""}
+            </span>
+          </p>
+        )}
+        {error && saveFrom === "top" && <ErrorMessage message={error} onReload={() => void reload()} />}
+      </div>
 
       <div className="editor-tabs" role="tablist" aria-label="Phrase settings">
         {(["text", "options"] as const).map((t) => (
@@ -978,13 +1018,14 @@ export function PhraseEditor({ folders, file, phrase, onSaved, onCancel, onReloa
           ))}
         </ul>
       )}
-      {error && <ErrorMessage message={error} onReload={() => void reload()} />}
+      {error && saveFrom === "bottom" && <ErrorMessage message={error} onReload={() => void reload()} />}
 
-      <div className="editor-buttons">
+      <div className="editor-buttons" role="group" aria-label="Save or cancel at the end of the form">
         <button
           type="submit"
           className="btn btn-primary"
-          disabled={saving || problems.length > 0 || (!!phrase && !dirty)}
+          data-where="bottom"
+          disabled={saveDisabled}
           title="Save (Ctrl+S)"
         >
           <Save size={16} aria-hidden="true" />
