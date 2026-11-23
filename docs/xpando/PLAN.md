@@ -36,6 +36,17 @@ phrase management.
 - **Wordmark font:** Fredoka SemiBold (OFL, bundled with the app) for the "xpando" wordmark only;
   UI text stays in Segoe UI Variable (system font) on Windows. Logo lockup: panda slightly smaller than the text height, both black.
 
+## Design principles (decided while building)
+
+- **Normal mode is simple; Advanced mode adds more.** Each control is essential (always visible),
+  occasional (behind one "More options" disclosure) or technical (Advanced only). Nothing is removed,
+  only moved. New features must be classified the same way when they are added.
+- **One word for one thing.** The user-facing term is **macro** (a dynamic piece such as a date or the
+  clipboard, stored as an espanso `vars` entry); its fields are **settings**. See
+  [TERMS.md](TERMS.md) for the glossary, which the wiki reuses. Technical names appear only in Advanced mode.
+- **Edits never lose the user's text.** Unsaved changes are guarded, removals offer Undo, and every file
+  write is atomic with a backup.
+
 ## UI direction: Fluent + Advanced mode
 
 Default (Advanced off) — clean three-pane Fluent layout for everyone:
