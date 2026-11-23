@@ -15,6 +15,9 @@ import {
 } from "lucide-react";
 import "./editor.css";
 import { useVars } from "./VarsEditor"; // xpando:vars
+import { BodyModeSwitch, RichBodyEditor } from "./RichLazy"; // xpando:richtext
+import type { BodyMode } from "./RichLazy"; // xpando:richtext
+import { isBlankHtml } from "./richtextUtil"; // xpando:richtext
 
 /** espanso's per-match options as the backend sends them (`null` = not set in the file). */
 export interface EditorOptions {
@@ -312,6 +315,10 @@ export function PhraseEditor({ folders, file, phrase, onSaved, onCancel, onReloa
   const [label, setLabel] = useState(phrase?.label ?? "");
   const [description, setDescription] = useState(phrase?.comment ?? "");
   const [body, setBody] = useState(phrase?.content ?? "");
+  // xpando:richtext — `body` holds HTML in rich mode and plain text in plain mode.
+  const originalMode: BodyMode = phrase?.kind === "html" ? "rich" : "plain";
+  const [mode, setMode] = useState<BodyMode>(originalMode);
+  const [switches, setSwitches] = useState(0);
   const [opts, setOpts] = useState<EditorOptions>(baseOptions);
   const [termDraft, setTermDraft] = useState("");
   const [tab, setTab] = useState<EditorTab>("text");
@@ -327,7 +334,7 @@ export function PhraseEditor({ folders, file, phrase, onSaved, onCancel, onReloa
   }, []);
 
   const triggersEditable = !phrase || !phrase.is_regex;
-  const bodyEditable = !phrase || phrase.kind === "replace"; // xpando:vars (variables no longer lock the text)
+  const bodyEditable = !phrase || phrase.kind === "replace" || phrase.kind === "html"; // xpando:vars, xpando:richtext
   const bodyNote = !phrase
     ? null
     : phrase.kind !== "replace"
@@ -368,7 +375,9 @@ export function PhraseEditor({ folders, file, phrase, onSaved, onCancel, onReloa
         }
       }
     }
-    if (bodyEditable && body.trim() === "") problems.push("Enter the text to insert.");
+    if (bodyEditable && (mode === "rich" ? isBlankHtml(body) : body.trim() === "")) {
+      problems.push("Enter the text to insert."); // xpando:richtext
+    }
     if (termDraft.trim() !== "") {
       problems.push("Press Add to keep the search term you typed on the Options tab, or clear it.");
     }
@@ -387,6 +396,7 @@ export function PhraseEditor({ folders, file, phrase, onSaved, onCancel, onReloa
     file,
     phrase,
     termDraft,
+    mode,
     vars.problems,
     vars.warnings,
   ]);
@@ -399,6 +409,7 @@ export function PhraseEditor({ folders, file, phrase, onSaved, onCancel, onReloa
       (bodyEditable && body !== phrase.content) ||
       descriptionChanged ||
       optionsChanged ||
+      mode !== originalMode || // xpando:richtext
       vars.dirty // xpando:vars
     : triggers.length > 1 ||
       triggers.some((t) => t !== "") ||
@@ -406,6 +417,7 @@ export function PhraseEditor({ folders, file, phrase, onSaved, onCancel, onReloa
       body !== "" ||
       description !== "" ||
       optionsChanged ||
+      mode !== originalMode || // xpando:richtext
       vars.dirty; // xpando:vars
 
   useEffect(() => {
@@ -445,12 +457,66 @@ export function PhraseEditor({ folders, file, phrase, onSaved, onCancel, onReloa
     setError(null);
     const labelOut = label === (phrase?.label ?? "") ? (phrase?.label ?? null) : label.trim() || null;
     try {
-      if (phrase) {
-        const comment = !descriptionChanged
-          ? "Keep"
-          : description.trim() === ""
-            ? "Clear"
-            : { Set: description };
+      const rich = mode === "rich"; // xpando:richtext
+      const comment = !phrase || !descriptionChanged
+        ? "Keep"
+        : description.trim() === ""
+          ? "Clear"
+          : { Set: description };
+      // xpando:richtext — editing an html phrase, or switching between plain and rich text.
+      if (phrase && (originalMode === "rich" || mode !== originalMode)) {
+        const switched = mode !== originalMode;
+        let saved = await invoke<EditorFolder>("save_rich_phrase", {
+          file,
+          index: phrase.index,
+          edit: {
+            triggers,
+            label: labelOut,
+            body: rich ? null : body,
+            comment,
+            options: optionsChanged ? opts : null,
+          },
+          convert: switched ? (rich ? "html" : "plain") : null,
+          html: rich && (switched || body !== phrase.content) ? body : null,
+          expectedHash: folder.hash,
+        });
+        // The variables go in a second write (the rich-text command does not carry them);
+        // it starts from the hash the first write returned.
+        if (vars.dirty) {
+          saved = await invoke<EditorFolder>("save_phrase_vars", {
+            file,
+            index: phrase.index,
+            change: { vars: vars.specs, body: null },
+            edit: { triggers, label: labelOut, body: null, comment: "Keep", options: null },
+            expectedHash: saved.hash,
+          });
+        }
+        onSaved(saved, phrase.index);
+      } else if (!phrase && rich) {
+        let saved = await invoke<EditorFolder>("create_rich_phrase", {
+          file,
+          phrase: {
+            triggers,
+            label: labelOut,
+            body: "",
+            comment: description.trim() === "" ? null : description,
+            options: opts,
+          },
+          html: body,
+          expectedHash: folder.hash,
+        });
+        const newIndex = Math.max(...saved.phrases.map((p) => p.index));
+        if (vars.dirty && vars.specs) {
+          saved = await invoke<EditorFolder>("save_phrase_vars", {
+            file,
+            index: newIndex,
+            change: { vars: vars.specs, body: null },
+            edit: { triggers, label: labelOut, body: null, comment: "Keep", options: null },
+            expectedHash: saved.hash,
+          });
+        }
+        onSaved(saved, newIndex);
+      } else if (phrase) {
         const edit = {
           triggers,
           label: labelOut,
@@ -715,9 +781,32 @@ export function PhraseEditor({ folders, file, phrase, onSaved, onCancel, onReloa
         </div>
 
         <div className="editor-group">
-          <label htmlFor={`${uid}-body`}>Text</label>
-          {vars.menu /* xpando:vars */}
-          {bodyEditable ? (
+          <div className="rt-labelrow">
+            <label htmlFor={`${uid}-body`} id={`${uid}-body-label`}>
+              Text
+            </label>
+            {bodyEditable && (
+              <BodyModeSwitch
+                mode={mode}
+                body={body}
+                onSwitch={(m, b) => {
+                  setMode(m);
+                  setBody(b);
+                  setSwitches((n) => n + 1);
+                }}
+              />
+            )}
+          </div>
+          {mode === "plain" && vars.menu /* xpando:vars (macros insert into the plain text box) */}
+          {mode === "rich" ? (
+            <RichBodyEditor
+              // A new editor after each switch, so it starts from the converted body.
+              key={switches}
+              html={body}
+              onChange={setBody}
+              labelledBy={`${uid}-body-label`}
+            />
+          ) : bodyEditable ? (
             <textarea
               id={`${uid}-body`}
               className="field mono"

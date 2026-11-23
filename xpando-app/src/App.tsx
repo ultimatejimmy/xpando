@@ -25,6 +25,7 @@ import {
   type EditorOptions,
 } from "./PhraseEditor";
 import { FolderToolbar, NewFolderButton, ScopeLabel, useFolderInfo } from "./FolderManager";
+import { RichTextView } from "./RichLazy";
 
 interface Variable {
   name: string;
@@ -485,7 +486,11 @@ export default function App() {
               </div>
               <OptionChips options={current.phrase.options} />
               <p className="detail-meta">{KIND_LABEL[current.phrase.kind] ?? current.phrase.kind}</p>
-              <pre className="content-text">{withPlaceholders(current.phrase.content)}</pre>
+              {current.phrase.kind === "html" ? (
+                <RichTextView html={current.phrase.content} />
+              ) : (
+                <pre className="content-text">{withPlaceholders(current.phrase.content)}</pre>
+              )}
               {current.phrase.vars.length > 0 && (
                 <>
                   <h3 className="detail-meta">Variables</h3>

@@ -1,6 +1,7 @@
 mod advanced;
 mod edit;
 mod folders;
+mod richtext;
 mod vars;
 mod yamledit;
 
@@ -50,7 +51,12 @@ pub fn run() {
             folders::preview_delete_folder,
             folders::delete_folder,
             folders::preview_folder_scope,
-            folders::set_folder_scope
+            folders::set_folder_scope,
+            richtext::save_rich_phrase,
+            richtext::create_rich_phrase,
+            richtext::sanitize_html,
+            richtext::plain_to_html,
+            richtext::html_to_plain
         ])
         .run(tauri::generate_context!())
         .expect("error while running xpando");

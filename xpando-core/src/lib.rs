@@ -14,6 +14,7 @@ use serde_norway::Value;
 
 pub mod edit;
 pub mod folders;
+pub mod htmledit;
 pub mod vars;
 
 /// Returns every `*.yml` / `*.yaml` match file under `<config_dir>/match`,
@@ -191,7 +192,11 @@ fn parse_entry(entry: &Value) -> Result<Phrase, String> {
         is_regex,
         label,
         kind: kind.to_string(),
-        preview: make_preview(&content),
+        preview: if kind == "html" {
+            htmledit::html_preview(&content)
+        } else {
+            make_preview(&content)
+        },
         content,
         vars: get("vars").map(parse_vars).unwrap_or_default(),
         comment: None,
