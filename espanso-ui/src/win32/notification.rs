@@ -32,7 +32,24 @@ use std::process::Command;
 use std::sync::LazyLock;
 use tauri_winrt_notification::{IconCrop, Toast};
 
-const ESPANSO_APP_USER_MODEL_ID: &str = "{5E3B6C0F-1A4D-45C4-8872-D8174702101A}";
+/// The name Windows shows above each notification comes from this ID's registration, so xpando
+/// registers its own (per user, no installer needed) instead of borrowing espanso's.
+const XPANDO_APP_USER_MODEL_ID: &str = "app.xpando.desktop";
+
+fn register_app_user_model_id(icon_path: &std::path::Path) {
+    let key = format!(r"HKCU\Software\Classes\AppUserModelId\{XPANDO_APP_USER_MODEL_ID}");
+    let icon = icon_path.to_string_lossy().to_string();
+    for (name, value) in [("DisplayName", "xpando"), ("IconUri", icon.as_str())] {
+        let result = Command::new("reg")
+            .args(["add", &key, "/v", name, "/t", "REG_SZ", "/d", value, "/f"])
+            .creation_flags(0x0800_0000)
+            .output();
+        if let Err(err) = result {
+            warn!("unable to register the notification name: {}", err);
+            return;
+        }
+    }
+}
 
 static SEND_CHANNEL: LazyLock<Arc<Mutex<Option<Sender<String>>>>> =
     LazyLock::new(|| Arc::new(Mutex::new(None)));
@@ -48,19 +65,10 @@ pub fn initialize_notification_thread(notification_icon_path: PathBuf) -> Result
     }
 
     std::thread::Builder::new().name("notification-thread".to_string()).spawn(move || {
-    // First determine which AppUserModelID we can use
-      static APP_USER_MODEL_ID: LazyLock<&'static str> = LazyLock::new(||
-      if is_espanso_app_user_model_id_set() {
-        ESPANSO_APP_USER_MODEL_ID
-      } else {
-        warn!("unable to find espanso AppUserModelID in the list of registered ones, falling back to Powershell");
-        Toast::POWERSHELL_APP_ID
-      }
-    );
-
+    register_app_user_model_id(&notification_icon_path);
 
     while let Ok(message) = receiver.recv() {
-      if let Err(err) = Toast::new(&APP_USER_MODEL_ID)
+      if let Err(err) = Toast::new(XPANDO_APP_USER_MODEL_ID)
         .icon(&notification_icon_path, IconCrop::Square, "xpando")
         .title("xpando")
         .text1(&message)
@@ -85,28 +93,5 @@ pub fn show_notification(msg: &str) -> Result<()> {
             Ok(())
         }
         None => bail!("notification sender not available"),
-    }
-}
-
-fn is_espanso_app_user_model_id_set() -> bool {
-    match Command::new("powershell")
-        .args(["-c", "get-startapps"])
-        .creation_flags(0x0800_0000)
-        .output()
-    {
-        Ok(output) => {
-            let output_str = String::from_utf8_lossy(&output.stdout);
-            // Check if espanso is present
-            output_str
-                .lines()
-                .any(|line| line.contains(ESPANSO_APP_USER_MODEL_ID))
-        }
-        Err(err) => {
-            error!(
-                "unable to determine if AppUserModelID was registered: {}",
-                err
-            );
-            false
-        }
     }
 }
