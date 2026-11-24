@@ -55,7 +55,8 @@ jobs:
     permissions:
       contents: read
     strategy:
-      fail-fast: true
+      # One slow or missing runner (macOS ones are scarce) must not stop the other builds.
+      fail-fast: false
       matrix:
         include:
           - name: windows
@@ -155,6 +156,9 @@ jobs:
   publish:
     name: publish GitHub release
     needs: [validate, build]
+    # Publishes whatever built. The Windows installer is required (checked below); a missing macOS
+    # or Linux build is named in the release notes instead of blocking the release.
+    if: ${{ always() && needs.validate.result == 'success' }}
     runs-on: ubuntu-latest
     permissions:
       contents: write # create the release and upload assets; nothing else
@@ -174,6 +178,19 @@ jobs:
           pattern: installers-*
           path: release-files
           merge-multiple: true
+      # Windows is xpando's main platform: no Windows installer, no release. Any other platform
+      # that did not build is listed in the release notes.
+      - name: Check what was built
+        run: |
+          ls release-files
+          if ! ls release-files/*x64-setup.exe >/dev/null 2>&1 || ! ls release-files/*x64-setup.exe.sig >/dev/null 2>&1; then
+            echo "the signed Windows installer is missing; not publishing" >&2
+            exit 1
+          fi
+          missing=""
+          ls release-files/*.dmg >/dev/null 2>&1 || missing="$missing macOS"
+          ls release-files/*.AppImage >/dev/null 2>&1 || missing="$missing Linux"
+          echo "MISSING_PLATFORMS=${missing# }" >> "$GITHUB_ENV"
       # For people who download by hand and want to check a file. The in-app updater does not use
       # it: it trusts only the minisign signatures listed in latest.json.
       - name: Write SHA256SUMS.txt
@@ -198,9 +215,14 @@ jobs:
           else
             flags=(--latest)
           fi
+          notes="xpando $TAG."
+          if [ -n "$MISSING_PLATFORMS" ]; then
+            notes="$notes Not included in this release (its build did not run): $MISSING_PLATFORMS."
+          fi
           gh release create "$TAG" release-files/* SHA256SUMS.txt latest.json \
             --repo "$GITHUB_REPOSITORY" \
             --verify-tag \
             --title "xpando $TAG" \
+            --notes "$notes" \
             --generate-notes \
             "${flags[@]}"
