@@ -112,10 +112,40 @@ commit SHAs. Not done yet: Authenticode / notarization, and a changelog agreemen
 The three builds are independent: one that fails or never gets a runner does not stop the others
 (macOS runners on GitHub are scarce, and a macOS job can be cancelled after waiting about 15 minutes
 with no runner). The `publish` job runs anyway, as long as the signed Windows installer exists, and
-the release notes name any platform that is missing. `latest.json` then simply has no entry for it,
-so the updater offers nothing on that platform until a release includes it. To add the missing
-platform later, re-run the failed job of the same workflow run only if that run's publish step has
-not happened; otherwise tag the next beta.
+the release notes name any platform that is missing. `latest.json` then has no entry for it, so the
+updater offers nothing on that platform until it is added.
+
+### Adding macOS to a published release (`release-macos.yml`)
+
+A separate workflow builds macOS for a release that was published without it and adds it. The
+steps that change the release are in `scripts/add-macos-to-release.sh`, which is tested against a
+fake `gh` (`scripts/add-macos-to-release.test.mjs`), including the cases that must change nothing.
+
+- **By hand:** Actions, "release-macos", Run workflow, give the tag (for example
+  `2026.11.24-beta2`). Or `gh workflow run release-macos.yml -f tag=2026.11.24-beta2 -f dry_run=false`.
+- **Dry run first:** `dry_run` is on by default for manual runs. It builds macOS and runs every
+  check (merged `latest.json`, checksums) but uploads nothing, and the log says what it would do.
+  Do one dry run, then run it again with `dry_run` off.
+- **Nightly:** the schedule (07:17 UTC, when runners are least busy) is **off until you set the
+  repository variable `RELEASE_MACOS_NIGHTLY` to `true`** (Settings, Secrets and variables, Actions,
+  Variables). Switch it on after one dry run and one real run have worked. It looks at the last 10
+  published releases from the last three weeks and builds macOS for each one without a
+  `_universal.dmg`; when all have macOS it does nothing.
+- **What it changes:** it builds the tagged source with the same steps and signing as `release.yml`
+  (the signing secrets are only in the build step), uploads the `.dmg`, the update package and its
+  `.sig`, and then replaces `latest.json` and `SHA256SUMS.txt`. The new `latest.json` is the
+  published one plus the macOS entries (`make-latest-json.mjs --merge`): a platform that is already
+  listed is never replaced, the version and the release URLs are checked, and the script stops
+  without uploading anything if a Windows or Linux entry would change or disappear. The macOS files
+  go up first so `latest.json` never points at a file that is not there yet.
+- **Safety:** it uses the same concurrency group as `release.yml` for that tag, so it never runs at
+  the same time as a release. If macOS was added meanwhile, it does nothing. If the macOS build is
+  missing or incomplete, the release is left exactly as it was. If no Mac runner is available the
+  job waits and is cancelled by GitHub after a while; the next run tries again.
+- **Release notes:** a note saying macOS was not included is changed to say it was added later.
+- **If a bad `latest.json` ever gets published:** download `latest.json` from an earlier run's
+  artifact or rebuild it with `scripts/make-latest-json.mjs` from the release's files and upload it
+  with `gh release upload <tag> latest.json --clobber`.
 
 ## In-app updater
 

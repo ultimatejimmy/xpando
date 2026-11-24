@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
-import { buildManifest, platformsFor, readStaged } from "./make-latest-json.mjs";
+import { buildManifest, mergeManifest, platformsFor, readStaged } from "./make-latest-json.mjs";
 
 const script = join(dirname(fileURLToPath(import.meta.url)), "make-latest-json.mjs");
 const SIG = "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZQpSVVE9\n";
@@ -97,4 +97,58 @@ test("the command line reads a folder and writes latest.json", () => {
   const bad = run(["--dir", dir, "--tag", "nope"]);
   assert.equal(bad.status, 1);
   assert.match(bad.stderr, /invalid version/);
+});
+
+// ---- adding a platform to a published manifest (release-macos.yml) ----
+
+const TAG = "2026.11.24-beta2";
+const published = () =>
+  buildManifest({ files: files(TAG).filter((f) => /setup\.exe|AppImage/.test(f.name)), tag: TAG, pubDate: DATE });
+const mac = () =>
+  buildManifest({ files: files(TAG).filter((f) => f.name.endsWith(".app.tar.gz")), tag: TAG, pubDate: DATE });
+
+test("merging adds the macOS entries and keeps Windows and Linux exactly as published", () => {
+  const before = published();
+  const merged = mergeManifest(before, mac(), { tag: TAG });
+  assert.deepEqual(Object.keys(merged.platforms), ["darwin-aarch64", "darwin-x86_64", "linux-x86_64", "windows-x86_64"]);
+  assert.deepEqual(merged.platforms["windows-x86_64"], before.platforms["windows-x86_64"]);
+  assert.deepEqual(merged.platforms["linux-x86_64"], before.platforms["linux-x86_64"]);
+  assert.equal(merged.version, before.version);
+  assert.equal(merged.pub_date, before.pub_date);
+  assert.equal(merged.notes, before.notes);
+});
+
+test("merging never replaces a platform that is already published", () => {
+  const withMac = mergeManifest(published(), mac(), { tag: TAG });
+  assert.throws(() => mergeManifest(withMac, mac(), { tag: TAG }), /already has an update package for darwin/);
+  const win = buildManifest({ files: files(TAG).filter((f) => f.name.includes("setup")), tag: TAG, pubDate: DATE });
+  assert.throws(() => mergeManifest(published(), win, { tag: TAG }), /already has an update package for windows/);
+});
+
+test("merging refuses a manifest for another version or another release", () => {
+  const other = buildManifest({ files: files("2026.11.23-beta").slice(0, 1), tag: "2026.11.23-beta", pubDate: DATE });
+  assert.throws(() => mergeManifest(other, mac(), { tag: TAG }), /not 2026/);
+  const foreign = published();
+  foreign.platforms["windows-x86_64"].url = "https://example.com/evil.exe";
+  assert.throws(() => mergeManifest(foreign, mac(), { tag: TAG }), /does not point at this release/);
+  const unsigned = published();
+  unsigned.platforms["windows-x86_64"].signature = "";
+  assert.throws(() => mergeManifest(unsigned, mac(), { tag: TAG }), /valid signature/);
+  assert.throws(() => mergeManifest({ nope: 1 }, mac(), { tag: TAG }), /not an update manifest/);
+});
+
+test("the command line merges into a published latest.json", () => {
+  const dir = mkdtempSync(join(tmpdir(), "mlj-merge-"));
+  writeFileSync(join(dir, `xpando_${TAG}_universal.app.tar.gz`), "x");
+  writeFileSync(join(dir, `xpando_${TAG}_universal.app.tar.gz.sig`), SIG);
+  const pub = join(dir, "published.json");
+  writeFileSync(pub, JSON.stringify(published()));
+  const out = join(dir, "latest.json");
+  const r = spawnSync(process.execPath, [script, "--dir", dir, "--tag", TAG, "--merge", pub, "--out", out], { encoding: "utf8" });
+  assert.equal(r.status, 0, r.stderr);
+  const m = JSON.parse(readFileSync(out, "utf8"));
+  assert.deepEqual(Object.keys(m.platforms), ["darwin-aarch64", "darwin-x86_64", "linux-x86_64", "windows-x86_64"]);
+  // A second run on the result must fail rather than replace anything.
+  const again = spawnSync(process.execPath, [script, "--dir", dir, "--tag", TAG, "--merge", out, "--out", join(dir, "x.json")], { encoding: "utf8" });
+  assert.notEqual(again.status, 0);
 });
