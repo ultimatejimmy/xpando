@@ -24,6 +24,13 @@
       "csp": "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src ipc: http://ipc.localhost"
     }
   },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEIxNjc2NjM5MjJDQkQwODEKUldTQjBNc2lPV1puc1dScGtacjg1Q000UkliUytrWG9hUEpiaVRyR2ErTU5SWDJTYTBjY2hsbnYK",
+      "endpoints": [],
+      "windows": { "installMode": "passive" }
+    }
+  },
   "bundle": {
     "active": true,
     "targets": "all",

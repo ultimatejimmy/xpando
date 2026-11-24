@@ -24,6 +24,6 @@ Build tools need strict semantic versions, so the files inside the app use a der
 4. Tag the commit and push the tag. The tag starts the release build (beta tags create a pre-release).
 5. Smoke-test the files on the release page before announcing.
 
-The in-app updater follows the same rule: stable users see stable releases, and an opt-in beta setting also offers pre-releases. Every release carries a `SHA256SUMS.txt` file, which the updater uses to check a download. See [[Updates]].
+The in-app updater follows the same rule: stable users see stable releases, and an opt-in beta setting also offers pre-releases. Every release carries a signed update list (`latest.json`) and a signature file next to each update package; the updater installs only what is signed with xpando's key. `SHA256SUMS.txt` is an extra for people who download by hand. See [[Updates]].
 
 The full agreed scheme is in the repository: [docs/xpando/RELEASING.md](https://github.com/ultimatejimmy/xpando/blob/dev/docs/xpando/RELEASING.md). Automating the release is still planned.

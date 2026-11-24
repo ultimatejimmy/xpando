@@ -20,10 +20,11 @@ The check sends no information about you or your computer. It only asks GitHub f
 
 ## What "Update now" does
 
-1. xpando downloads the installer from xpando's releases on GitHub into a temporary folder. It shows the progress.
-2. It checks the file against the list of checksums published with the release (`SHA256SUMS.txt`). If the file does not match, or is not on the list, xpando deletes it and stops. Nothing is installed.
-3. **Windows:** it starts the installer and closes xpando so the update can finish. Open xpando again afterwards.
-4. **macOS and Linux:** it shows the downloaded file in your file manager. Open it to install. Installing on these systems from inside xpando is planned.
+1. xpando downloads the update from xpando's releases on GitHub. It shows the progress.
+2. It checks the update's **digital signature**. Every official xpando update is signed with a private key that only the xpando maintainers have; the matching public key is built into the app. If the signature is missing or does not match, even a single byte differs, xpando discards the download and stops. Nothing is installed.
+3. **Windows:** it stops the background engine, starts the installer (it shows a small progress window and asks nothing) and closes xpando so the update can finish. xpando starts again afterwards.
+4. **macOS and Linux (AppImage):** it replaces the app in place. Close xpando and start it again to use the new version.
+5. **Linux, installed some other way (for example from the `.deb`):** xpando cannot replace itself, so it opens the release page in your browser. Download and install from there.
 
 Your phrases and settings are not touched by an update.
 
@@ -49,6 +50,6 @@ Both are saved in `settings.yml` in xpando's settings folder (next to the settin
 ## If something goes wrong
 
 * **"Could not reach GitHub"**: check your internet connection and try again. A company network or a firewall may block it.
-* **"does not match its published checksum"**: the download was damaged or changed on the way. xpando discarded it. Try again later, or download the installer from the [releases page](https://github.com/ultimatejimmy/xpando/releases) yourself.
-* **Nothing happens on macOS or Linux after the download**: open the file shown in your file manager.
+* **"did not pass its signature check"**: the download was damaged or changed on the way, or the release was not signed by xpando. xpando discarded it. Try again later, or download the installer from the [releases page](https://github.com/ultimatejimmy/xpando/releases) yourself.
+* **"Version ... was installed" but you still see the old one on macOS or Linux**: close xpando completely and start it again.
 * xpando needs the `curl` program to check for updates. Windows 10 and later, macOS and most Linux systems have it.

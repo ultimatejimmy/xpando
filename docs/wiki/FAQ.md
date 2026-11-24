@@ -9,7 +9,7 @@ Quick answers. Can't find yours? [Open an issue](https://github.com/ultimatejimm
 | **Is xpando the same as espanso?** | No. It is a fork: the engine that detects triggers and types text comes from espanso, and the app around it is new. |
 | **Is it free?** | Yes. xpando is free and open source under the GPL-3.0 license, the same as espanso. |
 | **Does xpando send my text anywhere?** | No. Everything stays in files on your computer (or in a folder you choose, see below). The only thing xpando contacts is GitHub, once a day, to ask whether a new version exists. It sends no information about you or your computer, and you can turn it off. See [[Updates]]. |
-| **How do I update xpando?** | It tells you when a new version is out, and you choose when to install it. See [[Updates]]. |
+| **How do I update xpando?** | It tells you when a new version is out, and you choose when to install it. Updates are digitally signed and checked before they are installed. See [[Updates]]. |
 | **Can I try beta versions?** | Yes, in Settings under Updates. Betas are early versions and may have problems. See [[Updates]]. |
 | **Which systems are supported?** | Windows first. macOS and Linux are built automatically but get less hands-on testing. |
 | **What do the version numbers mean?** | They are dates, like `2026.11.23`. Betas end in `-beta`. See [[Releasing]]. |

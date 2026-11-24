@@ -1,12 +1,14 @@
-//! The in-app updater: looks for a newer release on GitHub, downloads it, checks it against the
-//! published SHA-256 list and starts it. All decisions (which release, which file, which
-//! addresses are acceptable, whether a hash matches) are made by `xpando_core::update` and
-//! tested there; this file only talks to the network and the system.
+//! The in-app updater: looks for a newer release on GitHub, then lets Tauri's updater plugin
+//! download it, verify its minisign signature (public key in `tauri.conf.json`) and install it.
+//! All decisions about WHICH release to offer (channel, skipped version, never a downgrade,
+//! which addresses are acceptable) are made by `xpando_core::update` and tested there; this
+//! file talks to the network and the system.
 //!
-//! No extra crates: HTTPS goes through the system's `curl` (Windows 10 and later, macOS and most
+//! The release list is read through the system's `curl` (Windows 10 and later, macOS and most
 //! Linux systems have it) or, on a Windows without `curl.exe`, a few lines of PowerShell. Every
 //! request sends only the User-Agent `xpando-updater`, nothing about the computer or the user.
-//! Redirects are followed one hop at a time, and each hop must stay on GitHub's own hosts.
+//! Redirects are followed one hop at a time, and each hop must stay on GitHub's own hosts. The
+//! plugin does its own download of the one release picked here.
 
 use std::fs;
 use std::io::Read;
@@ -16,9 +18,9 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use tauri::{AppHandle, Emitter, Manager};
+use tauri_plugin_updater::UpdaterExt;
 use xpando_core::datadir::{self, Settings};
 use xpando_core::serde::Serialize;
-use xpando_core::sha256::sha256_file_hex;
 use xpando_core::update::{self, Channel, Os, Update, Version, RELEASES_API_URL, USER_AGENT};
 
 /// The version this build was made as. Cargo, Tauri and npm only take a derived semver, so the
@@ -27,11 +29,7 @@ const BUILD_SEMVER: &str = env!("CARGO_PKG_VERSION");
 
 const MAX_REDIRECTS: usize = 4;
 const API_MAX_BYTES: u64 = 4 * 1024 * 1024;
-const SUMS_MAX_BYTES: u64 = 1024 * 1024;
-const INSTALLER_MAX_BYTES: u64 = 1024 * 1024 * 1024;
 const API_SECS: u64 = 30;
-const SUMS_SECS: u64 = 60;
-const INSTALLER_SECS: u64 = 60 * 60;
 
 /// Only one install at a time.
 static INSTALLING: AtomicBool = AtomicBool::new(false);
@@ -71,7 +69,7 @@ pub struct UpdateState {
     skipped: Option<String>,
     /// A sentence to show when the user is on a beta but follows stable releases.
     note: Option<String>,
-    /// `true` when xpando can start the installer itself (Windows).
+    /// `true` when xpando can install an update by itself (see `can_self_update`).
     can_install: bool,
 }
 
@@ -88,7 +86,7 @@ fn state_of(settings: &Settings) -> UpdateState {
             .as_ref()
             .and_then(|v| update::downgrade_note(v, settings.update_channel))
             .map(String::from),
-        can_install: cfg!(windows),
+        can_install: can_self_update(),
     }
 }
 
@@ -189,6 +187,7 @@ fn find_update(
     skipped: Option<&Version>,
 ) -> Result<Option<Update>, String> {
     let work = WorkDir::new()?;
+    work.sweep_old();
     let file = work.path.join("releases.json");
     download(
         RELEASES_API_URL,
@@ -226,81 +225,133 @@ struct Progress {
 
 #[derive(Serialize)]
 #[serde(crate = "xpando_core::serde", tag = "kind", rename_all = "snake_case")]
-// One of the two variants is only built on each platform.
+// Not every variant is built on every platform.
 #[allow(dead_code)]
 pub enum InstallOutcome {
     /// The installer was started and xpando is about to close (Windows).
     Launched,
-    /// The file was downloaded and checked; the user opens it (macOS, Linux).
-    Revealed { path: String },
+    /// The update was installed; xpando has to be started again to use it (macOS, Linux).
+    Installed,
+    /// This copy cannot update itself (a Linux install that is not an AppImage), so the
+    /// release page was opened in the browser.
+    OpenedPage,
 }
 
-/// Downloads `version`, checks it and starts it. The version is the only thing taken from the
-/// window: the release and its files are looked up again here, so nothing the page could send
-/// decides what is downloaded or run.
+/// Whether xpando can install an update by itself. Windows (the NSIS installer) and macOS
+/// (the app bundle) always can; on Linux only the AppImage can replace itself.
+fn can_self_update() -> bool {
+    cfg!(windows) || cfg!(target_os = "macos") || std::env::var_os("APPIMAGE").is_some()
+}
+
+/// Downloads `version`, checks its signature and installs it. The version is the only thing
+/// taken from the window: the release is looked up again here, and the update itself comes
+/// from the release's signed `latest.json` through Tauri's updater, which refuses anything not
+/// signed with xpando's key (the public half is built into the app).
 #[tauri::command]
 pub async fn install_update(app: AppHandle, version: String) -> Result<InstallOutcome, String> {
     if INSTALLING.swap(true, Ordering::SeqCst) {
         return Err("An update is already being installed.".into());
     }
-    let result = tauri::async_runtime::spawn_blocking(move || install_blocking(&app, &version))
-        .await
-        .map_err(|e| e.to_string())
-        .and_then(|r| r);
+    let result = install(&app, &version).await;
     INSTALLING.store(false, Ordering::SeqCst);
     result
 }
 
-fn install_blocking(app: &AppHandle, version: &str) -> Result<InstallOutcome, String> {
+/// Picks the release again (same rules as the check) and returns it if it is `version`.
+fn select_for_install(app: &AppHandle, version: &str) -> Result<Update, String> {
     let settings = datadir::load_settings(&settings_dir(app)?)?;
     let current =
         current_version().ok_or("This is a development build, which does not install updates.")?;
     let wanted = Version::parse(version)?;
-    let update = find_update(&current, settings.update_channel, None)?
+    find_update(&current, settings.update_channel, None)?
         .filter(|u| Version::parse(&u.version).ok() == Some(wanted))
-        .ok_or("That version is not the newest one any more. Check for updates again.")?;
+        .ok_or_else(|| {
+            "That version is not the newest one any more. Check for updates again.".to_string()
+        })
+}
+
+/// Words for an updater failure. A bad signature gets its own plain sentence.
+fn explain_updater_error(e: &tauri_plugin_updater::Error) -> String {
+    let text = e.to_string();
+    let lower = text.to_ascii_lowercase();
+    if lower.contains("signature") || lower.contains("minisign") {
+        "The update did not pass its signature check, so it was discarded. Nothing was installed."
+            .into()
+    } else if lower.contains("error sending request") || lower.contains("connect") {
+        "Could not reach GitHub. Check your internet connection and try again.".into()
+    } else {
+        format!("The update could not be installed: {text}")
+    }
+}
+
+async fn install(app: &AppHandle, version: &str) -> Result<InstallOutcome, String> {
+    let (picker_app, picker_version) = (app.clone(), version.to_string());
+    let update = tauri::async_runtime::spawn_blocking(move || {
+        select_for_install(&picker_app, &picker_version)
+    })
+    .await
+    .map_err(|e| e.to_string())??;
+
+    if !can_self_update() {
+        open_release_page(&update.release_url)?;
+        return Ok(InstallOutcome::OpenedPage);
+    }
 
     let progress = |phase: &'static str, done: u64, total: u64| {
         let _ = app.emit("update-progress", Progress { phase, done, total });
     };
-    let mut work = WorkDir::new()?;
-    work.sweep_old();
 
-    // 1. The checksum list, then the installer it describes.
-    let sums_file = work.path.join(update::SUMS_FILE);
-    download(
-        &update.sums.url,
-        &sums_file,
-        SUMS_MAX_BYTES,
-        SUMS_SECS,
-        None,
-        &|_| {},
-    )?;
-    let sums = fs::read_to_string(&sums_file)
-        .map_err(|_| "The checksum list could not be read.".to_string())?;
-    let expected = update::find_sha256(&sums, &update.installer.name)?;
+    // Point the plugin at this one release's manifest, nothing else. `pick_update` already
+    // checked the address; it is checked again here because it is what gets fetched.
+    update::validate_download_url(&update.manifest.url, &update.tag, &update.manifest.name)?;
+    let endpoint = tauri::Url::parse(&update.manifest.url).map_err(|e| e.to_string())?;
+    let updater = app
+        .updater_builder()
+        .endpoints(vec![endpoint])
+        .and_then(|b| b.build())
+        .map_err(|e| explain_updater_error(&e))?;
+    let found = updater
+        .check()
+        .await
+        .map_err(|e| explain_updater_error(&e))?
+        .ok_or("The signed update list of this release has no update for this computer.")?;
+    // The signed manifest must describe the version that was offered.
+    let wanted = Version::parse(version)?;
+    if found.version != wanted.semver() {
+        return Err("The signed update list does not match the version that was offered, so nothing was installed.".into());
+    }
 
-    let installer = work.path.join(&update.installer.name);
     let total = update.installer.size;
     progress("downloading", 0, total);
-    download(
-        &update.installer.url,
-        &installer,
-        INSTALLER_MAX_BYTES,
-        INSTALLER_SECS,
-        None,
-        &|done| progress("downloading", done, total),
-    )?;
+    let mut done = 0u64;
+    let bytes = found
+        .download(
+            |chunk, len| {
+                done += chunk as u64;
+                progress("downloading", done, len.unwrap_or(total));
+            },
+            || {},
+        )
+        .await
+        .map_err(|e| explain_updater_error(&e))?;
 
-    // 2. Check it. A wrong or unreadable file is deleted and nothing is run.
+    // `download` has already checked the minisign signature; `install` checks it again.
     progress("verifying", total, total);
-    let actual = sha256_file_hex(&installer)
-        .map_err(|e| format!("The downloaded file could not be checked: {e}"))?;
-    update::verify_hash(&actual, &expected)?;
-
-    // 3. Hand over.
     progress("starting", total, total);
-    start_or_reveal(app, &mut work, &installer, &expected)
+    #[cfg(windows)]
+    tauri::async_runtime::spawn_blocking(stop_engine)
+        .await
+        .map_err(|e| e.to_string())?;
+    // Windows: starts the installer in passive mode and exits xpando. macOS and Linux: replaces
+    // the app in place; it has to be started again.
+    found
+        .install(&bytes)
+        .map_err(|e| explain_updater_error(&e))?;
+    Ok(if cfg!(windows) {
+        InstallOutcome::Launched
+    } else {
+        InstallOutcome::Installed
+    })
 }
 
 /// Stops xpando's engine process so the installer can replace its file. It asks politely
@@ -324,47 +375,22 @@ fn stop_engine() {
     }
 }
 
-#[cfg(windows)]
-fn start_or_reveal(
-    app: &AppHandle,
-    work: &mut WorkDir,
-    installer: &Path,
-    expected: &str,
-) -> Result<InstallOutcome, String> {
-    // Check again right before running, in case the file was touched after the first check.
-    let again = sha256_file_hex(installer).map_err(|e| e.to_string())?;
-    update::verify_hash(&again, expected)?;
-    stop_engine();
-    Command::new(installer)
-        .spawn()
-        .map_err(|e| format!("The installer could not be started: {e}"))?;
-    work.keep(); // the installer is running from here
-    let app = app.clone();
-    std::thread::spawn(move || {
-        std::thread::sleep(Duration::from_millis(1500));
-        app.exit(0);
-    });
-    Ok(InstallOutcome::Launched)
-}
-
-#[cfg(not(windows))]
-fn start_or_reveal(
-    _app: &AppHandle,
-    work: &mut WorkDir,
-    installer: &Path,
-    _expected: &str,
-) -> Result<InstallOutcome, String> {
-    work.keep();
-    // Show the file in the file manager; installing it is up to the user for now.
-    #[cfg(target_os = "macos")]
-    let _ = Command::new("open").arg("-R").arg(installer).spawn();
-    #[cfg(not(target_os = "macos"))]
-    if let Some(dir) = installer.parent() {
-        let _ = Command::new("xdg-open").arg(dir).spawn();
+/// Opens a GitHub release page in the browser (only used where xpando cannot update itself).
+fn open_release_page(url: &str) -> Result<(), String> {
+    if !url.starts_with("https://github.com/ultimatejimmy/xpando/releases/")
+        || url.bytes().any(|b| b <= b' ' || b == 0x7f)
+    {
+        return Err("The release page address was not recognised.".into());
     }
-    Ok(InstallOutcome::Revealed {
-        path: installer.to_string_lossy().into_owned(),
-    })
+    #[cfg(target_os = "macos")]
+    let opener = "open";
+    #[cfg(not(target_os = "macos"))]
+    let opener = "xdg-open";
+    Command::new(opener)
+        .arg(url)
+        .spawn()
+        .map(|_| ())
+        .map_err(|e| format!("The release page could not be opened: {e}"))
 }
 
 // ---------------------------------------------------------------------------------------
@@ -374,10 +400,9 @@ fn start_or_reveal(
 const WORK_PREFIX: &str = "xpando-update-";
 
 /// A fresh folder under the system temp folder, removed again when this goes out of scope
-/// unless `keep` was called.
+/// always.
 struct WorkDir {
     path: PathBuf,
-    keep: bool,
 }
 
 impl WorkDir {
@@ -393,11 +418,7 @@ impl WorkDir {
         // `create_dir` (not `create_dir_all`) fails if the name is already taken.
         fs::create_dir(&path)
             .map_err(|e| format!("Could not make a temporary folder for the download: {e}"))?;
-        Ok(WorkDir { path, keep: false })
-    }
-
-    fn keep(&mut self) {
-        self.keep = true;
+        Ok(WorkDir { path })
     }
 
     /// Removes download folders left by earlier updates that are more than two days old.
@@ -422,9 +443,7 @@ impl WorkDir {
 
 impl Drop for WorkDir {
     fn drop(&mut self) {
-        if !self.keep {
-            let _ = fs::remove_dir_all(&self.path);
-        }
+        let _ = fs::remove_dir_all(&self.path);
     }
 }
 
@@ -696,19 +715,13 @@ mod tests {
     }
 
     #[test]
-    fn work_dir_is_removed_unless_kept() {
+    fn work_dir_is_removed_when_dropped() {
         let path = {
             let w = WorkDir::new().unwrap();
             assert!(w.path.is_dir());
             w.path.clone()
         };
         assert!(!path.exists());
-        let mut w = WorkDir::new().unwrap();
-        w.keep();
-        let path = w.path.clone();
-        drop(w);
-        assert!(path.is_dir());
-        fs::remove_dir_all(path).unwrap();
     }
 
     #[test]
