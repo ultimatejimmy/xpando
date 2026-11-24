@@ -2,7 +2,10 @@
 // Builds `latest.json`, the update manifest Tauri's updater reads. See docs/xpando/RELEASING.md.
 //
 //   node scripts/make-latest-json.mjs --dir <folder> --tag <tag> [--repo owner/name]
-//        [--out latest.json] [--pub-date <RFC 3339>] [--notes <text>]
+//        [--out latest.json] [--pub-date <RFC 3339>] [--notes <text>] [--merge <published latest.json>]
+//
+// With --merge the staged files are added to an already published manifest (for a platform built
+// after the release, see release-macos.yml); platforms already in it are never replaced.
 //
 // <folder> holds the staged release files: every update package `X` next to its signature `X.sig`
 // (the file the Tauri build wrote, whose text is the minisign signature). Only packages that have
@@ -95,6 +98,41 @@ export function buildManifest({ files, tag, repo = DEFAULT_REPO, pubDate = new D
   };
 }
 
+/**
+ * Adds the platforms of `added` (a manifest built from newly staged files) to `existing` (the
+ * manifest already published with the release). Used when a platform is built after the release,
+ * so a published manifest is only ever extended: an existing platform is never replaced, the
+ * version and the release must match, and every entry of both must still look like what the
+ * build produces, otherwise nothing is written.
+ */
+export function mergeManifest(existing, added, { repo = DEFAULT_REPO, tag }) {
+  if (!REPO_RE.test(repo)) throw new Error(`invalid repository "${repo}"`);
+  parseVersion(tag);
+  const prefix = `https://github.com/${repo}/releases/download/${tag}/`;
+  const check = (m, what) => {
+    if (!m || typeof m !== "object" || typeof m.version !== "string" || !m.platforms || typeof m.platforms !== "object") {
+      throw new Error(`${what} is not an update manifest`);
+    }
+    if (m.version !== toSemver(tag)) throw new Error(`${what} is for version ${m.version}, not ${toSemver(tag)}`);
+    for (const [key, p] of Object.entries(m.platforms)) {
+      if (!p || typeof p.url !== "string" || !p.url.startsWith(prefix)) throw new Error(`${what}: ${key} does not point at this release`);
+      if (typeof p.signature !== "string" || !SIG_RE.test(p.signature.trim()) || !p.signature.trim()) {
+        throw new Error(`${what}: ${key} has no valid signature`);
+      }
+    }
+  };
+  check(existing, "the published latest.json");
+  check(added, "the new files");
+  const platforms = { ...existing.platforms };
+  for (const [key, entry] of Object.entries(added.platforms)) {
+    if (platforms[key]) throw new Error(`the release already has an update package for ${key}; refusing to replace it`);
+    platforms[key] = entry;
+  }
+  const sorted = {};
+  for (const key of Object.keys(platforms).sort((a, b) => a.localeCompare(b))) sorted[key] = platforms[key];
+  return { ...existing, platforms: sorted };
+}
+
 /** Reads the staged files of `dir` (and the `.sig` next to each). */
 export function readStaged(dir) {
   const names = readdirSync(dir);
@@ -121,13 +159,16 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   try {
     const a = parseArgs(process.argv.slice(2));
     if (!a.dir || !a.tag) throw new Error("usage: make-latest-json.mjs --dir <folder> --tag <tag> [--repo o/n] [--out file]");
-    const manifest = buildManifest({
+    let manifest = buildManifest({
       files: readStaged(a.dir),
       tag: a.tag,
       repo: a.repo,
       pubDate: a["pub-date"],
       notes: a.notes,
     });
+    if (a.merge) {
+      manifest = mergeManifest(JSON.parse(readFileSync(a.merge, "utf8")), manifest, { repo: a.repo, tag: a.tag });
+    }
     writeFileSync(a.out ?? "latest.json", `${JSON.stringify(manifest, null, 2)}\n`);
     console.log(`wrote ${a.out ?? "latest.json"}: ${manifest.version}, ${Object.keys(manifest.platforms).join(", ")}`);
   } catch (e) {

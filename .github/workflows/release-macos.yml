@@ -1,0 +1,268 @@
+name: release-macos
+
+# Adds the macOS build to a release that was published without it (macOS runners on GitHub are
+# scarce, and release.yml publishes without them). Run it by hand for one tag, or let the nightly
+# schedule find recent releases that have no macOS build yet. It never changes the other
+# platforms' files: it uploads the macOS files, then replaces latest.json and SHA256SUMS.txt with
+# versions that only add to what was published. See docs/xpando/RELEASING.md.
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to add macOS to, for example 2026.11.24-beta2"
+        required: true
+        type: string
+  schedule:
+    # Nightly, when the runners are least busy (07:17 UTC is the middle of the night in the US).
+    - cron: "17 7 * * *"
+
+# No permissions by default; each job asks for what it needs.
+permissions: {}
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  plan:
+    name: find releases without macOS
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      tags: ${{ steps.find.outputs.tags }}
+      any: ${{ steps.find.outputs.any }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+      - name: Find the tags to build
+        id: find
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG_INPUT: ${{ inputs.tag }}
+          EVENT: ${{ github.event_name }}
+        run: |
+          set -euo pipefail
+          candidates=()
+          if [ "$EVENT" = "workflow_dispatch" ]; then
+            candidates+=("$TAG_INPUT")
+          else
+            # Published (not draft) releases from the last three weeks, newest first.
+            since="$(date -u -d '21 days ago' +%Y-%m-%dT%H:%M:%SZ)"
+            while IFS= read -r t; do candidates+=("$t"); done < <(
+              gh release list --repo "$GITHUB_REPOSITORY" --limit 10 --json tagName,isDraft,publishedAt \
+                --jq ".[] | select(.isDraft | not) | select(.publishedAt > \"$since\") | .tagName")
+          fi
+          tags=()
+          for t in "${candidates[@]}"; do
+            # Only valid xpando versions; anything else is ignored (or refused for a typed tag).
+            if ! node scripts/version.mjs --info "$t" >/dev/null 2>&1; then
+              echo "::warning::$t is not a valid release tag; skipping"
+              [ "$EVENT" = "workflow_dispatch" ] && exit 1
+              continue
+            fi
+            if ! assets="$(gh release view "$t" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name' 2>/dev/null)"; then
+              echo "::warning::$t has no published release; skipping"
+              [ "$EVENT" = "workflow_dispatch" ] && exit 1
+              continue
+            fi
+            if grep -q '_universal\.dmg$' <<<"$assets"; then
+              echo "$t already has a macOS build"
+              continue
+            fi
+            if ! grep -q '^latest\.json$' <<<"$assets"; then
+              echo "::warning::$t has no latest.json to add to; skipping"
+              continue
+            fi
+            tags+=("$t")
+          done
+          if [ "${#tags[@]}" -eq 0 ]; then
+            echo "any=false" >> "$GITHUB_OUTPUT"
+            echo 'tags=[]' >> "$GITHUB_OUTPUT"
+            echo "nothing to do"
+          else
+            json="$(printf '%s\n' "${tags[@]}" | node -e 'const l=require("fs").readFileSync(0,"utf8").split("\n").filter(Boolean);console.log(JSON.stringify(l))')"
+            echo "any=true" >> "$GITHUB_OUTPUT"
+            echo "tags=$json" >> "$GITHUB_OUTPUT"
+            echo "will build: $json"
+          fi
+
+  build:
+    name: build macOS (${{ matrix.tag }})
+    needs: plan
+    if: ${{ needs.plan.outputs.any == 'true' }}
+    runs-on: macos-latest
+    # A runner may take a long time to appear; once it has one the build itself takes a while.
+    timeout-minutes: 120
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        tag: ${{ fromJSON(needs.plan.outputs.tags) }}
+    env:
+      TAG: ${{ matrix.tag }}
+    steps:
+      # The tagged source, so the build is the one the release would have had.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: refs/tags/${{ matrix.tag }}
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+      - name: Derive the version from the tag
+        id: info
+        run: node scripts/version.mjs --info "$TAG" | tee -a "$GITHUB_OUTPUT"
+      - name: Install Rust
+        run: |
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+          rustup target add aarch64-apple-darwin x86_64-apple-darwin
+      - name: Write version into manifests and verify
+        env:
+          VERSION: ${{ steps.info.outputs.version }}
+        run: |
+          node scripts/version.mjs "$VERSION"
+          node scripts/version.mjs "$VERSION" --check
+      - name: Build and stage the xpando engine
+        run: bash scripts/build-engine.sh
+      # No secrets are set on this job until the build step, so nothing before it can read them.
+      - name: Install frontend dependencies (lockfile only, no install scripts)
+        working-directory: xpando-app
+        run: npm ci --ignore-scripts
+      - name: Build installers
+        working-directory: xpando-app
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: npx tauri build --ci --config src-tauri/tauri.release.conf.json --bundles dmg,app --target universal-apple-darwin -- --locked
+      - name: Stage artifacts under the human version
+        env:
+          VERSION: ${{ steps.info.outputs.version }}
+          SEMVER: ${{ steps.info.outputs.semver }}
+        run: |
+          mkdir staged
+          while IFS= read -r -d '' f; do
+            name="$(basename "$f")"
+            # The macOS updater package is named after the app, not the version.
+            case "$name" in
+              xpando.app.tar.gz) name="xpando_${SEMVER}_universal.app.tar.gz" ;;
+              xpando.app.tar.gz.sig) name="xpando_${SEMVER}_universal.app.tar.gz.sig" ;;
+            esac
+            cp "$f" "staged/${name//$SEMVER/$VERSION}"
+          done < <(find xpando-app/src-tauri/target -path '*/release/bundle/*' -type f \
+            \( -name '*.dmg' -o -name '*.app.tar.gz' -o -name '*.sig' \) -print0)
+          ls -l staged
+          # Exactly what the release needs from macOS: the disk image, the update package and
+          # its signature. Anything less means the build is not usable.
+          ls staged/*_universal.dmg staged/*_universal.app.tar.gz staged/*_universal.app.tar.gz.sig
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: installers-macos-${{ matrix.tag }}
+          path: staged/*
+          if-no-files-found: error
+          retention-days: 7
+
+  attach:
+    name: add macOS to ${{ matrix.tag }}
+    needs: [plan, build]
+    # Runs for every tag even when another tag's build failed; a tag without a build is skipped.
+    if: ${{ always() && needs.plan.outputs.any == 'true' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # upload assets and replace latest.json / SHA256SUMS.txt; nothing else
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        tag: ${{ fromJSON(needs.plan.outputs.tags) }}
+    # The same group release.yml uses for this tag, so this never overlaps with a release run.
+    concurrency:
+      group: release-${{ matrix.tag }}
+      cancel-in-progress: false
+    env:
+      TAG: ${{ matrix.tag }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+      - name: Download the macOS build
+        id: dl
+        continue-on-error: true
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: installers-macos-${{ matrix.tag }}
+          path: macos-files
+      - name: Check there is something to add
+        id: have
+        run: |
+          if [ "${{ steps.dl.outcome }}" != "success" ] || ! ls macos-files/*_universal.dmg macos-files/*_universal.app.tar.gz macos-files/*_universal.app.tar.gz.sig >/dev/null 2>&1; then
+            echo "::warning::no macOS build for $TAG; leaving the release as it is"
+            echo "ok=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Download the published release files
+        if: steps.have.outputs.ok == 'true'
+        run: |
+          set -euo pipefail
+          mkdir published
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --dir published
+          ls -l published
+          # Someone else added macOS meanwhile: do nothing.
+          if ls published/*_universal.dmg >/dev/null 2>&1; then
+            echo "::warning::$TAG already has a macOS build; not adding another"
+            echo "SKIP=true" >> "$GITHUB_ENV"
+          fi
+      - name: Write the extended latest.json and SHA256SUMS.txt
+        if: steps.have.outputs.ok == 'true' && env.SKIP != 'true'
+        run: |
+          set -euo pipefail
+          mkdir out all
+          # The manifest only grows: the script refuses to replace a platform that is listed, and
+          # it checks every entry still points at this release and carries a signature.
+          node scripts/make-latest-json.mjs --dir macos-files --tag "$TAG" --repo "$GITHUB_REPOSITORY" \
+            --merge published/latest.json --out out/latest.json
+          cat out/latest.json
+          for k in windows-x86_64 darwin-aarch64 darwin-x86_64; do
+            if grep -q "\"$k\"" published/latest.json && ! grep -q "\"$k\"" out/latest.json; then
+              echo "a platform disappeared from latest.json: $k" >&2; exit 1
+            fi
+          done
+          grep -q '"darwin-aarch64"' out/latest.json
+          # Checksums over every installer file (the old and the new ones).
+          cp published/* all/
+          rm -f all/latest.json all/SHA256SUMS.txt
+          cp macos-files/* all/
+          (cd all && sha256sum -- * > ../out/SHA256SUMS.txt)
+          (cd all && sha256sum --check --strict ../out/SHA256SUMS.txt)
+          if grep -q 'SHA256SUMS' out/SHA256SUMS.txt; then echo "the list must not list itself" >&2; exit 1; fi
+      # Order matters: the new files go up first, so latest.json never points at a missing file.
+      - name: Upload the macOS files, then replace the manifest and checksums
+        if: steps.have.outputs.ok == 'true' && env.SKIP != 'true'
+        run: |
+          set -euo pipefail
+          gh release upload "$TAG" macos-files/* --repo "$GITHUB_REPOSITORY"
+          gh release upload "$TAG" out/latest.json out/SHA256SUMS.txt --repo "$GITHUB_REPOSITORY" --clobber
+      - name: Update the release notes
+        if: steps.have.outputs.ok == 'true' && env.SKIP != 'true'
+        run: |
+          set -euo pipefail
+          body="$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json body --jq .body)"
+          new="${body//Not included in this release (its build did not run): macOS./macOS was added after the release was published.}"
+          if [ "$new" != "$body" ]; then
+            printf '%s' "$new" | gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --notes-file -
+          fi
