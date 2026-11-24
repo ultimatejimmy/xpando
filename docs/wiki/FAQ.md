@@ -1,31 +1,39 @@
 # FAQ
 
-**Is xpando the same as espanso?**
-It is a fork. The engine that detects triggers and types text is espanso's, and the app is new. Differences are small and listed here (for example the [[Set Clipboard]] macro).
+Quick answers. Can't find yours? [Open an issue](https://github.com/ultimatejimmy/xpando/issues).
 
-**Do I need espanso installed?**
-The plan is for xpando to bundle its engine in one installer, so no.
+## About xpando
 
-**Can I use my existing espanso phrases?**
-Yes. xpando is meant to use espanso's configuration folder, so they appear without importing. Comments and layout are kept when xpando edits a file, and a `.bak` backup is made.
+| Question | Answer |
+| :------- | :----- |
+| **Is xpando the same as espanso?** | No. It is a fork: the engine that detects triggers and types text comes from espanso, and the app around it is new. |
+| **Is it free?** | Yes. xpando is free and open source under the GPL-3.0 license, the same as espanso. |
+| **Does xpando send my text anywhere?** | No. Everything stays in files on your computer (or in a folder you choose, see below). |
+| **Which systems are supported?** | Windows first. macOS and Linux are built automatically but get less hands-on testing. |
+| **What do the version numbers mean?** | They are dates, like `2026.11.23`. Betas end in `-beta`. See [[Releasing]]. |
 
-**Can I still edit the files by hand?**
-Yes. The files are the source of truth, and xpando never uses a separate database.
+## Your phrases and files
 
-**Does xpando send my text anywhere?**
-No. Everything is local files.
+| Question | Answer |
+| :------- | :----- |
+| **Where are my phrases?** | In xpando's data folder, one file per folder. The default is `%APPDATA%\xpando` on Windows. You can change it in Settings. |
+| **Can I keep them in OneDrive or Google Drive?** | Yes. Point the data folder at a synced folder to back it up or share it between your devices. xpando shows a notice if the sync service leaves a "conflicted copy" file. |
+| **I used espanso before. Can I bring my phrases?** | Yes. On first run xpando offers to import your espanso files. It only copies them and never changes the originals. |
+| **Can I still edit the files by hand?** | Yes. The YAML files are the source of truth, and there is no separate database. Comments and layout are kept when xpando saves. |
+| **Will xpando damage my files?** | It is built not to. Saves are atomic, a one-time `.bak` backup is made before the first edit, and a save is refused if the file changed underneath you. |
 
-**Where are my phrases?**
-In your espanso `match` folder, one file per folder. In [[Advanced Mode]] the status bar shows the config folder path.
+## Words and features
 
-**Why "macro" and not "variable"?**
-It is the plain-language word for the dynamic pieces of a phrase. See [[Macros]]. The files still use espanso's name (`vars`).
+| Question | Answer |
+| :------- | :----- |
+| **Why "macro" and not "variable"?** | It is the plain-language word for the changing pieces of a phrase, such as today's date. See [[Macros]]. The files still use espanso's name, `vars`. |
+| **Do I need espanso installed?** | No. xpando ships with its own engine. |
+| **Can I run xpando and espanso together?** | Not at the same time. Both would expand the same triggers. Quit espanso first. |
+| **What is Set clipboard?** | A macro that puts text on the clipboard for you to paste. See [[Set Clipboard]]. |
 
-**Which systems are supported?**
-Windows first. macOS and Linux are built in CI but get less hands-on testing.
+## Help
 
-**What do the version numbers mean?**
-They are dates. See [[Releasing]].
-
-**How do I report a bug or ask for a feature?**
-[Open an issue](https://github.com/ultimatejimmy/xpando/issues).
+| Question | Answer |
+| :------- | :----- |
+| **Something doesn't work.** | Try [[Troubleshooting]] first. |
+| **How do I report a bug or ask for a feature?** | [Open an issue](https://github.com/ultimatejimmy/xpando/issues). |
