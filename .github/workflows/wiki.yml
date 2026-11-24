@@ -1,0 +1,51 @@
+name: wiki
+
+# Publishes docs/wiki/** to the GitHub wiki. The wiki repo must exist first: enable the Wiki
+# in the repository settings and create its first page once in the browser.
+on:
+  push:
+    branches: [dev]
+    paths:
+      - "docs/wiki/**"
+      - ".github/workflows/wiki.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: wiki
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Publish to the wiki
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          WIKI_URL: https://github.com/ultimatejimmy/xpando.wiki.git
+        run: |
+          set -euo pipefail
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          # Pass the token through an auth header instead of the URL so it never lands in a file or log.
+          AUTH="Authorization: basic $(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)"
+          echo "::add-mask::$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)"
+          git -c "http.extraheader=$AUTH" clone "$WIKI_URL" "$RUNNER_TEMP/wiki"
+          # Mirror the source: remove old pages (keeping .git), then copy the new ones.
+          find "$RUNNER_TEMP/wiki" -mindepth 1 -maxdepth 1 -not -name .git -exec rm -rf {} +
+          cp -R docs/wiki/. "$RUNNER_TEMP/wiki/"
+          rm -f "$RUNNER_TEMP/wiki/SCREENSHOTS.md"
+          cd "$RUNNER_TEMP/wiki"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "Wiki is already up to date."
+            exit 0
+          fi
+          git commit -m "Publish docs/wiki from ${GITHUB_SHA}"
+          git -c "http.extraheader=$AUTH" push origin HEAD

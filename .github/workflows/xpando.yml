@@ -1,0 +1,98 @@
+name: xpando
+
+on:
+  push:
+    branches: [dev]
+    paths: &paths
+      - "xpando-core/**"
+      - "xpando-app/**"
+      - "espanso*/**"
+      - "scripts/build-engine.sh"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - ".github/workflows/xpando.yml"
+  pull_request:
+    paths: *paths
+
+permissions:
+  contents: read
+
+# A newer push supersedes older runs of the same ref, so stale macOS jobs don't pile up in the queue.
+concurrency:
+  group: xpando-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  core:
+    name: core (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest, ubuntu-latest]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Check formatting
+        working-directory: xpando-core
+        run: cargo fmt --check
+      - name: Test xpando-core
+        working-directory: xpando-core
+        run: cargo test --locked
+
+  app:
+    name: app (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest, ubuntu-latest]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+      - name: Install Linux system libraries for Tauri
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential libssl-dev libxdo-dev \
+            libayatana-appindicator3-dev librsvg2-dev
+      - name: Install frontend dependencies (lockfile only, no install scripts)
+        working-directory: xpando-app
+        run: npm ci --ignore-scripts
+      - name: Type-check and build frontend
+        working-directory: xpando-app
+        run: npm run build
+      - name: Test search parser
+        working-directory: xpando-app
+        run: node --test --experimental-strip-types src/search.test.ts
+      - name: Check Tauri shell formatting and build
+        working-directory: xpando-app/src-tauri
+        run: |
+          cargo fmt --check
+          cargo check --locked
+
+  # Lighter than the release build: type-checks the patched engine (no wxWidgets/modulo, no link).
+  # The full build, the -xpando version check and staging run in release.yml.
+  engine:
+    name: engine check (ubuntu-latest)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Install Linux libraries
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libx11-dev libxtst-dev libxkbcommon-dev libdbus-1-dev libssl-dev
+      - name: Check the engine and its version suffix
+        run: |
+          cargo check -p espanso --locked --no-default-features --features vendored-tls
+          grep -q '"-xpando"' espanso/src/main.rs
+      - name: Test the render extensions (set_clipboard)
+        run: cargo test -p espanso-render --locked

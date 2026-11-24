@@ -1,0 +1,379 @@
+/* Rich text editor, viewer and the plain/rich switch. Uses the variables from styles.css
+   and editor.css (--ink, --muted, --surface, --bg, --accent, --field-border, --danger-text). */
+
+.rt-labelrow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.rt-switch-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: flex-end;
+}
+
+.rt-switch {
+  display: inline-flex;
+  border: 1px solid var(--field-border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.rt-seg {
+  min-height: 28px;
+  padding: 2px 12px;
+  border: 0;
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  cursor: pointer;
+}
+
+.rt-seg + .rt-seg {
+  border-left: 1px solid var(--field-border);
+}
+
+.rt-seg[aria-pressed="true"] {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+.rt-seg:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -3px;
+}
+
+.rt-confirm {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--field-border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--warn-text);
+}
+
+.rt-confirm .grow {
+  flex: 1 1 200px;
+}
+
+.rt-hint,
+.rt-error {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 6px 0 0;
+  font-size: 0.9em;
+}
+
+.rt-hint {
+  color: var(--muted);
+}
+
+.rt-error {
+  color: var(--danger-text);
+}
+
+.rt-hint svg,
+.rt-error svg {
+  flex: none;
+  margin-top: 2px;
+}
+
+/* ---- editor ---- */
+
+.rt-editor {
+  border: 1px solid var(--field-border);
+  border-radius: 6px;
+  background: var(--surface);
+}
+
+.rt-editor:focus-within {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.rt-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px;
+  padding: 4px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg);
+  border-radius: 6px 6px 0 0;
+}
+
+.rt-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.rt-btn:hover:not(:disabled) {
+  background: var(--surface);
+  border-color: var(--field-border);
+}
+
+.rt-btn[aria-pressed="true"] {
+  background: color-mix(in srgb, var(--accent) 22%, var(--surface));
+  border-color: var(--accent);
+}
+
+.rt-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.rt-btn:focus-visible,
+.rt-select:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.rt-select {
+  height: 32px;
+  padding: 0 6px;
+  border: 1px solid var(--field-border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+}
+
+.rt-sep {
+  align-self: stretch;
+  width: 1px;
+  margin: 4px 4px;
+  background: var(--field-border);
+}
+
+.rt-panel {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg);
+}
+
+.rt-panel .field {
+  flex: 1 1 220px;
+  width: auto;
+}
+
+.rt-panel .rt-error,
+.rt-panel .rt-hint {
+  flex: 1 1 100%;
+  margin: 0;
+}
+
+/* ---- content (editable and read-only) ---- */
+
+.rt-content {
+  min-height: 160px;
+  max-height: 55vh;
+  overflow: auto;
+  padding: 10px 12px;
+  color: var(--ink);
+  line-height: 1.5;
+  outline: none;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.rt-readonly {
+  min-height: 0;
+  max-height: none;
+  padding: 0;
+}
+
+.rt-content > :first-child {
+  margin-top: 0;
+}
+
+.rt-content > :last-child {
+  margin-bottom: 0;
+}
+
+.rt-content p {
+  margin: 0 0 0.6em;
+}
+
+.rt-content h1,
+.rt-content h2,
+.rt-content h3 {
+  margin: 0.8em 0 0.4em;
+  line-height: 1.25;
+}
+
+.rt-content h1 {
+  font-size: 1.5em;
+}
+
+.rt-content h2 {
+  font-size: 1.25em;
+}
+
+.rt-content h3 {
+  font-size: 1.1em;
+}
+
+.rt-content ul,
+.rt-content ol {
+  margin: 0 0 0.6em;
+  padding-left: 1.6em;
+}
+
+.rt-content li > p {
+  margin: 0;
+}
+
+.rt-content blockquote {
+  margin: 0 0 0.6em;
+  padding-left: 12px;
+  border-left: 3px solid var(--field-border);
+  color: var(--muted);
+}
+
+.rt-content code,
+.rt-content pre {
+  font-family: "Cascadia Mono", Consolas, monospace;
+  font-size: 0.92em;
+}
+
+.rt-content code {
+  padding: 0 4px;
+  border-radius: 4px;
+  background: var(--bg);
+}
+
+.rt-content pre {
+  margin: 0 0 0.6em;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: var(--bg);
+  overflow: auto;
+}
+
+.rt-content pre code {
+  padding: 0;
+  background: none;
+}
+
+.rt-content hr {
+  margin: 0.8em 0;
+  border: 0;
+  border-top: 1px solid var(--field-border);
+}
+
+.rt-content a {
+  color: var(--accent);
+  text-decoration: underline;
+  cursor: text;
+}
+
+.rt-readonly a {
+  cursor: default;
+}
+
+.rt-content img {
+  max-width: 100%;
+  height: auto;
+}
+
+.rt-content .placeholder {
+  padding: 0 4px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  font-family: "Cascadia Mono", Consolas, monospace;
+  font-size: 0.92em;
+}
+
+.rt-content img.ProseMirror-selectednode {
+  outline: 2px solid var(--accent);
+}
+
+/* ---- paste button, colours, tables ---- */
+
+.rt-btn.rt-btn-text {
+  width: auto;
+  gap: 6px;
+  padding: 0 10px;
+  color: var(--ink);
+  background: transparent;
+  font: inherit;
+  cursor: pointer;
+}
+
+.rt-btn.rt-btn-text:hover {
+  background: var(--surface);
+  border-color: var(--field-border);
+}
+
+.rt-swatch {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid var(--field-border);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.rt-swatch:focus-visible,
+.rt-color-input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.rt-color-input {
+  width: 36px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid var(--field-border);
+  border-radius: 6px;
+  background: var(--surface);
+}
+
+.rt-content table {
+  border-collapse: collapse;
+  margin: 6px 0;
+}
+
+.rt-content td,
+.rt-content th {
+  min-width: 2em;
+  padding: 2px 6px;
+  vertical-align: top;
+  /* A faint guide, so a table without borders can still be edited. */
+  outline: 1px dashed var(--border);
+  outline-offset: -1px;
+}
+
+.rt-content th {
+  font-weight: 700;
+  text-align: left;
+}
+
+.rt-content td > p,
+.rt-content th > p {
+  margin: 0;
+}
+
+.rt-content .selectedCell {
+  background: color-mix(in srgb, var(--accent) 20%, transparent);
+}

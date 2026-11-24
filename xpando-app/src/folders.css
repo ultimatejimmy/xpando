@@ -1,0 +1,244 @@
+/* Folder management: scope labels, folder toolbar and its dialogs. Uses the variables from
+   styles.css (and --danger/--warn-text/--field-border from editor.css, with fallbacks). */
+
+.fm-scope {
+  display: block;
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.fm-scope-warn {
+  color: var(--warn-text, #7a4b00);
+}
+
+.fm-new {
+  width: calc(100% - 16px);
+  margin: 8px;
+}
+
+/* Toolbar above the phrase list when one folder is chosen */
+.fm-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  margin: 0 8px 8px;
+}
+
+.fm-bar-scope {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  font-size: 13px;
+}
+
+/* One "Folder options" menu instead of three buttons */
+.fm-menu {
+  position: relative;
+  margin-left: auto;
+}
+
+.fm-menu-list {
+  position: absolute;
+  z-index: 5;
+  top: calc(100% + 4px);
+  right: 0;
+  display: grid;
+  min-width: 160px;
+  padding: 4px;
+  border: 1px solid var(--field-border, #747a86);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.18);
+}
+
+.fm-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+}
+
+.fm-menu-item:hover:not(:disabled),
+.fm-menu-item:focus-visible {
+  background: var(--bg);
+}
+
+.fm-menu-item:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.fm-menu-item:disabled {
+  color: var(--muted);
+  cursor: default;
+}
+
+.fm-note {
+  flex-basis: 100%;
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+/* Dialogs */
+.fm-dialog {
+  width: min(560px, calc(100vw - 32px));
+  max-height: calc(100vh - 32px);
+  padding: 20px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--ink);
+}
+
+.fm-dialog::backdrop {
+  background: rgb(0 0 0 / 45%);
+}
+
+.fm-title {
+  margin: 0 0 12px;
+  font-size: 18px;
+  overflow-wrap: anywhere;
+}
+
+.fm-form,
+.fm-apps {
+  display: grid;
+  gap: 8px;
+}
+
+.fm-form > label,
+.fm-apps > label {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.fm-help {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.fm-problem {
+  margin: 8px 0 0;
+  padding: 8px 10px;
+  border: 1px solid var(--danger-text, #c42b1c);
+  border-radius: 6px;
+  color: var(--danger-text, #c42b1c);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.fm-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.fm-changes {
+  margin: 0 0 8px;
+  padding-left: 20px;
+  font-size: 13px;
+}
+
+.fm-changes li {
+  margin: 4px 0;
+  overflow-wrap: anywhere;
+}
+
+.fm-dialog code {
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.fm-radios {
+  margin: 0 0 12px;
+  padding: 0;
+  border: 0;
+}
+
+.fm-legend {
+  padding: 0;
+  margin-bottom: 6px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.fm-radio,
+.fm-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 28px;
+  font-size: 14px;
+  font-weight: 400;
+}
+
+.fm-check {
+  align-items: flex-start;
+  font-size: 13px;
+}
+
+.fm-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.fm-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px 4px 2px 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg);
+  font-size: 13px;
+}
+
+.fm-chip-x {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  cursor: pointer;
+}
+
+.fm-chip-x:hover {
+  background: var(--border);
+}
+
+.fm-chip-x:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.fm-add {
+  display: flex;
+  gap: 6px;
+}
+
+/* Folder actions are unavailable while the phrase editor holds unsaved changes. */
+.folder-actions-locked {
+  opacity: 0.5;
+}

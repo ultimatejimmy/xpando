@@ -1,0 +1,1 @@
+xpando is open source (GPL-3.0), a fork of [espanso](https://espanso.org). [Report an issue](https://github.com/ultimatejimmy/xpando/issues) | [Source](https://github.com/ultimatejimmy/xpando). This wiki is published from `docs/wiki/` in the repository; do not edit it here.

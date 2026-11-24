@@ -1,0 +1,13 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+  <!-- xpando app icon: Lucide "panda" (ISC license, https://lucide.dev/icons/panda) on a white rounded square. -->
+  <!-- Regenerate icons: render to a 1024px PNG, then `npx tauri icon <png> --output src-tauri/icons` and delete android/ and ios/. -->
+  <rect x="32" y="32" width="960" height="960" rx="220" fill="#FFFFFF"/>
+  <g transform="translate(112 112) scale(33.33)" fill="none" stroke="#1B1B1B" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M11.25 17.25h1.5L12 18z"/>
+    <path d="m15 12 2 2"/>
+    <path d="M17.902 6.599a8 8 0 0 0-.5-.5"/>
+    <path d="M2 14.5C2 19.47 6.48 22 12 22s10-2.53 10-7.5a10 10 0 0 0-1.3-4.83 4.5 4.5 0 1 0-7.05-5.5 8 8 0 0 0-3.3 0 4.5 4.5 0 1 0-7.04 5.5A10 10 0 0 0 2 14.5"/>
+    <path d="M6.099 6.599a8 8 0 0 1 .5-.5"/>
+    <path d="m9 12-2 2"/>
+  </g>
+</svg>

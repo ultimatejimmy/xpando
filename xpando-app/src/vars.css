@@ -1,0 +1,459 @@
+/* Macros editor and Insert macro menu. Uses the variables from styles.css and editor.css. */
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Insert macro menu */
+.macro-menu {
+  position: relative;
+  justify-self: start;
+}
+
+.macro-list {
+  position: absolute;
+  z-index: 5;
+  top: calc(100% + 4px);
+  left: 0;
+  display: grid;
+  min-width: 280px;
+  max-width: min(420px, 90vw);
+  padding: 4px;
+  border: 1px solid var(--field-border);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.18);
+}
+
+.macro-item {
+  display: grid;
+  grid-template-columns: 16px auto 1fr;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.macro-item:hover,
+.macro-item:focus-visible {
+  background: var(--bg);
+}
+
+.macro-item:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.macro-label {
+  font-weight: 600;
+}
+
+.macro-off {
+  cursor: not-allowed;
+}
+
+.macro-off .macro-label {
+  color: var(--muted);
+}
+
+.macro-hint {
+  color: var(--muted);
+  font-size: 12px;
+  text-align: right;
+}
+
+/* Macros section */
+.var-cards {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.var-card {
+  display: grid;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.var-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 10px;
+}
+
+/* Normal mode: the card's title is what it is and how it shows in the text */
+.var-head:has(.var-title) {
+  flex-wrap: nowrap;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.var-title {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  margin: 0;
+  font-weight: 600;
+}
+
+.var-title svg {
+  flex: none;
+}
+
+/* Settings that are rarely changed */
+.var-more > summary {
+  width: fit-content;
+  color: var(--muted);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.var-more > summary:hover {
+  color: var(--ink);
+}
+
+.var-more > summary:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.var-more-body {
+  display: grid;
+  gap: 12px;
+  margin-top: 10px;
+}
+
+.var-name {
+  flex: 1 1 140px;
+}
+
+.var-type {
+  flex: 2 1 200px;
+}
+
+.var-buttons {
+  display: flex;
+  gap: 4px;
+}
+
+.var-field {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.var-field > label,
+.var-label {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.var-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 10px;
+}
+
+.var-hint {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.var-hint svg {
+  flex: none;
+  margin-top: 1px;
+}
+
+.var-error {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0;
+  color: var(--danger-text);
+  font-size: 13px;
+}
+
+.var-error svg {
+  flex: none;
+  margin-top: 2px;
+}
+
+.var-add {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.var-add .field {
+  width: auto;
+  min-width: 200px;
+}
+
+.var-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.var-check input {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent);
+}
+
+.var-checks {
+  display: grid;
+  gap: 6px;
+}
+
+.param-row {
+  display: grid;
+  grid-template-columns: minmax(80px, 1fr) minmax(120px, 2fr) auto;
+  align-items: start;
+  gap: 6px;
+}
+
+.var-help {
+  font-size: 13px;
+}
+
+.var-help summary {
+  cursor: pointer;
+  color: var(--muted);
+}
+
+.var-help summary:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.token-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 4px 12px;
+  margin: 8px 0 0;
+}
+
+.token-list div {
+  display: flex;
+  gap: 8px;
+}
+
+.token-list dt,
+.token-list dd {
+  margin: 0;
+}
+
+.token-list dd {
+  color: var(--muted);
+}
+
+.date-preview {
+  color: var(--ink);
+  font-family: "Cascadia Mono", Consolas, monospace;
+}
+
+.editor-body-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Collapsible Macros section */
+.vars-heading {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.vars-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px 4px 2px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  cursor: pointer;
+}
+
+.vars-toggle:hover {
+  background: var(--bg);
+}
+
+.vars-toggle:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.vars-chevron {
+  transition: transform 0.12s;
+}
+
+.vars-toggle[aria-expanded="true"] .vars-chevron {
+  transform: rotate(90deg);
+}
+
+.vars-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+}
+
+.vars-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 8px;
+  border: 1px solid var(--warn-text);
+  border-radius: 999px;
+  color: var(--warn-text);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.vars-badge-problem {
+  border-color: var(--danger-text);
+  color: var(--danger-text);
+}
+
+.vars-body {
+  display: grid;
+  gap: 12px;
+}
+
+.vars-body[hidden] {
+  display: none;
+}
+
+/* Notices (removed, renamed, blocked) and unused macros */
+.var-notice {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  font-size: 13px;
+}
+
+.var-notice > svg {
+  flex: none;
+}
+
+.var-notice-error {
+  border-color: var(--danger-text);
+  color: var(--danger-text);
+}
+
+.var-unused {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  color: var(--warn-text);
+  font-size: 13px;
+}
+
+.var-unused svg {
+  flex: none;
+}
+
+/* Plain labels with the file's own name beside them in Advanced mode */
+.var-key {
+  margin-left: 8px;
+  padding: 0 6px;
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--muted);
+  font-family: "Cascadia Mono", Consolas, monospace;
+  font-size: 12px;
+  font-weight: 400;
+}
+
+/* "(vars: in the YAML)" beside the Macros heading, Advanced mode only */
+.var-aka {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.var-aka code {
+  font-family: "Cascadia Mono", Consolas, monospace;
+}
+
+.date-examples {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.date-example {
+  padding: 2px 10px;
+  font-size: 13px;
+}
+
+.date-example.is-on {
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+.vars-summary .chip {
+  font-family: "Cascadia Mono", Consolas, monospace;
+  font-size: 12px;
+}
+
+.var-add {
+  align-items: center;
+}
+
+/* The Add menu sits at the end of the section, so it opens upwards. */
+.macro-list.macro-up {
+  top: auto;
+  bottom: calc(100% + 4px);
+}
+
+/* "Changing this clears the settings" only matters while the choice is being made. */
+.var-type .var-hint {
+  display: none;
+}
+
+.var-type:focus-within .var-hint {
+  display: block;
+}

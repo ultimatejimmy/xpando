@@ -1,0 +1,13 @@
+[package]
+name = "xpando-core"
+version = "0.1.0"
+description = "Phrase model and espanso config discovery for the xpando app"
+edition = "2021"
+license = "GPL-3.0"
+
+# Standalone workspace: keeps xpando out of espanso's Cargo.lock so upstream merges stay clean.
+[workspace]
+
+[dependencies]
+serde = { version = "=1.0.229", features = ["derive"] }
+serde_norway = "=0.9.42"

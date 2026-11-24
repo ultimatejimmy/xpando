@@ -1,0 +1,58 @@
+/* Fredoka (SIL OFL 1.1, see public/fonts/Fredoka-OFL.txt), used for the wordmark only. */
+@font-face {
+  font-family: "Fredoka";
+  src: url("/fonts/Fredoka.ttf") format("truetype");
+  font-weight: 300 700;
+  font-stretch: 75% 125%;
+  font-display: swap;
+}
+
+:root {
+  --accent: #107c10;
+  --ink: #1b1b1b;
+  --muted: #5c6370;
+  --bg: #eef1f6;
+  --surface: #ffffff;
+  --border: #e1e4ea;
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --ink: #f3f3f3;
+    --muted: #a0a6b1;
+    --bg: #1c1e22;
+    --surface: #25282d;
+    --border: #353941;
+    --accent: #6ccb5f;
+    color-scheme: dark;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  min-height: 60px;
+  padding: 0 16px;
+}
+
+/* Wordmark font (Fredoka SemiBold) is bundled in a later step; falls back for now. */
+.wordmark {
+  font-family: Fredoka, "Segoe UI Variable Display", system-ui, sans-serif;
+  font-size: 24px;
+  font-weight: 600;
+  line-height: 1;
+}
