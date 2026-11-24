@@ -138,7 +138,13 @@ fake `gh` (`scripts/add-macos-to-release.test.mjs`), including the cases that mu
   November 2026 and the `-large` and `-xlarge` ones are paid.
 - **Dry run first:** `dry_run` is on by default for manual runs. It builds macOS and runs every
   check (merged `latest.json`, checksums) but uploads nothing, and the log says what it would do.
-  Do one dry run, then run it again with `dry_run` off.
+  Do one dry run, then do the real one **without building again**: run it with `dry_run` off and
+  `reuse_run` set to the number of the dry run (the number in its URL). The real run then only
+  checks and uploads the macOS files the dry run built; it skips the build and the wait for a Mac
+  runner. The built files are kept for 7 days. If the run cannot be reused (not a release-macos
+  run, not started by hand, not finished, no build for that tag, expired) the run stops and says
+  why; it never rebuilds on its own. From a terminal:
+  `gh workflow run release-macos.yml --repo ultimatejimmy/xpando -f tag=<tag> -f dry_run=false -f reuse_run=<run number>`.
 - **Nightly:** the schedule (07:17 UTC, when runners are least busy) is **off until you set the
   repository variable `RELEASE_MACOS_NIGHTLY` to `true`** (Settings, Secrets and variables, Actions,
   Variables). Switch it on after one dry run and one real run have worked. It looks at the last 10
