@@ -64,7 +64,11 @@ pub struct PhraseRef {
 /// the folder named after their file). Each file is changed in one write; if a file cannot be
 /// changed the error says so and the files done before it stay changed.
 #[tauri::command]
-pub fn set_phrases_folder(app: AppHandle, items: Vec<PhraseRef>, folder: Option<String>) -> Result<(), String> {
+pub fn set_phrases_folder(
+    app: AppHandle,
+    items: Vec<PhraseRef>,
+    folder: Option<String>,
+) -> Result<(), String> {
     let dir = data_dir(&app)?;
     let mut files: Vec<String> = Vec::new();
     for it in &items {
@@ -73,7 +77,11 @@ pub fn set_phrases_folder(app: AppHandle, items: Vec<PhraseRef>, folder: Option<
         }
     }
     for file in files {
-        let indexes: Vec<usize> = items.iter().filter(|i| i.file == file).map(|i| i.index).collect();
+        let indexes: Vec<usize> = items
+            .iter()
+            .filter(|i| i.file == file)
+            .map(|i| i.index)
+            .collect();
         edit::edit_file_now(&dir, &file, |text| {
             edit::set_phrase_folders(text, &indexes, folder.as_deref())
         })
@@ -110,5 +118,6 @@ pub fn folder_names_set(app: AppHandle, names: Vec<String>) -> Result<(), String
             clean.push(n);
         }
     }
-    std::fs::write(&path, clean.join("\n") + "\n").map_err(|e| format!("Could not save the folder list: {e}"))
+    std::fs::write(&path, clean.join("\n") + "\n")
+        .map_err(|e| format!("Could not save the folder list: {e}"))
 }

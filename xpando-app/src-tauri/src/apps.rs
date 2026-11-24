@@ -428,14 +428,23 @@ pub async fn app_icons(
         };
         let mut known = cache.lock().map_err(|e| e.to_string())?;
         for e in &todo {
-            let hit = found.iter().find(|(f, _)| f.eq_ignore_ascii_case(e)).map(|(_, d)| d.clone());
+            let hit = found
+                .iter()
+                .find(|(f, _)| f.eq_ignore_ascii_case(e))
+                .map(|(_, d)| d.clone());
             known.insert(e.to_lowercase(), hit);
         }
     }
     let known = cache.lock().map_err(|e| e.to_string())?;
     Ok(wanted
         .into_iter()
-        .filter_map(|e| known.get(&e.to_lowercase()).cloned().flatten().map(|d| (e, d)))
+        .filter_map(|e| {
+            known
+                .get(&e.to_lowercase())
+                .cloned()
+                .flatten()
+                .map(|d| (e, d))
+        })
         .collect())
 }
 
@@ -644,7 +653,10 @@ nonsense
 ";
         assert_eq!(
             parse_icon_lines(text, &asked),
-            vec![("Word.exe".to_string(), "data:image/png;base64,QUJD+/=".to_string())]
+            vec![(
+                "Word.exe".to_string(),
+                "data:image/png;base64,QUJD+/=".to_string()
+            )]
         );
     }
 

@@ -295,7 +295,9 @@ pub const MAX_FOLDER_NAME_CHARS: usize = 60;
 pub fn validate_folder_name(name: &str) -> Result<String, String> {
     let n = name.trim();
     if n.chars().count() > MAX_FOLDER_NAME_CHARS {
-        return Err(format!("A folder name can have at most {MAX_FOLDER_NAME_CHARS} characters."));
+        return Err(format!(
+            "A folder name can have at most {MAX_FOLDER_NAME_CHARS} characters."
+        ));
     }
     if n.chars().any(|c| c.is_control()) {
         return Err("A folder name cannot contain control characters.".into());
@@ -1276,7 +1278,11 @@ pub fn edit_file(
 /// Files the phrases at `indexes` in the folder `folder` (`Some("")` is "no folder", `None`
 /// removes the setting so the phrase is in the folder named after its file). Everything else
 /// in each entry is left as it was.
-pub fn set_phrase_folders(text: &str, indexes: &[usize], folder: Option<&str>) -> Result<String, String> {
+pub fn set_phrase_folders(
+    text: &str,
+    indexes: &[usize],
+    folder: Option<&str>,
+) -> Result<String, String> {
     let folder = match folder {
         Some(f) => Some(validate_folder_name(f)?),
         None => None,
@@ -1997,15 +2003,25 @@ mod tests {
 "
         );
         let (phrases, _) = parse_match_text(&one);
-        assert_eq!(phrases[1].options.folder.as_deref(), Some("Client: work #1"));
+        assert_eq!(
+            phrases[1].options.folder.as_deref(),
+            Some("Client: work #1")
+        );
         assert_eq!(phrases[0].options.folder, None);
         // Several at once, "no folder", and removing the setting again.
         let none = set_phrase_folders(&one, &[0, 1], Some("")).unwrap();
         let (p2, _) = parse_match_text(&none);
         assert!(p2.iter().all(|p| p.options.folder.as_deref() == Some("")));
         assert_eq!(set_phrase_folders(&none, &[0, 1], None).unwrap(), t);
-        assert!(set_phrase_folders(t, &[0], Some("bad
-name")).is_err());
+        assert!(set_phrase_folders(
+            t,
+            &[0],
+            Some(
+                "bad
+name"
+            )
+        )
+        .is_err());
         assert!(set_phrase_folders(t, &[5], Some("x")).is_err());
     }
 }
