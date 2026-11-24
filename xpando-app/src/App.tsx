@@ -376,6 +376,23 @@ export default function App() {
         onCancel={() => guard(closeEditor)}
         onReload={load}
         onDirtyChange={setDirty}
+        worksIn={(isDirty) => (
+          <WorksIn
+            compact
+            blocked={isDirty ? "Save or cancel your changes first." : undefined}
+            folder={{
+              file: editing.file,
+              name: folders.find((f) => f.file === editing.file)?.name ?? editing.file,
+              hash: folders.find((f) => f.file === editing.file)?.hash ?? "",
+            }}
+            phrase={{ index: editing.base.index, triggers: editing.base.triggers, name: title(editing.base) }}
+            infos={infos}
+            folders={folders}
+            advanced={advanced}
+            onMoved={(o, n) => void phraseMoved(o, n)}
+            onReload={() => void load()}
+          />
+        )}
       />
     ) : null;
   const warnings = folders.flatMap((f) => f.warnings.map((w) => `${f.file}: ${w}`));
@@ -571,19 +588,6 @@ export default function App() {
                   onClose={() => setMoved(null)}
                 />
               )}
-              <WorksIn
-                folder={{
-                  file: current.folder,
-                  name: current.folderName,
-                  hash: folders.find((f) => f.file === current.folder)?.hash ?? "",
-                }}
-                phrase={{ index: current.phrase.index, triggers: current.phrase.triggers, name: title(current.phrase) }}
-                infos={infos}
-                folders={folders}
-                advanced={advanced}
-                onMoved={(o, n) => void phraseMoved(o, n)}
-                onReload={() => void load()}
-              />
               <h2 className="detail-title">{title(current.phrase)}</h2>
               {advanced && <FileMeta file={current.folder} line={current.phrase.line} />}
               {current.phrase.comment && current.phrase.comment !== title(current.phrase) && (
@@ -679,6 +683,19 @@ export default function App() {
               )}
               </div>
               )}
+              <WorksIn
+                folder={{
+                  file: current.folder,
+                  name: current.folderName,
+                  hash: folders.find((f) => f.file === current.folder)?.hash ?? "",
+                }}
+                phrase={{ index: current.phrase.index, triggers: current.phrase.triggers, name: title(current.phrase) }}
+                infos={infos}
+                folders={folders}
+                advanced={advanced}
+                onMoved={(o, n) => void phraseMoved(o, n)}
+                onReload={() => void load()}
+              />
             </>
           ) : (
             <p className="empty">Select a phrase to see its details.</p>

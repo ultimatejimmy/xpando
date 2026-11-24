@@ -1,6 +1,6 @@
 import { useEffect, useId, useMemo, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { AlertTriangle, AppWindow, MoveRight, Undo2, X } from "lucide-react";
+import { AlertTriangle, MoveRight, Undo2, X } from "lucide-react";
 import { AppPicker } from "./AppPicker";
 import { CONFLICT_PREFIX, ChangeList, Dialog, Problem, errorText, useDialog, type Change, type FolderInfo } from "./FolderManager";
 import { allAppsFolders, rememberOrigin, returnFolder, worksIn, worksInLabel, type Origins } from "./worksInLogic";
@@ -86,6 +86,8 @@ export function WorksIn({
   advanced,
   onMoved,
   onReload,
+  compact,
+  blocked,
 }: {
   folder: WorksInFolder;
   phrase: WorksInPhrase;
@@ -94,21 +96,57 @@ export function WorksIn({
   advanced: boolean;
   onMoved: (outcome: MoveOutcome, phraseName: string) => void;
   onReload: () => void;
+  /** One line for a header (the editor), without the section heading and notes. */
+  compact?: boolean;
+  /** Why Change is unavailable right now, when it is. */
+  blocked?: string;
 }) {
   const [open, setOpen] = useState(false);
   const info = infos[folder.file];
   const current = worksIn(info);
   const label = info ? worksInLabel(current) : "…";
+  const change = (
+    <button
+      type="button"
+      className="wi-change"
+      onClick={() => setOpen(true)}
+      disabled={!info || !!blocked}
+      title={blocked}
+    >
+      Change
+    </button>
+  );
+  const dialog = open && info && (
+    <WorksInDialog
+      folder={folder}
+      phrase={phrase}
+      infos={infos}
+      folders={folders}
+      advanced={advanced}
+      onClose={() => setOpen(false)}
+      onMoved={onMoved}
+      onReload={onReload}
+    />
+  );
+  if (compact) {
+    return (
+      <div className="wi wi-compact">
+        <div className="wi-box">
+          <span className="wi-box-text">{label}</span>
+          {change}
+        </div>
+        {blocked && <p className="wi-note">Save or cancel your changes to change this.</p>}
+        {dialog}
+      </div>
+    );
+  }
   return (
     <div className="wi">
-      <span className="wi-label">
-        <AppWindow size={16} aria-hidden="true" />
-        Works in:
-      </span>
-      <strong>{label}</strong>
-      <button type="button" className="btn" onClick={() => setOpen(true)} disabled={!info}>
-        Change…
-      </button>
+      <h3 className="detail-meta">Works in</h3>
+      <p className="wi-line">
+        {label}
+        {change}
+      </p>
       {current.kind === "custom" && (
         <p className="wi-note">
           Its folder “{folder.name}” is limited in a way set up by hand (for example by a window title). Changing this
@@ -132,18 +170,7 @@ export function WorksIn({
           .
         </p>
       )}
-      {open && info && (
-        <WorksInDialog
-          folder={folder}
-          phrase={phrase}
-          infos={infos}
-          folders={folders}
-          advanced={advanced}
-          onClose={() => setOpen(false)}
-          onMoved={onMoved}
-          onReload={onReload}
-        />
-      )}
+      {dialog}
     </div>
   );
 }

@@ -164,24 +164,52 @@
 
 /* "Works in" on the phrase detail */
 .wi {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 4px 10px;
-  margin: 0 0 12px;
-  font-size: 13px;
+  font-size: 14px;
 }
 
-.wi-label {
-  display: inline-flex;
+.wi-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 12px;
+  margin: 0;
+}
+
+.wi-change {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  font-size: 13px;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.wi-box {
+  display: flex;
   align-items: center;
-  gap: 6px;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 10px;
+  border: 1px solid var(--field-border);
+  border-radius: 6px;
+  background: var(--surface);
+  font-size: 14px;
+}
+
+.wi-box-text {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.wi-change:disabled {
   color: var(--muted);
+  cursor: default;
 }
 
 .wi-note {
-  flex-basis: 100%;
-  margin: 0;
+  margin: 4px 0 0;
   color: var(--muted);
   font-size: 12px;
 }
