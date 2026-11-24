@@ -50,13 +50,66 @@
   flex: 1;
   min-height: 0;
   display: grid;
-  grid-template-columns: minmax(160px, 220px) minmax(240px, 380px) minmax(280px, 1fr);
+  grid-template-columns: var(--side-w, 220px) var(--list-w, 380px) minmax(280px, 1fr);
   gap: 8px;
   margin: 0 8px 8px;
+  position: relative;
+}
+
+/* Drag handle in the gap after a pane */
+.pane-grip {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  z-index: 3;
+  width: 8px;
+  cursor: col-resize;
+  touch-action: none;
+}
+
+.pane-grip:hover,
+.pane-grip:focus-visible {
+  background: var(--accent);
+  opacity: 0.5;
+  outline: none;
+}
+
+.folder-name {
+  min-width: 0;
+}
+
+.folder-label {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.folder-label::first-letter {
+  text-transform: uppercase;
+}
+
+.list-sort {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 8px 8px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.list-sort select {
+  font: inherit;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--field-border);
+  border-radius: 6px;
+  padding: 2px 6px;
 }
 
 .pane {
   min-height: 0;
+  overflow-x: hidden;
   overflow-y: auto;
   padding: 8px;
   background: var(--surface);
@@ -69,6 +122,7 @@
   margin: 0;
   padding: 0;
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 2px;
 }
 
@@ -147,7 +201,31 @@ button {
 .phrase {
   display: grid;
   gap: 4px;
-  padding: 8px 10px;
+  padding: 10px 12px;
+}
+
+/* Zebra stripes: every other phrase has a light tint, no lines. The selected one is filled
+   with the accent bar. */
+.pane.list ul {
+  gap: 0;
+}
+
+.pane.list ul > li:nth-child(even) {
+  background: var(--bg);
+}
+
+.pane.list .phrase {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.pane.list .phrase:hover {
+  background: var(--border);
+}
+
+.pane.list .phrase[aria-current="true"] {
+  background: color-mix(in srgb, var(--accent) 16%, var(--surface));
 }
 
 .phrase-top {
@@ -259,6 +337,10 @@ button {
     grid-template-columns: 1fr;
   }
 
+  .pane-grip {
+    display: none;
+  }
+
   .pane {
     max-height: 60vh;
   }
@@ -339,4 +421,23 @@ button {
   color: var(--muted);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+}
+
+/* The folder menu under a phrase's title */
+.detail-folder {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 8px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.detail-folder select {
+  font: inherit;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--field-border);
+  border-radius: 6px;
+  padding: 2px 6px;
 }

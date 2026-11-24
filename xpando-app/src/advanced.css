@@ -91,11 +91,10 @@
   flex-direction: column;
 }
 
-/* The list grows so the conflicts panel sits at the bottom, but its rows must stay compact
-   instead of stretching to fill the extra height. */
-.sidebar > ul {
-  flex: 1 0 auto;
-  align-content: start;
+/* The New folder button and the conflicts panel sit at the bottom; the rows above stay compact. */
+.side-bottom {
+  margin-top: auto;
+  padding-top: 12px;
 }
 
 .adv-folder-file {
@@ -177,6 +176,55 @@
 
 .adv-conflict button:hover {
   background: var(--bg);
+}
+
+.adv-conflict-help {
+  margin: 0 0 6px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.adv-conflict-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.adv-conflict-row .adv-conflict-open {
+  flex: 1 1 auto;
+  width: auto;
+  min-width: 0;
+}
+
+.adv-conflict .adv-conflict-del,
+.adv-conflict .adv-conflict-ask .btn {
+  display: inline-flex;
+  width: auto;
+  flex: none;
+  min-height: 28px;
+  padding: 2px 10px;
+  border: 1px solid var(--field-border);
+  border-radius: 6px;
+  background: var(--surface);
+  font-size: 12px;
+}
+
+.adv-conflict .adv-conflict-ask .btn-danger {
+  border-color: var(--danger);
+  background: var(--danger);
+  color: var(--on-danger);
+}
+
+.adv-conflict-ask {
+  display: inline-flex;
+  gap: 4px;
+  flex: none;
+}
+
+.adv-conflict-problem {
+  margin: 6px 0 0;
+  color: var(--danger-text);
+  font-size: 12px;
 }
 
 .adv-conflict-where {

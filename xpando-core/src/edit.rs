@@ -243,6 +243,11 @@ fn validate_options(new: &PhraseOptions, old: &PhraseOptions) -> Result<PhraseOp
             }
         }
     }
+    if new.folder != old.folder {
+        if let Some(f) = &new.folder {
+            validate_folder_name(f)?;
+        }
+    }
     if new.force_mode != old.force_mode {
         if let Some(s) = &new.force_mode {
             if !FORCE_MODES.contains(&s.as_str()) {
@@ -260,11 +265,15 @@ fn validate_options(new: &PhraseOptions, old: &PhraseOptions) -> Result<PhraseOp
             }
         }
     }
-    Ok(new.clone())
+    let mut out = new.clone();
+    if let Some(f) = &out.folder {
+        out.folder = Some(f.trim().to_string());
+    }
+    Ok(out)
 }
 
 /// The scalar options in the order new keys are written.
-fn scalar_options(o: &PhraseOptions) -> [(&'static str, Option<String>); 6] {
+fn scalar_options(o: &PhraseOptions) -> [(&'static str, Option<String>); 7] {
     let b = |v: Option<bool>| v.map(|v| v.to_string());
     [
         ("word", b(o.word)),
@@ -273,7 +282,27 @@ fn scalar_options(o: &PhraseOptions) -> [(&'static str, Option<String>); 6] {
         ("propagate_case", b(o.propagate_case)),
         ("uppercase_style", o.uppercase_style.clone()),
         ("force_mode", o.force_mode.clone()),
+        // Written as quoted text, since a folder name can hold `:` or `#`.
+        ("xpando_folder", o.folder.as_deref().map(dq)),
     ]
+}
+
+/// The longest folder name xpando writes.
+pub const MAX_FOLDER_NAME_CHARS: usize = 60;
+
+/// Checks a folder name: some text of a reasonable length without control characters. Empty
+/// text is allowed here; it means "in no folder".
+pub fn validate_folder_name(name: &str) -> Result<String, String> {
+    let n = name.trim();
+    if n.chars().count() > MAX_FOLDER_NAME_CHARS {
+        return Err(format!(
+            "A folder name can have at most {MAX_FOLDER_NAME_CHARS} characters."
+        ));
+    }
+    if n.chars().any(|c| c.is_control()) {
+        return Err("A folder name cannot contain control characters.".into());
+    }
+    Ok(n.to_string())
 }
 
 fn render_search_terms(terms: &[String], k: usize, step: usize, eol: &str) -> Vec<String> {
@@ -1246,6 +1275,63 @@ pub fn edit_file(
         .ok_or_else(|| "The file disappeared after saving.".to_string())
 }
 
+/// Files the phrases at `indexes` in the folder `folder` (`Some("")` is "no folder", `None`
+/// removes the setting so the phrase is in the folder named after its file). Everything else
+/// in each entry is left as it was.
+pub fn set_phrase_folders(
+    text: &str,
+    indexes: &[usize],
+    folder: Option<&str>,
+) -> Result<String, String> {
+    let folder = match folder {
+        Some(f) => Some(validate_folder_name(f)?),
+        None => None,
+    };
+    let mut text = text.to_string();
+    for &index in indexes {
+        let (phrases, _) = parse_match_text(&text);
+        let Some(p) = phrases.into_iter().find(|p| p.index == index) else {
+            return Err(format!(
+                "Entry #{} could not be read, so xpando leaves it untouched.",
+                index + 1
+            ));
+        };
+        if p.options.folder == folder {
+            continue;
+        }
+        let mut options = p.options.clone();
+        options.folder = folder.clone();
+        let edit = PhraseEdit {
+            triggers: p.triggers.clone(),
+            label: p.label.clone(),
+            body: None,
+            comment: CommentChange::Keep,
+            options: Some(options),
+        };
+        text = update_phrase(&text, index, &edit)?;
+    }
+    Ok(text)
+}
+
+/// Like [`edit_file`], for changes that do not start from something the user saw: it reads the
+/// file's current hash itself. Returns whether anything changed.
+pub fn edit_file_now(
+    config_dir: &Path,
+    file: &str,
+    edit: impl FnOnce(&str) -> Result<String, String>,
+) -> Result<bool, String> {
+    let path = resolve_match_file(config_dir, file)?;
+    let bytes = fs::read(&path).map_err(|e| format!("Could not read the file: {e}"))?;
+    let hash = content_hash(&bytes);
+    let text = String::from_utf8(bytes).map_err(|_| "The file is not valid UTF-8.".to_string())?;
+    let new_text = edit(&text)?;
+    if new_text == text {
+        return Ok(false);
+    }
+    save_file(&path, &new_text, &hash).map_err(|e| e.to_string())?;
+    Ok(true)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1893,5 +1979,49 @@ mod tests {
         let mut e = same(odd, 0);
         e.label = Some("L".into());
         assert!(update_phrase(odd, 0, &e).is_ok());
+    }
+
+    #[test]
+    fn files_phrases_in_folders() {
+        let t = "matches:
+  # note
+  - trigger: a
+    replace: x
+  - trigger: b
+    replace: y
+";
+        let one = set_phrase_folders(t, &[1], Some("Client: work #1")).unwrap();
+        assert_eq!(
+            one,
+            "matches:
+  # note
+  - trigger: a
+    replace: x
+  - trigger: b
+    replace: y
+    xpando_folder: \"Client: work #1\"
+"
+        );
+        let (phrases, _) = parse_match_text(&one);
+        assert_eq!(
+            phrases[1].options.folder.as_deref(),
+            Some("Client: work #1")
+        );
+        assert_eq!(phrases[0].options.folder, None);
+        // Several at once, "no folder", and removing the setting again.
+        let none = set_phrase_folders(&one, &[0, 1], Some("")).unwrap();
+        let (p2, _) = parse_match_text(&none);
+        assert!(p2.iter().all(|p| p.options.folder.as_deref() == Some("")));
+        assert_eq!(set_phrase_folders(&none, &[0, 1], None).unwrap(), t);
+        assert!(set_phrase_folders(
+            t,
+            &[0],
+            Some(
+                "bad
+name"
+            )
+        )
+        .is_err());
+        assert!(set_phrase_folders(t, &[5], Some("x")).is_err());
     }
 }

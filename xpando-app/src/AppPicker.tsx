@@ -6,7 +6,6 @@ import {
   chipsFor,
   filterRows,
   isWindows,
-  knownRows,
   parseTypedExes,
   programRows,
   removeExes,
@@ -17,7 +16,7 @@ import {
 } from "./knownApps";
 import { friendlyNames } from "./worksInLogic";
 
-type Source = "common" | "open" | "installed";
+type Source = "open" | "installed";
 
 const MAX_ROWS = 150;
 
@@ -26,8 +25,8 @@ function errorText(e: unknown): string {
 }
 
 /**
- * Chooses programs by name: a search box over three lists (common programs, programs that are
- * open now, programs installed on this computer), a Browse button for a program file, and
+ * Chooses programs by name: a search box over two lists (programs installed on this computer and
+ * programs that are open now), a Browse button for a program file, and
  * removable chips for what is chosen. Used for a folder's apps and for a phrase's "Works in".
  * In Advanced mode there is also a field for typing a file name such as winword.exe.
  *
@@ -47,9 +46,8 @@ export function AppPicker({
   const windows = useMemo(() => typeof navigator !== "undefined" && isWindows(navigator.userAgent), []);
   const sources: { id: Source; label: string }[] = windows
     ? [
-        { id: "common", label: "Common" },
-        { id: "open", label: "Open now" },
         { id: "installed", label: "Installed" },
+        { id: "open", label: "Open now" },
       ]
     : [{ id: "open", label: "Open now" }];
   const [source, setSource] = useState<Source>(sources[0].id);
@@ -93,7 +91,7 @@ export function AppPicker({
   }, [source, running, installed, load]);
 
   const rows: Row[] = useMemo(() => {
-    const all = source === "common" ? knownRows() : programRows(source === "open" ? (running ?? []) : (installed ?? []));
+    const all = programRows(source === "open" ? (running ?? []) : (installed ?? []));
     return filterRows(all, query);
   }, [source, running, installed, query]);
   const shown = rows.slice(0, MAX_ROWS);
@@ -214,18 +212,16 @@ export function AppPicker({
             {s.label}
           </button>
         ))}
-        {source !== "common" && (
-          <button
-            type="button"
-            className="btn ap-refresh"
-            onClick={() => void load(source === "open" ? "open" : "installed", true)}
-            disabled={loading !== null}
-            aria-label={source === "open" ? "Look again for open programs" : "Look again for installed programs"}
-          >
-            <RefreshCw size={14} aria-hidden="true" />
-            Refresh
-          </button>
-        )}
+        <button
+          type="button"
+          className="btn ap-refresh"
+          onClick={() => void load(source === "open" ? "open" : "installed", true)}
+          disabled={loading !== null}
+          aria-label={source === "open" ? "Look again for open programs" : "Look again for installed programs"}
+        >
+          <RefreshCw size={14} aria-hidden="true" />
+          Refresh
+        </button>
       </div>
 
       <div role="tabpanel" id={`${uid}-panel`} aria-labelledby={`${uid}-tab-${source}`} className="ap-panel">

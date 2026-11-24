@@ -278,6 +278,176 @@ pub async fn list_installed_programs(refresh: bool) -> Result<Vec<Program>, Stri
     Ok(list)
 }
 
+// ---------------------------------------------------------------------------------------
+// Program icons (Windows only; other systems show the generic icon)
+// ---------------------------------------------------------------------------------------
+
+/// Finds each program named in the `XPANDO_ICON_EXES` environment variable (one file name per
+/// line, already checked by xpando) among the running programs, the App Paths registry keys and
+/// the Start Menu shortcuts, and prints `exe<TAB>base64 PNG` for each one whose icon it can read.
+/// The names travel in the environment, never inside the script text.
+#[cfg(any(windows, test))]
+const ICON_SCRIPT: &str = r#"
+$ErrorActionPreference = 'SilentlyContinue'
+[Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false)
+Add-Type -AssemblyName System.Drawing
+$want = @($env:XPANDO_ICON_EXES -split "[\r\n]+" | Where-Object { $_ })
+# Folders often name a program without ".exe" ("firefox"), so look it up by its file name.
+$keys = @{}
+foreach ($w in $want) { $k = $w.ToLower(); if (-not $k.EndsWith('.exe')) { $k = $k + '.exe' }; $keys[$w] = $k }
+$paths = @{}
+Get-Process | ForEach-Object {
+  try {
+    $p = $_.MainModule.FileName
+    if ($p) { $k = [System.IO.Path]::GetFileName($p).ToLower(); if (-not $paths.ContainsKey($k)) { $paths[$k] = $p } }
+  } catch {}
+}
+foreach ($hive in 'HKLM:', 'HKCU:') {
+  Get-ChildItem "$hive\SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths" | ForEach-Object {
+    $k = $_.PSChildName.ToLower()
+    if (-not $paths.ContainsKey($k)) {
+      $p = (Get-ItemProperty $_.PSPath).'(default)'
+      if ($p) { $p = $p.Trim('"'); if (Test-Path $p) { $paths[$k] = $p } }
+    }
+  }
+}
+$missing = @($want | Where-Object { -not $paths.ContainsKey($keys[$_]) })
+if ($missing.Count -gt 0) {
+  $sh = New-Object -ComObject WScript.Shell
+  $roots = @("$env:ProgramData\Microsoft\Windows\Start Menu\Programs", "$env:APPDATA\Microsoft\Windows\Start Menu\Programs")
+  foreach ($r in $roots) {
+    if (Test-Path $r) {
+      Get-ChildItem -Path $r -Filter *.lnk -Recurse -File | ForEach-Object {
+        $t = $sh.CreateShortcut($_.FullName).TargetPath
+        if ($t -and $t.ToLower().EndsWith('.exe') -and (Test-Path $t)) {
+          $k = [System.IO.Path]::GetFileName($t).ToLower()
+          if (-not $paths.ContainsKey($k)) { $paths[$k] = $t }
+        }
+      }
+    }
+  }
+}
+foreach ($w in $want) {
+  $p = $null
+  $p = $paths[$keys[$w]]
+  if (-not $p) { continue }
+  try {
+    $bmp = [System.Drawing.Icon]::ExtractAssociatedIcon($p).ToBitmap()
+    $ms = New-Object System.IO.MemoryStream
+    $bmp.Save($ms, [System.Drawing.Imaging.ImageFormat]::Png)
+    $w + "`t" + [Convert]::ToBase64String($ms.ToArray())
+  } catch {}
+}
+"#;
+
+/// Largest icon text accepted from the script. Real icons are a few KB.
+const MAX_ICON_CHARS: usize = 200_000;
+
+/// Reads `exe<TAB>base64` lines into `(exe, data URL)` pairs. Only requested programs and plain
+/// base64 text are accepted, so nothing else the script prints can reach the page.
+#[cfg(any(windows, test))]
+fn parse_icon_lines(text: &str, asked: &[String]) -> Vec<(String, String)> {
+    let mut out = Vec::new();
+    for line in text.lines() {
+        let Some((exe, data)) = line.trim().split_once('\t') else {
+            continue;
+        };
+        let data = data.trim();
+        let Some(asked_name) = asked.iter().find(|a| a.eq_ignore_ascii_case(exe.trim())) else {
+            continue;
+        };
+        let plain = !data.is_empty()
+            && data.len() <= MAX_ICON_CHARS
+            && data
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || c == '+' || c == '/' || c == '=');
+        if plain {
+            out.push((asked_name.clone(), format!("data:image/png;base64,{data}")));
+        }
+    }
+    out
+}
+
+/// What was learned so far, by lower-case file name; `None` means "no icon found".
+static ICONS: OnceLock<Mutex<std::collections::HashMap<String, Option<String>>>> = OnceLock::new();
+
+#[cfg(windows)]
+fn icons_blocking(exes: &[String]) -> Result<Vec<(String, String)>, String> {
+    use std::os::windows::process::CommandExt;
+    let mut cmd = Command::new("powershell.exe");
+    cmd.args([
+        "-NoProfile",
+        "-NonInteractive",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-EncodedCommand",
+        &crate::data::encode_powershell(ICON_SCRIPT),
+    ])
+    .env("XPANDO_ICON_EXES", exes.join("\n"))
+    .stdin(Stdio::null())
+    .creation_flags(0x0800_0000); // CREATE_NO_WINDOW
+    let (code, out, _) = crate::data::run_with_timeout(cmd, Duration::from_secs(60))?;
+    if code != 0 {
+        return Err("Could not read the program icons.".into());
+    }
+    Ok(parse_icon_lines(&String::from_utf8_lossy(&out), exes))
+}
+
+#[cfg(not(windows))]
+fn icons_blocking(_exes: &[String]) -> Result<Vec<(String, String)>, String> {
+    Ok(Vec::new())
+}
+
+/// Small icons for the given program file names, as `data:` URLs. Programs without a findable
+/// icon are left out of the answer. Each program is looked up once until xpando closes.
+#[tauri::command]
+pub async fn app_icons(
+    exes: Vec<String>,
+) -> Result<std::collections::HashMap<String, String>, String> {
+    let cache = ICONS.get_or_init(|| Mutex::new(std::collections::HashMap::new()));
+    let mut wanted: Vec<String> = Vec::new();
+    for e in exes {
+        if exe_ok(&e) && !wanted.iter().any(|w| w.eq_ignore_ascii_case(&e)) {
+            wanted.push(e);
+        }
+    }
+    let todo: Vec<String> = {
+        let known = cache.lock().map_err(|e| e.to_string())?;
+        wanted
+            .iter()
+            .filter(|e| !known.contains_key(&e.to_lowercase()))
+            .cloned()
+            .collect()
+    };
+    if !todo.is_empty() {
+        let found = {
+            let todo = todo.clone();
+            tauri::async_runtime::spawn_blocking(move || icons_blocking(&todo))
+                .await
+                .map_err(|e| e.to_string())??
+        };
+        let mut known = cache.lock().map_err(|e| e.to_string())?;
+        for e in &todo {
+            let hit = found
+                .iter()
+                .find(|(f, _)| f.eq_ignore_ascii_case(e))
+                .map(|(_, d)| d.clone());
+            known.insert(e.to_lowercase(), hit);
+        }
+    }
+    let known = cache.lock().map_err(|e| e.to_string())?;
+    Ok(wanted
+        .into_iter()
+        .filter_map(|e| {
+            known
+                .get(&e.to_lowercase())
+                .cloned()
+                .flatten()
+                .map(|d| (e, d))
+        })
+        .collect())
+}
+
 /// Windows: the "Open" dialog for a program file. Prints `path<TAB>description` and exits 0;
 /// exit code 2 is "cancelled". With `XPANDO_PICK_DRY` set it builds the dialog and exits 3
 /// without showing it (used to check that the script compiles).
@@ -472,6 +642,24 @@ pub async fn pick_program(window: tauri::WebviewWindow) -> Result<Option<Program
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn icon_lines_keep_only_asked_programs_and_plain_base64() {
+        let asked = vec!["Word.exe".to_string(), "x.exe".to_string()];
+        let text = "word.EXE	QUJD+/=
+other.exe	QUJD
+x.exe	<script>
+x.exe	
+nonsense
+";
+        assert_eq!(
+            parse_icon_lines(text, &asked),
+            vec![(
+                "Word.exe".to_string(),
+                "data:image/png;base64,QUJD+/=".to_string()
+            )]
+        );
+    }
+
     use super::*;
 
     #[test]

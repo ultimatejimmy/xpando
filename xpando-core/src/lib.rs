@@ -90,6 +90,12 @@ pub struct PhraseOptions {
     /// Extra words the search finds this phrase by.
     #[serde(default)]
     pub search_terms: Vec<String>,
+    /// The xpando folder the phrase is filed in (`xpando_folder:` in the entry; espanso ignores
+    /// it). `None`: not set, so the phrase is in the folder named after its file. An empty text
+    /// means "in no folder". Folders are only labels: they have nothing to do with which apps
+    /// the phrase works in.
+    #[serde(default)]
+    pub folder: Option<String>,
 }
 
 /// One phrase (a single entry of `matches:`), read-only.
@@ -227,6 +233,7 @@ fn parse_options(map: &serde_norway::Mapping) -> PhraseOptions {
         propagate_case: flag("propagate_case"),
         uppercase_style: text("uppercase_style"),
         force_mode: text("force_mode"),
+        folder: text("xpando_folder"),
         search_terms: map
             .get("search_terms")
             .and_then(Value::as_sequence)

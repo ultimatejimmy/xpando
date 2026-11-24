@@ -97,14 +97,41 @@ export function isAppFolder(folder: ScopeFolder | undefined): boolean {
   return folder?.scope.kind === "only";
 }
 
-/** Splits folders into the ordinary ones and the app-specific ones, keeping their order. */
-export function splitFolders<T extends { file: string }>(
+const plain = (t: string) => t.toLowerCase().replace(/[^\p{L}\p{N}]/gu, "");
+
+/**
+ * True for a folder xpando made (or would make) for some programs: it works only in them and is
+ * named after them ("Word", "Word, Outlook"). A folder the user named and filled themselves stays
+ * a folder, whatever apps it is limited to.
+ */
+export function isAutoAppFolder(name: string, folder: ScopeFolder | undefined): boolean {
+  if (!folder || !isAppFolder(folder)) return false;
+  const exes = [...new Set(folder.scope.apps.flatMap((a) => a.exe_names))];
+  if (exes.length === 0) return false;
+  const n = plain(name);
+  const friendlyJoined = plain(friendlyNames(exes).slice(0, 3).join(", "));
+  return (
+    n === friendlyJoined ||
+    exes.some((e) => n === plain(exeKey(e)) || n === plain(friendlyNames([e])[0])) ||
+    n === plain(exes.map((e) => exeKey(e)).join(", "))
+  );
+}
+
+/**
+ * Splits folders into the ones listed as folders and the ones listed as apps (see
+ * [`isAutoAppFolder`]), each sorted A to Z by name.
+ */
+export function splitFolders<T extends { file: string; name: string }>(
   folders: readonly T[],
   infos: Readonly<Record<string, ScopeFolder | undefined>>,
 ): { general: T[]; apps: T[] } {
   const general: T[] = [];
   const apps: T[] = [];
-  for (const f of folders) (isAppFolder(infos[f.file]) ? apps : general).push(f);
+  for (const f of folders) (isAutoAppFolder(f.name, infos[f.file]) ? apps : general).push(f);
+  // A to Z, ignoring capitals, so the list is in a predictable order.
+  const byName = (a: T, b: T) => a.name.localeCompare(b.name, undefined, { sensitivity: "base", numeric: true });
+  general.sort(byName);
+  apps.sort(byName);
   return { general, apps };
 }
 
@@ -141,4 +168,50 @@ export function returnFolder(
   const from = origins[originKey(file, firstTrigger)];
   if (from && candidates.some((c) => c.file === from)) return from;
   return candidates.find((c) => c.file.toLowerCase() === "base.yml")?.file ?? candidates[0]?.file ?? null;
+}
+
+// ---- apps as categories -------------------------------------------------------------------
+
+/**
+ * One entry of the "Apps" list. Files are still limited per folder, but the list shows one entry
+ * per program: a folder that works in Word and Excel is listed under both.
+ */
+export interface AppCategory {
+  /** What the list selects by: `app:<program>`, or the folder's file for a folder with a
+   * hand-written filter that has no program names. */
+  key: string;
+  name: string;
+  /** The program file names this entry stands for (empty for a hand-written filter). */
+  exes: string[];
+  /** The folder files whose phrases belong under this entry. */
+  files: string[];
+}
+
+export function appCategories<T extends { file: string; name: string }>(
+  appFolders: readonly T[],
+  infos: Readonly<Record<string, ScopeFolder | undefined>>,
+): AppCategory[] {
+  const byKey = new Map<string, AppCategory>();
+  const sole = new Map<string, string>(); // program key -> name of a folder made for just that program
+  for (const f of appFolders) {
+    const exes = [...new Set((infos[f.file]?.scope.apps ?? []).flatMap((a) => a.exe_names))];
+    if (exes.length === 0) {
+      byKey.set(f.file, { key: f.file, name: f.name, exes: [], files: [f.file] });
+      continue;
+    }
+    if (exes.length === 1 && !sole.has(exeKey(exes[0]))) sole.set(exeKey(exes[0]), f.name);
+    for (const e of exes) {
+      const key = `app:${exeKey(e)}`;
+      const c = byKey.get(key) ?? { key, name: "", exes: [], files: [] };
+      if (!c.exes.some((x) => exeKey(x) === exeKey(e))) c.exes.push(e);
+      if (!c.files.includes(f.file)) c.files.push(f.file);
+      byKey.set(key, c);
+    }
+  }
+  for (const c of byKey.values()) {
+    if (c.name === "") c.name = sole.get(exeKey(c.exes[0])) ?? friendlyNames([c.exes[0]])[0];
+  }
+  return [...byKey.values()].sort((a, b) =>
+    a.name.localeCompare(b.name, undefined, { sensitivity: "base", numeric: true }),
+  );
 }

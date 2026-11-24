@@ -272,11 +272,30 @@ function conflictNote(c: Conflict): string {
 export function ConflictsPanel({
   conflicts,
   onJump,
+  onDelete,
 }: {
   conflicts: Conflict[];
   onJump: (file: string, index: number) => void;
+  /** Deletes one of the clashing phrases. */
+  onDelete: (file: string, index: number) => Promise<void>;
 }) {
   const [open, setOpen] = useState(false);
+  // The phrase whose Delete was pressed and is waiting for a second press, and any error.
+  const [asking, setAsking] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [problem, setProblem] = useState<string | null>(null);
+  async function remove(file: string, index: number) {
+    setBusy(true);
+    setProblem(null);
+    try {
+      await onDelete(file, index);
+      setAsking(null);
+    } catch (e) {
+      setProblem(String(e).replace(/^file-changed:\s*/, ""));
+    } finally {
+      setBusy(false);
+    }
+  }
   if (conflicts.length === 0) return null;
   const Chevron = open ? ChevronDown : ChevronRight;
   return (
@@ -294,19 +313,48 @@ export function ConflictsPanel({
             <li key={i} className="adv-conflict">
               <p className="adv-conflict-title">{conflictSummary(c)}</p>
               <p className="adv-conflict-note">{conflictNote(c)}</p>
+              <p className="adv-conflict-help">
+                Open a phrase to change its trigger, or delete the copy you do not need.
+              </p>
               <ul>
-                {c.phrases.map((p, j) => (
-                  <li key={j}>
-                    <button type="button" onClick={() => onJump(p.file, p.index)}>
-                      <span>{p.title}</span>
-                      <span className="adv-conflict-where">
-                        {p.trigger} · {p.file}
-                        {p.word !== "none" && ` · ${WORD_LABEL[p.word]}`}
-                      </span>
-                    </button>
-                  </li>
-                ))}
+                {c.phrases.map((p, j) => {
+                  const key = `${p.file}#${p.index}`;
+                  return (
+                    <li key={j} className="adv-conflict-row">
+                      <button type="button" className="adv-conflict-open" onClick={() => onJump(p.file, p.index)}>
+                        <span>{p.title}</span>
+                        <span className="adv-conflict-where">
+                          {p.trigger} · {p.file}
+                          {p.word !== "none" && ` · ${WORD_LABEL[p.word]}`}
+                        </span>
+                      </button>
+                      {asking === key ? (
+                        <span className="adv-conflict-ask">
+                          <button type="button" className="btn btn-danger" disabled={busy} onClick={() => void remove(p.file, p.index)}>
+                            {busy ? "Deleting…" : "Delete"}
+                          </button>
+                          <button type="button" className="btn" disabled={busy} onClick={() => setAsking(null)}>
+                            Keep
+                          </button>
+                        </span>
+                      ) : (
+                        <button
+                          type="button"
+                          className="btn adv-conflict-del"
+                          aria-label={`Delete “${p.title}” from ${p.file}`}
+                          onClick={() => {
+                            setProblem(null);
+                            setAsking(key);
+                          }}
+                        >
+                          Delete
+                        </button>
+                      )}
+                    </li>
+                  );
+                })}
               </ul>
+              {problem && asking && <p className="adv-conflict-problem">{problem}</p>}
             </li>
           ))}
         </ul>

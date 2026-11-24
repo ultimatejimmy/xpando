@@ -1,3 +1,4 @@
+import type { NewPlace } from "./WorksIn";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import type { KeyboardEvent, ReactNode } from "react";
 import { invoke } from "@tauri-apps/api/core";
@@ -34,6 +35,8 @@ export interface EditorOptions {
   uppercase_style: string | null;
   force_mode: string | null;
   search_terms: string[];
+  /** The xpando folder (`null`: not set, so the one named after the file; `""`: no folder). */
+  folder: string | null;
 }
 
 export const NO_OPTIONS: EditorOptions = {
@@ -44,6 +47,7 @@ export const NO_OPTIONS: EditorOptions = {
   uppercase_style: null,
   force_mode: null,
   search_terms: [],
+  folder: null,
 };
 
 /** Tolerates a backend that predates `options`. */
@@ -60,6 +64,7 @@ function optionsKey(o: EditorOptions): string {
     o.uppercase_style,
     o.force_mode,
     o.search_terms,
+    o.folder,
   ]);
 }
 
@@ -354,6 +359,18 @@ interface EditorProps {
   start?: ClipboardStart;
   /** The "Works in" control for the header, given whether there are unsaved changes. */
   worksIn?: (dirty: boolean) => ReactNode;
+  /** For a new phrase: the "Works in" control, given the current choice and how to change it. */
+  newWorksIn?: (place: NewPlace, setPlace: (next: NewPlace) => void) => ReactNode;
+  /** Tells the user something after the editor has closed (the phrase was saved but not moved). */
+  onNotice?: (text: string) => void;
+  /** For a new phrase: where it should work to start with (an app selected in the list). */
+  initialPlace?: NewPlace;
+  /** The folders a phrase can be filed in. */
+  folderNames?: string[];
+  /** The folder an existing phrase is in when it has no label of its own (its file's). */
+  fileDefaultFolder?: string | null;
+  /** For a new phrase: the folder it starts in (`null`: none). */
+  initialFolder?: string | null;
 }
 
 /** Plain text of a draft, for the copy button. */
@@ -376,7 +393,7 @@ function draftText(
 
 export function PhraseEditor({
   folders,
-  file,
+  file: fileProp,
   phrase,
   onSaved,
   onCancel,
@@ -384,9 +401,22 @@ export function PhraseEditor({
   onDirtyChange,
   start,
   worksIn,
+  newWorksIn,
+  onNotice,
+  initialPlace,
+  folderNames,
+  fileDefaultFolder,
+  initialFolder,
 }: EditorProps) {
+  const file = fileProp;
+  // A new phrase is saved into this folder first, then moved to where the user chose.
+  const [newPlace, setNewPlace] = useState<NewPlace>(initialPlace ?? null);
   const folder = folders.find((f) => f.file === file);
-  const baseOptions = useMemo(() => normalizeOptions(phrase?.options), [phrase]);
+  const baseOptions = useMemo(
+    () => normalizeOptions(phrase ? phrase.options : { folder: initialFolder ?? "" }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [phrase],
+  );
   const [triggers, setTriggers] = useState<string[]>(phrase ? phrase.triggers : [""]);
   const [label, setLabel] = useState(phrase?.label ?? "");
   const [description, setDescription] = useState(phrase?.comment ?? "");
@@ -623,7 +653,7 @@ export function PhraseEditor({
             expectedHash: saved.hash,
           });
         }
-        onSaved(saved, newIndex);
+        await finishNew(saved, newIndex);
       } else if (phrase) {
         const edit = {
           triggers,
@@ -669,11 +699,37 @@ export function PhraseEditor({
                 phrase: newPhrase,
                 expectedHash: folder.hash,
               });
-        onSaved(saved, Math.max(...saved.phrases.map((p) => p.index)));
+        await finishNew(saved, Math.max(...saved.phrases.map((p) => p.index)));
       }
     } catch (err) {
       setError(errorText(err));
       setSaving(false);
+    }
+  }
+
+  /** A new phrase was added to `file`; when it should work in certain apps, move it there now. */
+  async function finishNew(saved: EditorFolder, index: number) {
+    if (!newPlace) {
+      onSaved(saved, index);
+      return;
+    }
+    try {
+      const out = await invoke<{ to_file: string; to_index: number }>("set_phrase_where", {
+        file,
+        index,
+        place: { kind: "apps", exes: newPlace.exes, names: newPlace.names },
+        expectedHash: saved.hash,
+      });
+      const all = await onReload();
+      const dest = all?.find((f) => f.file === out.to_file);
+      if (dest) onSaved(dest, out.to_index);
+      else onSaved(saved, index);
+    } catch (err) {
+      // The phrase exists already, so leave the editor and say where it ended up.
+      onSaved(saved, index);
+      onNotice?.(
+        `The phrase was saved in “${folder?.name ?? file}”, but it could not be moved to the chosen apps. ${errorText(err)}`,
+      );
     }
   }
 
@@ -823,7 +879,7 @@ export function PhraseEditor({
     >
       <div className="editor-head">
         <h2 className="detail-title">{phrase ? `Edit “${phraseName(phrase)}”` : "New phrase"}</h2>
-        {!(phrase && worksIn) && (
+        {!(phrase && worksIn) && !(!phrase && newWorksIn) && (
           <p className="detail-meta editor-where">
             {phrase
               ? `In ${advanced ? (folder?.file ?? file) : (folder?.name ?? file)}`
@@ -892,6 +948,36 @@ export function PhraseEditor({
           />
         </div>
         </div>
+
+        {!phrase && newWorksIn && (
+          <div className="editor-group" role="group" aria-labelledby={`${uid}-worksin`}>
+            <span className="editor-legend" id={`${uid}-worksin`}>
+              Works in
+            </span>
+            {newWorksIn(newPlace, setNewPlace)}
+          </div>
+        )}
+
+        {folderNames && (
+          <div className="editor-group">
+            <label htmlFor={`${uid}-folder`}>Folder</label>
+            <select
+              id={`${uid}-folder`}
+              className="field editor-dest"
+              value={opts.folder ?? fileDefaultFolder ?? ""}
+              onChange={(e) => patchOptions({ folder: e.target.value })}
+            >
+              <option value="">No folder</option>
+              {[...new Set([...(folderNames ?? []), opts.folder ?? fileDefaultFolder ?? ""])]
+                .filter(Boolean)
+                .map((n) => (
+                  <option key={n} value={n}>
+                    {n}
+                  </option>
+                ))}
+            </select>
+          </div>
+        )}
 
         {phrase && worksIn && (
           <div className="editor-group" role="group" aria-labelledby={`${uid}-worksin`}>
