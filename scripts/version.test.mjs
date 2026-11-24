@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { cpSync, mkdtempSync, readFileSync, mkdirSync } from "node:fs";
+import { cpSync, mkdtempSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -123,7 +123,10 @@ test("check detects drift", () => {
 });
 
 test("check without a version flags non-derived manifests", () => {
-  const dir = fixture(); // the repo still carries 0.1.0 until the first release
+  const dir = fixture();
+  // The repo carries a derived version once a release is prepared, so put a plain one back here.
+  const pkg = join(dir, "xpando-app/package.json");
+  writeFileSync(pkg, readFileSync(pkg, "utf8").replace(/"version": "[^"]*"/, '"version": "0.1.0"'));
   assert.ok(check(dir).some((p) => /not a derived/.test(p)));
   apply(dir, "2026.11.23");
   assert.deepEqual(check(dir), []);
