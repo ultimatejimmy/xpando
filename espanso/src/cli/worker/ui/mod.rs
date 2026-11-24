@@ -19,4 +19,3 @@
 
 pub mod notification;
 pub mod util;
-pub mod welcome;
