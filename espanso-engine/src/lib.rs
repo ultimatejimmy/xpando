@@ -29,6 +29,7 @@ use self::{
 pub mod dispatch;
 pub mod event;
 pub mod funnel;
+pub mod open_app;
 pub mod process;
 
 pub struct Engine<'a> {

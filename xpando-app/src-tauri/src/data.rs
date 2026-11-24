@@ -119,7 +119,7 @@ fn clean_picker_output(bytes: &[u8]) -> Option<String> {
 }
 
 /// Starts the command, waits up to `limit`, and returns (exit code, stdout, stderr).
-fn run_with_timeout(
+pub(crate) fn run_with_timeout(
     mut cmd: Command,
     limit: std::time::Duration,
 ) -> Result<(i32, Vec<u8>, Vec<u8>), String> {
@@ -149,7 +149,7 @@ fn run_with_timeout(
             None if started.elapsed() >= limit => {
                 let _ = child.kill();
                 let _ = child.wait();
-                return Err("The folder dialog was open too long and was closed.".into());
+                return Err("The helper program took too long and was closed.".into());
             }
             None => std::thread::sleep(std::time::Duration::from_millis(100)),
         }
@@ -222,10 +222,13 @@ fn base64(data: &[u8]) -> String {
 /// The script as the UTF-16LE base64 that `-EncodedCommand` expects.
 #[cfg(any(windows, test))]
 fn encoded_picker_script() -> String {
-    let bytes: Vec<u8> = WINDOWS_PICKER_SCRIPT
-        .encode_utf16()
-        .flat_map(u16::to_le_bytes)
-        .collect();
+    encode_powershell(WINDOWS_PICKER_SCRIPT)
+}
+
+/// A PowerShell script as the UTF-16LE base64 that `-EncodedCommand` expects.
+#[cfg(any(windows, test))]
+pub(crate) fn encode_powershell(script: &str) -> String {
+    let bytes: Vec<u8> = script.encode_utf16().flat_map(u16::to_le_bytes).collect();
     base64(&bytes)
 }
 

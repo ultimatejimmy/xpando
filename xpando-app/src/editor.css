@@ -107,6 +107,28 @@
   margin: 0;
 }
 
+.editor-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px 16px;
+}
+
+/* Trigger and Name side by side */
+.editor-pair {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+
+@media (max-width: 640px) {
+  .editor-pair {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 /* Label-to-field gap is wide enough that the 2px focus outline (plus its offset) never
    touches the label above. */
 .editor-group {
@@ -208,16 +230,16 @@ textarea.field {
   gap: 8px;
 }
 
-/* Sticky Save / Cancel bar at the top of the editor */
+/* Sticky Save / Cancel bar at the bottom of the editor */
 .editor-topbar {
   position: sticky;
-  top: -16px;
+  bottom: -16px;
   z-index: 4;
   display: grid;
   gap: 8px;
-  margin: -16px -24px 0;
+  margin: 0 -24px -16px;
   padding: 12px 24px;
-  border-bottom: 1px solid var(--border);
+  border-top: 1px solid var(--border);
   background: var(--surface);
 }
 
@@ -503,4 +525,12 @@ textarea.field {
   overflow-wrap: anywhere;
   font-family: "Cascadia Mono", Consolas, monospace;
   font-size: 13px;
+}
+
+/* The macro names under the text; clicking one opens the macro cards */
+.vars-chip {
+  font: inherit;
+  font-family: "Cascadia Mono", Consolas, monospace;
+  font-size: 12px;
+  cursor: pointer;
 }

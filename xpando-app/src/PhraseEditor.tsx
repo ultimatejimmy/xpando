@@ -1,5 +1,5 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
-import type { KeyboardEvent } from "react";
+import type { KeyboardEvent, ReactNode } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import {
   AlertTriangle,
@@ -352,6 +352,8 @@ interface EditorProps {
   onDirtyChange: (dirty: boolean) => void;
   /** A new phrase that starts with the clipboard's text (xpando:richtext). */
   start?: ClipboardStart;
+  /** The "Works in" control for the header, given whether there are unsaved changes. */
+  worksIn?: (dirty: boolean) => ReactNode;
 }
 
 /** Plain text of a draft, for the copy button. */
@@ -372,7 +374,17 @@ function draftText(
   return lines.join("\n");
 }
 
-export function PhraseEditor({ folders, file, phrase, onSaved, onCancel, onReload, onDirtyChange, start }: EditorProps) {
+export function PhraseEditor({
+  folders,
+  file,
+  phrase,
+  onSaved,
+  onCancel,
+  onReload,
+  onDirtyChange,
+  start,
+  worksIn,
+}: EditorProps) {
   const folder = folders.find((f) => f.file === file);
   const baseOptions = useMemo(() => normalizeOptions(phrase?.options), [phrase]);
   const [triggers, setTriggers] = useState<string[]>(phrase ? phrase.triggers : [""]);
@@ -478,6 +490,9 @@ export function PhraseEditor({ folders, file, phrase, onSaved, onCancel, onReloa
 
   // What is set under "More options", so a closed disclosure still says what is inside.
   const moreSummary = [
+    opts.propagate_case === true ? "match capitalization" : null,
+    advanced && opts.left_word === true ? "start of word" : null,
+    advanced && opts.right_word === true ? "end of word" : null,
     description.trim() !== "" ? "description" : null,
     opts.search_terms.length > 0
       ? `${opts.search_terms.length} search ${opts.search_terms.length === 1 ? "term" : "terms"}`
@@ -806,49 +821,19 @@ export function PhraseEditor({ folders, file, phrase, onSaved, onCancel, onReloa
       onKeyDown={onFormKeyDown}
       aria-label={phrase ? "Edit phrase" : "New phrase"}
     >
-      <h2 className="detail-title">{phrase ? `Edit “${phraseName(phrase)}”` : "New phrase"}</h2>
-      <p className="detail-meta editor-where">
-        {phrase
-          ? `In ${advanced ? (folder?.file ?? file) : (folder?.name ?? file)}`
-          : `Will be added to ${advanced ? (folder?.file ?? file) : (folder?.name ?? file)}`}
-      </p>
-
-      <div className="editor-topbar" role="toolbar" aria-label="Save or cancel this phrase">
-        <div className="editor-buttons">
-          <button
-            type="submit"
-            className="btn btn-primary"
-            data-where="top"
-            disabled={saveDisabled}
-            aria-describedby={problems.length > 0 ? `${uid}-topbar-note` : undefined}
-            title="Save (Ctrl+S)"
-          >
-            <Save size={16} aria-hidden="true" />
-            {saving ? "Saving…" : "Save"}
-          </button>
-          <button type="button" className="btn" onClick={onCancel} disabled={saving} title="Cancel (Esc)">
-            Cancel
-          </button>
-          {dirty && (
-            <span className="editor-unsaved">
-              <span className="editor-unsaved-dot" aria-hidden="true" />
-              Unsaved changes
-            </span>
-          )}
-        </div>
-        {problems.length > 0 && (
-          <p className="editor-topbar-note" id={`${uid}-topbar-note`}>
-            <AlertTriangle size={16} aria-hidden="true" />
-            <span>
-              Can't save yet: {problems[0]}
-              {problems.length > 1 ? ` (and ${problems.length - 1} more below)` : ""}
-            </span>
+      <div className="editor-head">
+        <h2 className="detail-title">{phrase ? `Edit “${phraseName(phrase)}”` : "New phrase"}</h2>
+        {!(phrase && worksIn) && (
+          <p className="detail-meta editor-where">
+            {phrase
+              ? `In ${advanced ? (folder?.file ?? file) : (folder?.name ?? file)}`
+              : `Will be added to ${advanced ? (folder?.file ?? file) : (folder?.name ?? file)}`}
           </p>
         )}
-        {error && saveFrom === "top" && <ErrorMessage message={error} onReload={() => void reload()} />}
       </div>
 
       <div className="editor-panel">
+        <div className="editor-pair">
         <div className="editor-group" role="group" aria-labelledby={`${uid}-triggers`}>
           <span className="editor-legend" id={`${uid}-triggers`}>
             {phrase?.is_regex ? "Regex trigger" : triggers.length > 1 ? "Triggers" : "Trigger"}
@@ -906,6 +891,16 @@ export function PhraseEditor({ folders, file, phrase, onSaved, onCancel, onReloa
             onChange={(e) => setLabel(e.target.value)}
           />
         </div>
+        </div>
+
+        {phrase && worksIn && (
+          <div className="editor-group" role="group" aria-labelledby={`${uid}-worksin`}>
+            <span className="editor-legend" id={`${uid}-worksin`}>
+              Works in
+            </span>
+            {worksIn(dirty)}
+          </div>
+        )}
 
         <div className="editor-group">
           <div className="rt-labelrow">
@@ -970,11 +965,26 @@ export function PhraseEditor({ folders, file, phrase, onSaved, onCancel, onReloa
 
         {vars.section /* xpando:vars */}
 
-        <div className="editor-group" role="group" aria-labelledby={`${uid}-when`}>
-          <span className="editor-legend" id={`${uid}-when`}>
-            When it expands
-          </span>
-          {FLAGS.filter((f) => advanced || !f.advanced).map(flagRow)}
+        <div className="editor-group">{flagRow(FLAGS[0])}</div>
+
+        <details
+          className="editor-more"
+          open={moreOpen}
+          onToggle={(e) => setMoreOpen(e.currentTarget.open)}
+        >
+          <summary>
+            <ChevronRight size={16} aria-hidden="true" className="editor-more-chev" />
+            More options
+            {moreSummary && <span className="editor-more-sum">{moreSummary}</span>}
+          </summary>
+          <div className="editor-more-body">
+            <div className="editor-group" role="group" aria-labelledby={`${uid}-match`}>
+              <span className="editor-legend" id={`${uid}-match`}>
+                Matching
+              </span>
+              {FLAGS.slice(1)
+                .filter((f) => advanced || !f.advanced)
+                .map(flagRow)}
           {advanced && (
             <div className="opt-select opt-indent">
               <label htmlFor={`${uid}-upper`}>
@@ -1003,19 +1013,8 @@ export function PhraseEditor({ folders, file, phrase, onSaved, onCancel, onReloa
               </p>
             </div>
           )}
-        </div>
+            </div>
 
-        <details
-          className="editor-more"
-          open={moreOpen}
-          onToggle={(e) => setMoreOpen(e.currentTarget.open)}
-        >
-          <summary>
-            <ChevronRight size={16} aria-hidden="true" className="editor-more-chev" />
-            More options
-            {moreSummary && <span className="editor-more-sum">{moreSummary}</span>}
-          </summary>
-          <div className="editor-more-body">
             <div className="editor-group">
               <label htmlFor={`${uid}-desc`}>Description</label>
               <textarea
@@ -1137,13 +1136,14 @@ export function PhraseEditor({ folders, file, phrase, onSaved, onCancel, onReloa
       )}
       {error && saveFrom === "bottom" && <ErrorMessage message={error} onReload={() => void reload()} />}
 
-      {advanced && (
-        <div className="editor-buttons" role="group" aria-label="Save or cancel at the end of the form">
+      <div className="editor-topbar" role="toolbar" aria-label="Save or cancel this phrase">
+        <div className="editor-buttons">
           <button
             type="submit"
             className="btn btn-primary"
-            data-where="bottom"
+            data-where="top"
             disabled={saveDisabled}
+            aria-describedby={problems.length > 0 ? `${uid}-topbar-note` : undefined}
             title="Save (Ctrl+S)"
           >
             <Save size={16} aria-hidden="true" />
@@ -1152,8 +1152,24 @@ export function PhraseEditor({ folders, file, phrase, onSaved, onCancel, onReloa
           <button type="button" className="btn" onClick={onCancel} disabled={saving} title="Cancel (Esc)">
             Cancel
           </button>
+          {dirty && (
+            <span className="editor-unsaved">
+              <span className="editor-unsaved-dot" aria-hidden="true" />
+              Unsaved changes
+            </span>
+          )}
         </div>
-      )}
+        {problems.length > 0 && (
+          <p className="editor-topbar-note" id={`${uid}-topbar-note`}>
+            <AlertTriangle size={16} aria-hidden="true" />
+            <span>
+              Can't save yet: {problems[0]}
+              {problems.length > 1 ? ` (and ${problems.length - 1} more below)` : ""}
+            </span>
+          </p>
+        )}
+        {error && saveFrom === "top" && <ErrorMessage message={error} onReload={() => void reload()} />}
+      </div>
     </form>
   );
 }

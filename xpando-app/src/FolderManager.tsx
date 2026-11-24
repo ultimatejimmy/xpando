@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState, type FormEvent, type KeyboardEvent, type ReactNode } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { AppWindow, ChevronDown, FolderPlus, Pencil, Plus, Settings2, Trash2, X } from "lucide-react";
+import { AppWindow, FolderPlus, MoreHorizontal, Pencil, Plus, Trash2 } from "lucide-react";
+import { AppPicker } from "./AppPicker";
 
 /** Mirrors `xpando_core::folders`. */
 export type ScopeKind = "all" | "only" | "except" | "nowhere";
@@ -28,7 +29,7 @@ export interface FolderInfo {
   imported_by: string[];
 }
 
-interface Change {
+export interface Change {
   file: string;
   action: "create" | "edit" | "rename" | "delete";
   detail: string;
@@ -51,9 +52,9 @@ export interface FolderRef {
   phrases: number;
 }
 
-const CONFLICT_PREFIX = "file-changed:";
+export const CONFLICT_PREFIX = "file-changed:";
 
-function errorText(e: unknown): string {
+export function errorText(e: unknown): string {
   const s = String(e);
   return s.startsWith(CONFLICT_PREFIX) ? s.slice(CONFLICT_PREFIX.length).trim() : s;
 }
@@ -120,7 +121,7 @@ export function ScopeLabel({ info, showAll = false }: { info: FolderInfo | undef
 // Shared pieces
 // ---------------------------------------------------------------------------------------
 
-function useDialog(onClose: () => void) {
+export function useDialog(onClose: () => void) {
   const ref = useRef<HTMLDialogElement>(null);
   useEffect(() => {
     const dialog = ref.current;
@@ -165,7 +166,7 @@ function usePreview(check: () => Promise<Change[]> | null, deps: unknown[]) {
   return { changes, error };
 }
 
-function ChangeList({ changes }: { changes: Change[] }) {
+export function ChangeList({ changes }: { changes: Change[] }) {
   return (
     <ul className="fm-changes">
       {changes.map((c, i) => (
@@ -190,7 +191,7 @@ const ACTION_TEXT: Record<Change["action"], string> = {
   delete: "will be deleted.",
 };
 
-function Problem({ message, onReload }: { message: string; onReload?: () => void }) {
+export function Problem({ message, onReload }: { message: string; onReload?: () => void }) {
   return (
     <p className="fm-problem" role="alert">
       {message}
@@ -206,7 +207,7 @@ function Problem({ message, onReload }: { message: string; onReload?: () => void
   );
 }
 
-function Dialog({
+export function Dialog({
   title,
   labelId,
   dialog,
@@ -280,7 +281,7 @@ function NewFolderDialog({ onClose, onDone }: { onClose: () => void; onDone: (fi
           aria-describedby={`${fieldId}-help`}
         />
         <p id={`${fieldId}-help`} className="fm-help">
-          Letters, digits, spaces, “-” and “_”. It applies to all apps until you limit it under Folder options.
+          Letters, digits, spaces, “,”, “-” and “_”. It applies to all apps until you limit it under Folder options.
         </p>
         {error && <Problem message={error} />}
         <div className="fm-buttons">
@@ -320,14 +321,6 @@ export function FolderToolbar({
   const scopeNote = info?.scope_locked ?? null;
   return (
     <div className="fm-bar">
-      {advanced && (
-        <p className="fm-bar-scope">
-          <AppWindow size={16} aria-hidden="true" />
-          <span>
-            Applies to: <strong>{info ? scopeLabel(info) : "…"}</strong>
-          </span>
-        </p>
-      )}
       <FolderMenu
         label={`Folder “${folder.name}”`}
         items={[
@@ -337,15 +330,34 @@ export function FolderToolbar({
         ]}
         onPick={(id) => setWhich(id)}
       />
-      {(lockNote || scopeNote) && (
-        <p className="fm-note">
-          {lockNote ? `This folder cannot be renamed or deleted here. ${lockNote}` : `Its apps cannot be changed here. ${scopeNote}`}
-        </p>
-      )}
       {which === "rename" && <RenameDialog folder={folder} onClose={close} onDone={onDone} advanced={advanced} />}
       {which === "delete" && <DeleteDialog folder={folder} onClose={close} onDone={onDone} advanced={advanced} />}
       {which === "apps" && info && (
         <AppsDialog folder={folder} info={info} advanced={advanced} onClose={close} onDone={onDone} />
+      )}
+    </div>
+  );
+}
+
+/** The lines under the folder's title: what it applies to (Advanced) and why it is locked, if it is. */
+export function FolderExtras({ info, advanced }: { info: FolderInfo | undefined; advanced: boolean }) {
+  const lockNote = info?.locked ?? null;
+  const scopeNote = info?.scope_locked ?? null;
+  if (!advanced && !lockNote && !scopeNote) return null;
+  return (
+    <div className="fm-extras">
+      {advanced && (
+        <p className="fm-bar-scope">
+          <AppWindow size={16} aria-hidden="true" />
+          <span>
+            Applies to: <strong>{info ? scopeLabel(info) : "…"}</strong>
+          </span>
+        </p>
+      )}
+      {(lockNote || scopeNote) && (
+        <p className="fm-note">
+          {lockNote ? `This folder cannot be renamed or deleted here. ${lockNote}` : `Its apps cannot be changed here. ${scopeNote}`}
+        </p>
       )}
     </div>
   );
@@ -402,15 +414,15 @@ function FolderMenu({
       <button
         type="button"
         ref={button}
-        className="btn"
+        className="btn btn-icon"
+        aria-label="Folder options"
+        title="Folder options"
         aria-haspopup="menu"
         aria-expanded={open}
         aria-controls={`${uid}-menu`}
         onClick={() => setOpen((o) => !o)}
       >
-        <Settings2 size={16} aria-hidden="true" />
-        Folder options
-        <ChevronDown size={16} aria-hidden="true" />
+        <MoreHorizontal size={18} aria-hidden="true" />
       </button>
       {open && (
         <div className="fm-menu-list" role="menu" id={`${uid}-menu`} aria-label={label}>
@@ -635,7 +647,6 @@ function AppsDialog({
   const customTitle = apps.some((a) => a.title_pattern && !a.title_text);
   const [mode, setMode] = useState<"all" | "only">(info.scope.kind === "only" ? "only" : "all");
   const [exes, setExes] = useState<string[]>(() => [...new Set(apps.flatMap((a) => a.exe_names))]);
-  const [draft, setDraft] = useState("");
   const [title, setTitle] = useState(apps.find((a) => a.title_text)?.title_text ?? "");
   const [dropCustomExec, setDropCustomExec] = useState(false);
   const [dropCustomTitle, setDropCustomTitle] = useState(false);
@@ -660,16 +671,6 @@ function AppsDialog({
     () => (alreadyAll ? null : invoke<Change[]>("preview_folder_scope", { file: folder.file, spec })),
     [JSON.stringify(spec)],
   );
-
-  function addDraft() {
-    const parts = draft
-      .split(/[,;\n]/)
-      .map((s) => s.trim())
-      .filter(Boolean);
-    if (parts.length === 0) return;
-    setExes((cur) => [...cur, ...parts.filter((p) => !cur.some((c) => c.toLowerCase() === p.toLowerCase()))]);
-    setDraft("");
-  }
 
   async function save() {
     setBusy(true);
@@ -706,48 +707,7 @@ function AppsDialog({
 
       {mode === "only" && (
         <div className="fm-apps">
-          <label htmlFor={`${listId}-exe`}>Programs</label>
-          <ul className="fm-chips" aria-label="Chosen programs">
-            {exes.map((x) => (
-              <li key={x} className="fm-chip">
-                {x}
-                <button
-                  type="button"
-                  className="fm-chip-x"
-                  aria-label={`Remove ${x}`}
-                  onClick={() => setExes((cur) => cur.filter((c) => c !== x))}
-                >
-                  <X size={14} aria-hidden="true" />
-                </button>
-              </li>
-            ))}
-            {exes.length === 0 && <li className="fm-help">No programs added.</li>}
-          </ul>
-          <div className="fm-add">
-            <input
-              id={`${listId}-exe`}
-              className="field"
-              value={draft}
-              placeholder="winword.exe"
-              autoComplete="off"
-              onChange={(e) => setDraft(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  e.preventDefault();
-                  addDraft();
-                }
-              }}
-              aria-describedby={`${listId}-exe-help`}
-            />
-            <button type="button" className="btn" onClick={addDraft} disabled={!draft.trim()}>
-              <Plus size={16} aria-hidden="true" />
-              Add
-            </button>
-          </div>
-          <p id={`${listId}-exe-help`} className="fm-help">
-            The program’s file name, for example winword.exe. Task Manager, Details tab, shows it while the
-            program runs.
-          </p>
+          <AppPicker value={exes} advanced={advanced} onChange={(next) => setExes(next)} />
           {customExec && (
             <label className="fm-check">
               <input type="checkbox" checked={dropCustomExec} onChange={(e) => setDropCustomExec(e.target.checked)} />

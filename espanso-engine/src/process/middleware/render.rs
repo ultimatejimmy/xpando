@@ -97,7 +97,7 @@ impl Middleware for RenderMiddleware<'_> {
                     dispatch(Event::caused_by(
                     event.source_id,
                     EventType::TextInject(TextInjectRequest {
-                      text: "[Espanso]: An error occurred during rendering, please examine the logs for more information.".to_string(),
+                      text: "[xpando]: An error occurred during rendering, please examine the logs for more information.".to_string(),
                       ..Default::default()
                     }),
                   ));

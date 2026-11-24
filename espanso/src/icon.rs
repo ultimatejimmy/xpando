@@ -27,6 +27,10 @@ const LOGO_NO_BACKGROUND_BINARY: &[u8] = include_bytes!("res/logo_no_background.
 #[cfg(target_os = "windows")]
 const WINDOWS_NORMAL_DARK_ICO_BINARY: &[u8] = include_bytes!("res/windows/normal_dark.ico");
 #[cfg(target_os = "windows")]
+const WINDOWS_NORMAL_LIGHT_ICO_BINARY: &[u8] = include_bytes!("res/windows/normal_light.ico");
+#[cfg(target_os = "windows")]
+const WINDOWS_DISABLED_LIGHT_ICO_BINARY: &[u8] = include_bytes!("res/windows/disabled_light.ico");
+#[cfg(target_os = "windows")]
 const WINDOWS_DISABLED_DARK_ICO_BINARY: &[u8] = include_bytes!("res/windows/disabled_dark.ico");
 #[cfg(target_os = "windows")]
 const WINDOWS_LOGO_ICO_BINARY: &[u8] = include_bytes!("res/windows/logo.ico");
@@ -67,28 +71,45 @@ pub struct IconPaths {
 
 #[cfg(target_os = "windows")]
 pub fn load_icon_paths(runtime_dir: &Path) -> Result<IconPaths> {
+    let light = taskbar_is_light();
     Ok(IconPaths {
         form_icon: Some(extract_icon(
             WINDOWS_LOGO_ICO_BINARY,
-            &runtime_dir.join("formv2.ico"),
+            &runtime_dir.join("formv3.ico"),
         )?),
-        search_icon: Some(extract_icon(ICON_BINARY, &runtime_dir.join("search.png"))?),
+        search_icon: Some(extract_icon(ICON_BINARY, &runtime_dir.join("search3.png"))?),
         wizard_icon: Some(extract_icon(
             WINDOWS_LOGO_ICO_BINARY,
-            &runtime_dir.join("wizardv2.ico"),
+            &runtime_dir.join("wizardv3.ico"),
         )?),
         tray_icon_normal: Some(extract_icon(
-            WINDOWS_NORMAL_DARK_ICO_BINARY,
-            &runtime_dir.join("normalv2.ico"),
+            if light {
+                WINDOWS_NORMAL_LIGHT_ICO_BINARY
+            } else {
+                WINDOWS_NORMAL_DARK_ICO_BINARY
+            },
+            &runtime_dir.join(if light {
+                "tray-normal-light.ico"
+            } else {
+                "tray-normal-dark.ico"
+            }),
         )?),
         tray_icon_disabled: Some(extract_icon(
-            WINDOWS_DISABLED_DARK_ICO_BINARY,
-            &runtime_dir.join("disabledv2.ico"),
+            if light {
+                WINDOWS_DISABLED_LIGHT_ICO_BINARY
+            } else {
+                WINDOWS_DISABLED_DARK_ICO_BINARY
+            },
+            &runtime_dir.join(if light {
+                "tray-disabled-light.ico"
+            } else {
+                "tray-disabled-dark.ico"
+            }),
         )?),
-        logo: Some(extract_icon(ICON_BINARY, &runtime_dir.join("iconv2.png"))?),
+        logo: Some(extract_icon(ICON_BINARY, &runtime_dir.join("iconv3.png"))?),
         logo_no_background: Some(extract_icon(
             LOGO_NO_BACKGROUND_BINARY,
-            &runtime_dir.join("icon_no_backgroundv2.png"),
+            &runtime_dir.join("icon_no_backgroundv3.png"),
         )?),
         tray_explain_image: Some(extract_icon(
             WINDOWS_TRAY_EXPLAIN_IMAGE,
@@ -114,10 +135,10 @@ pub fn load_icon_paths(runtime_dir: &Path) -> Result<IconPaths> {
             MAC_SYSTEM_DISABLED_BINARY,
             &runtime_dir.join("systemdisabledv2.png"),
         )?),
-        logo: Some(extract_icon(ICON_BINARY, &runtime_dir.join("iconv2.png"))?),
+        logo: Some(extract_icon(ICON_BINARY, &runtime_dir.join("iconv3.png"))?),
         logo_no_background: Some(extract_icon(
             LOGO_NO_BACKGROUND_BINARY,
-            &runtime_dir.join("icon_no_background.png"),
+            &runtime_dir.join("icon_no_background3.png"),
         )?),
         accessibility_image_1: Some(extract_icon(
             MAC_ACCESSIBILITY_1_BINARY,
@@ -138,11 +159,11 @@ pub fn load_icon_paths(runtime_dir: &Path) -> Result<IconPaths> {
 #[cfg(target_os = "linux")]
 pub fn load_icon_paths(runtime_dir: &Path) -> Result<IconPaths> {
     Ok(IconPaths {
-        logo: Some(extract_icon(ICON_BINARY, &runtime_dir.join("iconv2.png"))?),
-        search_icon: Some(extract_icon(ICON_BINARY, &runtime_dir.join("search.png"))?),
+        logo: Some(extract_icon(ICON_BINARY, &runtime_dir.join("iconv3.png"))?),
+        search_icon: Some(extract_icon(ICON_BINARY, &runtime_dir.join("search3.png"))?),
         logo_no_background: Some(extract_icon(
             LOGO_NO_BACKGROUND_BINARY,
-            &runtime_dir.join("icon_no_background.png"),
+            &runtime_dir.join("icon_no_background3.png"),
         )?),
         ..Default::default()
     })
@@ -160,4 +181,22 @@ fn extract_icon(data: &[u8], target_file: &Path) -> Result<PathBuf> {
     }
 
     Ok(target_file.to_owned())
+}
+
+/// Whether the Windows taskbar is light (so the tray icon must be dark). Read once, when the
+/// engine starts. Defaults to dark when Windows does not say.
+#[cfg(target_os = "windows")]
+fn taskbar_is_light() -> bool {
+    use std::os::windows::process::CommandExt;
+    std::process::Command::new("reg")
+        .args([
+            "query",
+            r"HKCU\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize",
+            "/v",
+            "SystemUsesLightTheme",
+        ])
+        .creation_flags(0x0800_0000) // CREATE_NO_WINDOW
+        .output()
+        .map(|o| String::from_utf8_lossy(&o.stdout).contains("0x1"))
+        .unwrap_or(false)
 }

@@ -26,7 +26,7 @@ use super::BuiltInMatch;
 pub fn create_match_exit() -> BuiltInMatch {
     BuiltInMatch {
         id: generate_next_builtin_id(),
-        label: "Exit espanso",
+        label: "Quit xpando",
         triggers: Vec::new(),
         action: |_| EventType::ExitRequested(ExitMode::ExitAllProcesses),
         ..Default::default()
@@ -36,9 +36,23 @@ pub fn create_match_exit() -> BuiltInMatch {
 pub fn create_match_restart() -> BuiltInMatch {
     BuiltInMatch {
         id: generate_next_builtin_id(),
-        label: "Restart espanso",
+        label: "Restart xpando",
         triggers: Vec::new(),
         action: |_| EventType::ExitRequested(ExitMode::RestartWorker),
+        ..Default::default()
+    }
+}
+
+pub fn create_match_open_app() -> BuiltInMatch {
+    BuiltInMatch {
+        id: generate_next_builtin_id(),
+        label: "Open xpando",
+        pinned: true,
+        triggers: Vec::new(),
+        action: |_| {
+            espanso_engine::open_app::open_xpando_app();
+            EventType::NOOP
+        },
         ..Default::default()
     }
 }

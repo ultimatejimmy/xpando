@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { AlertTriangle, Folder as FolderIcon, Library, Panda, Search } from "lucide-react";
+import { AlertTriangle, AppWindow, Folder as FolderIcon, Library, Panda, Search } from "lucide-react";
 import {
   AdvancedSwitch,
   ConflictsPanel,
@@ -25,7 +25,7 @@ import {
   type ClipboardStart,
   type EditorOptions,
 } from "./PhraseEditor";
-import { FolderToolbar, NewFolderButton, ScopeLabel, useFolderInfo } from "./FolderManager";
+import { FolderExtras, FolderToolbar, NewFolderButton, ScopeLabel, useFolderInfo } from "./FolderManager";
 import { RichTextView } from "./RichLazy";
 import { VarsAka, macroLabel } from "./VarsEditor";
 import { ClipboardHackOffer, EngineWarning, useEngine } from "./EnginePanels";
@@ -38,6 +38,8 @@ import {
   useImportOffer,
 } from "./DataFolder";
 import { UpdateBanner, useUpdates } from "./Updates";
+import { MovedNotice, WorksIn, type MoveOutcome } from "./WorksIn";
+import { splitFolders } from "./worksInLogic";
 
 interface MacroInfo {
   name: string;
@@ -235,6 +237,41 @@ export default function App() {
   }, [data.refresh]);
 
   const infos = useFolderInfo(folders);
+  const { general: generalFolders, apps: appFolders } = useMemo(() => splitFolders(folders, infos), [folders, infos]);
+
+  // After "Works in" moved a phrase: what happened, with a way to put it back.
+  const [moved, setMoved] = useState<{ outcome: MoveOutcome; name: string } | null>(null);
+  const [undoBusy, setUndoBusy] = useState(false);
+  const [undoError, setUndoError] = useState<string | null>(null);
+  const phraseMoved = async (outcome: MoveOutcome, name: string) => {
+    await load();
+    setEditing(null);
+    setScope(outcome.to_file);
+    setSelected(`${outcome.to_file}#${outcome.to_index}`);
+    setUndoError(null);
+    setMoved({ outcome, name });
+  };
+  const undoMove = async () => {
+    if (!moved) return;
+    setUndoBusy(true);
+    setUndoError(null);
+    try {
+      const out = await invoke<MoveOutcome>("set_phrase_where", {
+        file: moved.outcome.to_file,
+        index: moved.outcome.to_index,
+        place: { kind: "folder", file: moved.outcome.from_file },
+        expectedHash: folders.find((f) => f.file === moved.outcome.to_file)?.hash ?? "",
+      });
+      await load();
+      setScope(out.to_file);
+      setSelected(`${out.to_file}#${out.to_index}`);
+      setMoved(null);
+    } catch (e) {
+      setUndoError(String(e).replace(/^file-changed:\s*/, ""));
+    } finally {
+      setUndoBusy(false);
+    }
+  };
 
   /** A folder was created, renamed, deleted or given other apps: reload and show it. */
   const folderChanged = async (file: string | null) => {
@@ -339,9 +376,46 @@ export default function App() {
         onCancel={() => guard(closeEditor)}
         onReload={load}
         onDirtyChange={setDirty}
+        worksIn={(isDirty) => (
+          <WorksIn
+            compact
+            blocked={isDirty ? "Save or cancel your changes first." : undefined}
+            folder={{
+              file: editing.file,
+              name: folders.find((f) => f.file === editing.file)?.name ?? editing.file,
+              hash: folders.find((f) => f.file === editing.file)?.hash ?? "",
+            }}
+            phrase={{ index: editing.base.index, triggers: editing.base.triggers, name: title(editing.base) }}
+            infos={infos}
+            folders={folders}
+            advanced={advanced}
+            onMoved={(o, n) => void phraseMoved(o, n)}
+            onReload={() => void load()}
+          />
+        )}
       />
     ) : null;
   const warnings = folders.flatMap((f) => f.warnings.map((w) => `${f.file}: ${w}`));
+
+  const folderItem = (f: FolderData, appSpecific = false) => (
+    <li key={f.file}>
+      <button
+        type="button"
+        className="folder"
+        aria-current={scope === f.file}
+        title={f.file}
+        onClick={() => changeScope(f.file)}
+      >
+        {appSpecific ? <AppWindow size={16} aria-hidden="true" /> : <FolderIcon size={16} aria-hidden="true" />}
+        <span className="grow">
+          {f.name}
+          {advanced && <span className="adv-folder-file">{f.file}</span>}
+          <ScopeLabel info={infos[f.file]} showAll={advanced} />
+        </span>
+        <span className="count">{f.phrases.length}</span>
+      </button>
+    </li>
+  );
 
   return (
     <div className="app">
@@ -409,25 +483,14 @@ export default function App() {
                 <span className="count">{rows.length}</span>
               </button>
             </li>
-            {folders.map((f) => (
-              <li key={f.file}>
-                <button
-                  type="button"
-                  className="folder"
-                  aria-current={scope === f.file}
-                  title={f.file}
-                  onClick={() => changeScope(f.file)}
-                >
-                  <FolderIcon size={16} aria-hidden="true" />
-                  <span className="grow">
-                    {f.name}
-                    {advanced && <span className="adv-folder-file">{f.file}</span>}
-                    <ScopeLabel info={infos[f.file]} showAll={advanced} />
-                  </span>
-                  <span className="count">{f.phrases.length}</span>
-                </button>
+            {generalFolders.map((f) => folderItem(f))}
+            {appFolders.length > 0 && (
+              <li className="side-heading" role="presentation">
+                <AppWindow size={14} aria-hidden="true" />
+                Apps
               </li>
-            ))}
+            )}
+            {appFolders.map((f) => folderItem(f, true))}
           </ul>
           {/* Folder actions reload everything and close the editor, so they wait for unsaved edits. */}
           <div inert={folderActionsLocked} className={folderActionsLocked ? "folder-actions-locked" : undefined}>
@@ -437,29 +500,32 @@ export default function App() {
         </nav>
 
         <section className="pane list" aria-label={`${scopeName} phrases`}>
-          <h2 className="pane-title">
-            {scopeName} <span className="count">{visible.length}</span>
-          </h2>
-          {scopeFolder && (
-            <div
-              inert={folderActionsLocked}
-              className={folderActionsLocked ? "folder-actions-locked" : undefined}
-              title={folderActionsLocked ? "Save or cancel your edit to change this folder" : undefined}
-            >
-              <FolderToolbar
-                key={scopeFolder.file}
-                folder={{
-                  name: scopeFolder.name,
-                  file: scopeFolder.file,
-                  hash: scopeFolder.hash,
-                  phrases: scopeFolder.phrases.length,
-                }}
-                info={infos[scopeFolder.file]}
-                advanced={advanced}
-                onDone={(file) => void folderChanged(file)}
-              />
-            </div>
-          )}
+          <div className="pane-head">
+            <h2 className="pane-title">
+              {scopeName} <span className="count">{visible.length}</span>
+            </h2>
+            {scopeFolder && (
+              <div
+                inert={folderActionsLocked}
+                className={folderActionsLocked ? "folder-actions-locked" : undefined}
+                title={folderActionsLocked ? "Save or cancel your edit to change this folder" : undefined}
+              >
+                <FolderToolbar
+                  key={scopeFolder.file}
+                  folder={{
+                    name: scopeFolder.name,
+                    file: scopeFolder.file,
+                    hash: scopeFolder.hash,
+                    phrases: scopeFolder.phrases.length,
+                  }}
+                  info={infos[scopeFolder.file]}
+                  advanced={advanced}
+                  onDone={(file) => void folderChanged(file)}
+                />
+              </div>
+            )}
+          </div>
+          {scopeFolder && <FolderExtras info={infos[scopeFolder.file]} advanced={advanced} />}
           <NewPhraseButton
             disabled={folders.length === 0}
             onClick={() =>
@@ -515,6 +581,16 @@ export default function App() {
                 onDeleted={(f) => saved(f, null)}
                 onReload={load}
               />
+              {moved && (
+                <MovedNotice
+                  outcome={moved.outcome}
+                  phraseName={moved.name}
+                  busy={undoBusy}
+                  error={undoError}
+                  onUndo={() => void undoMove()}
+                  onClose={() => setMoved(null)}
+                />
+              )}
               <h2 className="detail-title">{title(current.phrase)}</h2>
               {advanced && <FileMeta file={current.folder} line={current.phrase.line} />}
               {current.phrase.comment && current.phrase.comment !== title(current.phrase) && (
@@ -610,6 +686,19 @@ export default function App() {
               )}
               </div>
               )}
+              <WorksIn
+                folder={{
+                  file: current.folder,
+                  name: current.folderName,
+                  hash: folders.find((f) => f.file === current.folder)?.hash ?? "",
+                }}
+                phrase={{ index: current.phrase.index, triggers: current.phrase.triggers, name: title(current.phrase) }}
+                infos={infos}
+                folders={folders}
+                advanced={advanced}
+                onMoved={(o, n) => void phraseMoved(o, n)}
+                onReload={() => void load()}
+              />
             </>
           ) : (
             <p className="empty">Select a phrase to see its details.</p>

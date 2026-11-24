@@ -306,7 +306,7 @@ interface MacroDef {
   /** Variable to create; null for text that needs none. */
   make: ((name: string) => VarSpec) | null;
   baseName: string;
-  /** Offered only in Advanced mode: technical, or needed only for building other macros. */
+  /** Offered only in Advanced mode: runs commands or programs on the computer. */
   advanced?: boolean;
 }
 
@@ -356,9 +356,8 @@ const MACROS: MacroDef[] = [
   },
   {
     id: "echo",
-    advanced: true,
     label: "Fixed text",
-    hint: "Text to reuse in other macros",
+    hint: "Text that stays the same",
     icon: <MessageSquare size={16} aria-hidden="true" />,
     baseName: "text",
     make: (n) => spec(n, "echo", [{ key: "echo", value: text("") }]),
@@ -366,7 +365,6 @@ const MACROS: MacroDef[] = [
   {
     // Needs xpando's engine build: stock espanso rejects this variable type.
     id: "set_clipboard",
-    advanced: true,
     label: "Set clipboard",
     hint: "Fills the clipboard",
     icon: <ClipboardCopy size={16} aria-hidden="true" />,
@@ -384,7 +382,6 @@ const MACROS: MacroDef[] = [
   },
   {
     id: "form",
-    advanced: true,
     label: "Form",
     hint: "Asks several questions",
     icon: <ClipboardList size={16} aria-hidden="true" />,
@@ -1077,9 +1074,9 @@ function VarsSection(p: SectionProps) {
       {!p.open && (
         <p className="vars-summary" id={`${uid}-sum`}>
           {p.items.map((it) => (
-            <span className="chip mono" key={it.key}>
+            <button type="button" className="chip mono vars-chip" key={it.key} onClick={p.onToggle}>
               {it.name || "(no name)"}
-            </span>
+            </button>
           ))}
           {issues > 0 && (
             <span className={`vars-badge${p.problemCount > 0 ? " vars-badge-problem" : ""}`}>

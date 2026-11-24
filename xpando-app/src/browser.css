@@ -123,10 +123,25 @@ button {
   font-weight: 400;
 }
 
+.pane-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 4px 8px 10px;
+}
+
 .pane-title {
-  margin: 4px 8px 8px;
-  font-size: 14px;
+  margin: 0;
+  min-width: 0;
+  font-size: 20px;
   font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.pane-title .count {
+  margin-left: 4px;
+  font-size: 14px;
 }
 
 .phrase {

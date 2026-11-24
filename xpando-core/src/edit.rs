@@ -840,14 +840,14 @@ pub fn update_phrase(text: &str, index: usize, edit: &PhraseEdit) -> Result<Stri
     Ok(new_text)
 }
 
-/// Appends a plain-text phrase at the end of the `matches:` block, in the file's style.
-pub fn add_phrase(text: &str, new: &NewPhrase) -> Result<String, String> {
-    let triggers = validate_triggers(&new.triggers)?;
-    let label = normalize_label(&new.label);
-    let body = normalize_body(&new.body);
-    let comment = new.comment.as_deref().and_then(normalize_comment);
-    let options = validate_options(&new.options, &PhraseOptions::default())?;
-
+/// Appends an entry at the end of the `matches:` block. `build` receives the file's entry
+/// layout (dash column, key offset after the dash, nested indent step, line ending) and returns
+/// the entry's lines (comment block first), each ending with the line ending. Returns the new
+/// text and the number of entries the file had before.
+fn append_entry(
+    text: &str,
+    build: impl FnOnce(usize, usize, usize, &str) -> Vec<String>,
+) -> Result<(String, usize), String> {
     let count = entry_count(text)?;
     let eol = detect_eol(text);
     let ends_nl = text.is_empty() || text.ends_with('\n');
@@ -916,28 +916,43 @@ pub fn add_phrase(text: &str, new: &NewPhrase) -> Result<String, String> {
     if blank_before {
         block.push(eol.to_string());
     }
-    if let Some(c) = &comment {
-        block.extend(render_comment(c, d, eol));
-    }
-    let k = d + offset;
-    let mut entry_lines = render_triggers(&triggers, k, step, eol);
-    entry_lines.extend(render_value("replace", &body, k, step, eol));
-    if let Some(l) = &label {
-        entry_lines.extend(render_value("label", l, k, step, eol));
-    }
-    entry_lines.extend(render_options(&options, k, step, eol));
-    let prefix = format!("{}-{}", " ".repeat(d), " ".repeat(offset - 1));
-    for (i, l) in entry_lines.into_iter().enumerate() {
-        block.push(if i == 0 {
-            format!("{prefix}{l}")
-        } else if l.starts_with(' ') || l == eol {
-            l
-        } else {
-            format!("{}{l}", " ".repeat(k))
-        });
-    }
+    block.extend(build(d, offset, step, eol));
     lines.splice(insert_at..insert_at, block);
-    let new_text = finish(lines, eol, ends_nl);
+    Ok((finish(lines, eol, ends_nl), count))
+}
+
+/// Appends a plain-text phrase at the end of the `matches:` block, in the file's style.
+pub fn add_phrase(text: &str, new: &NewPhrase) -> Result<String, String> {
+    let triggers = validate_triggers(&new.triggers)?;
+    let label = normalize_label(&new.label);
+    let body = normalize_body(&new.body);
+    let comment = new.comment.as_deref().and_then(normalize_comment);
+    let options = validate_options(&new.options, &PhraseOptions::default())?;
+
+    let (new_text, count) = append_entry(text, |d, offset, step, eol| {
+        let mut block = Vec::new();
+        if let Some(c) = &comment {
+            block.extend(render_comment(c, d, eol));
+        }
+        let k = d + offset;
+        let mut entry_lines = render_triggers(&triggers, k, step, eol);
+        entry_lines.extend(render_value("replace", &body, k, step, eol));
+        if let Some(l) = &label {
+            entry_lines.extend(render_value("label", l, k, step, eol));
+        }
+        entry_lines.extend(render_options(&options, k, step, eol));
+        let prefix = format!("{}-{}", " ".repeat(d), " ".repeat(offset - 1));
+        for (i, l) in entry_lines.into_iter().enumerate() {
+            block.push(if i == 0 {
+                format!("{prefix}{l}")
+            } else if l.starts_with(' ') || l == eol {
+                l
+            } else {
+                format!("{}{l}", " ".repeat(k))
+            });
+        }
+        block
+    })?;
 
     let expected = Phrase {
         triggers,
@@ -989,6 +1004,101 @@ pub fn delete_phrase(text: &str, index: usize) -> Result<String, String> {
 
     let new_text = finish(lines, ctx.eol, ctx.ends_nl);
     verify(text, &new_text, ctx.count, Op::Delete { index })?;
+    Ok(new_text)
+}
+
+// ---------------------------------------------------------------------------------------
+// Moving an entry between files
+// ---------------------------------------------------------------------------------------
+
+/// One entry lifted out of a match file together with its own comment block, ready to be put
+/// into another file with [`put_entry`]. Every key of the entry travels as it was written.
+#[derive(Debug, Clone)]
+pub struct EntryBlock {
+    /// The comment lines and the entry's lines, as in the source file.
+    lines: Vec<String>,
+    /// Column of the entry's `-` in the source file.
+    dash: usize,
+    /// The entry as parsed (without its line number).
+    phrase: Phrase,
+    /// The entry's whole YAML mapping, including keys xpando does not know.
+    value: Value,
+}
+
+impl EntryBlock {
+    /// The phrase as it reads in the source file.
+    pub fn phrase(&self) -> &Phrase {
+        &self.phrase
+    }
+}
+
+/// The YAML mapping of entry `index` of `matches:`.
+fn entry_value(text: &str, index: usize) -> Option<Value> {
+    let Ok(Value::Mapping(doc)) = serde_norway::from_str::<Value>(text) else {
+        return None;
+    };
+    doc.get("matches")?.as_sequence()?.get(index).cloned()
+}
+
+/// Takes entry `index` and its comment block out of `text`. Returns the text without it (as
+/// [`delete_phrase`] would) and the block to put elsewhere.
+pub fn take_entry(text: &str, index: usize) -> Result<(String, EntryBlock), String> {
+    let ctx = Ctx::load(text)?;
+    let phrase = without_line(ctx.phrase(index)?);
+    let value = entry_value(text, index).ok_or(UNSUPPORTED_ENTRY)?;
+    let span = &ctx.spans[index];
+    let be = ctx.body_end(span);
+    let block = EntryBlock {
+        lines: ctx.lines[span.first_line..be].to_vec(),
+        dash: indent(text_of(&ctx.lines[span.start_line])),
+        phrase,
+        value,
+    };
+    Ok((delete_phrase(text, index)?, block))
+}
+
+/// Appends `block` at the end of the `matches:` block of `text`, re-indented to the file's own
+/// style. The result is re-parsed and must hold the very same entry, with every other entry
+/// unchanged; otherwise nothing is returned.
+pub fn put_entry(text: &str, block: &EntryBlock) -> Result<String, String> {
+    let (new_text, count) = append_entry(text, |d, _offset, _step, eol| {
+        block
+            .lines
+            .iter()
+            .map(|l| {
+                let t = text_of(l);
+                if t.trim().is_empty() {
+                    return eol.to_string();
+                }
+                let shifted = if d >= block.dash {
+                    format!("{}{t}", " ".repeat(d - block.dash))
+                } else {
+                    let lead = indent(t).min(block.dash - d);
+                    t[lead..].to_string()
+                };
+                format!("{shifted}{eol}")
+            })
+            .collect()
+    })?;
+    let expected = Phrase {
+        index: count,
+        ..block.phrase.clone()
+    };
+    verify(
+        text,
+        &new_text,
+        count,
+        Op::Add {
+            expected: &expected,
+        },
+    )?;
+    if entry_value(&new_text, count).as_ref() != Some(&block.value) {
+        return Err(
+            "Safety check failed (the phrase would change on the way); nothing was changed. \
+             Please report this."
+                .into(),
+        );
+    }
     Ok(new_text)
 }
 
@@ -1089,10 +1199,26 @@ pub fn resolve_match_file(config_dir: &Path, file: &str) -> Result<PathBuf, Stri
     }
     let root = fs::canonicalize(config_dir.join("match")).map_err(|_| bad())?;
     let path = fs::canonicalize(root.join(&rel)).map_err(|_| bad())?;
-    if !path.starts_with(&root) || !path.is_file() {
-        return Err(bad());
+    if path.starts_with(&root) && path.is_file() {
+        return Ok(path);
     }
-    Ok(path)
+    // Some systems (for example a packaged Windows app, which redirects file access) report a
+    // file's real location somewhere other than under its folder, although the file is right
+    // there. Accept it when the name leads straight down from the folder and nothing on the way
+    // is a link. `rel` has no `..`, so it cannot leave the folder.
+    let mut walk = root;
+    for part in rel.components() {
+        walk.push(part);
+        match fs::symlink_metadata(&walk) {
+            Ok(m) if !m.file_type().is_symlink() => {}
+            _ => return Err(bad()),
+        }
+    }
+    if walk.is_file() {
+        Ok(walk)
+    } else {
+        Err(bad())
+    }
 }
 
 /// Loads `file`, checks it still hashes to `expected_hash`, lets `edit` turn its text into

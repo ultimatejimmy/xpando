@@ -299,7 +299,8 @@ pub fn initialize_and_spawn(
                 }
             }
 
-            let mut welcome_handle = None;
+            // xpando has its own app, so the engine never shows its welcome window; it is only
+            // marked as shown.
             match start_reason.as_deref() {
                 Some(flag) if flag == WORKER_START_REASON_CONFIG_CHANGED => {
                     notification_manager.notify_config_reloaded(false);
@@ -314,7 +315,6 @@ pub fn initialize_and_spawn(
                     notification_manager.notify_start();
 
                     if !preferences.has_displayed_welcome() {
-                        welcome_handle = super::ui::welcome::show_welcome_screen();
                         preferences.set_has_displayed_welcome(true);
                     }
                 }
@@ -322,9 +322,6 @@ pub fn initialize_and_spawn(
 
             let mut engine = espanso_engine::Engine::new(&funnel, &mut processor, &dispatcher);
             let exit_mode = engine.run();
-            if let Some(mut handle) = welcome_handle {
-                handle.wait().expect("welcome screen died");
-            };
 
             info!("engine eventloop has terminated, propagating exit event...");
             ui_remote.exit();

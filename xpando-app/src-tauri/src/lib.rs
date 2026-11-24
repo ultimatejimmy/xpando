@@ -1,7 +1,9 @@
 mod advanced;
+mod apps;
 mod data;
 mod edit;
 mod engine;
+mod engine_run;
 mod folders;
 mod richtext;
 mod update;
@@ -21,6 +23,24 @@ fn list_phrases(app: AppHandle) -> Result<Vec<xpando_core::Folder>, String> {
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_updater::Builder::new().build())
+        .setup(|app| {
+            let handle = app.handle().clone();
+            if std::env::args().any(|a| a == engine_run::BACKGROUND_FLAG) {
+                // Start at sign-in: only the engine, no window.
+                std::thread::spawn(move || {
+                    engine_run::start_if_wanted(&handle);
+                    handle.exit(0);
+                });
+            } else {
+                // The window is not created from the config alone, so the sign-in start above
+                // never loads a web view.
+                if let Some(cfg) = app.config().app.windows.first() {
+                    tauri::WebviewWindowBuilder::from_config(app.handle(), cfg)?.build()?;
+                }
+                std::thread::spawn(move || engine_run::start_if_wanted(&handle));
+            }
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             list_phrases,
             data::data_info,
@@ -39,6 +59,13 @@ pub fn run() {
             advanced::list_conflicts,
             advanced::config_path,
             engine::engine_status,
+            engine_run::engine_run_state,
+            engine_run::engine_start,
+            engine_run::engine_stop,
+            engine_run::engine_restart,
+            engine_run::engine_set_at_login,
+            engine_run::search_shortcut_get,
+            engine_run::search_shortcut_set,
             engine::preview_clipboard_hack,
             engine::convert_clipboard_hack,
             edit::save_phrase,
@@ -60,6 +87,11 @@ pub fn run() {
             folders::delete_folder,
             folders::preview_folder_scope,
             folders::set_folder_scope,
+            folders::preview_phrase_where,
+            folders::set_phrase_where,
+            apps::list_running_programs,
+            apps::list_installed_programs,
+            apps::pick_program,
             richtext::save_rich_phrase,
             richtext::create_rich_phrase,
             richtext::sanitize_html,
