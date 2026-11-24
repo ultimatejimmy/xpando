@@ -145,7 +145,7 @@ install there is future work.
 **Settings** (`settings.yml`, next to `data_dir`): `update_channel: stable|beta` (default
 `stable`; an unknown value counts as stable), `auto_check: true`, `last_update_check` (seconds since
 1970), `skipped_version`. The daily check runs at start when more than 24 hours have passed and the
-open window asks every 30 minutes whether it is due again. It fails silently; the button reports
+open window asks once a day whether it is due again. It fails silently; the button reports
 errors.
 
 **Not covered.** Downloads are checksummed against a file from the same release, not signed, so
@@ -159,3 +159,25 @@ Tag patterns the workflow uses (case-sensitive):
 - Beta: `^[0-9]{4}\.[0-9]{1,2}\.[0-9]{1,2}-beta[0-9]*$`
 
 Anything else is not a release tag and must not publish.
+
+## Signing (plan)
+
+Today updates are checked against `SHA256SUMS.txt` from the same release. That catches a corrupted
+download but not a tampered release, so signing comes in layers:
+
+1. **Windows Authenticode.** Apply to the SignPath Foundation (free for open source; espanso uses it).
+   The release workflow submits the installer for signing. The app then checks, before running an
+   update, that `Get-AuthenticodeSignature` reports a valid signature from xpando's publisher
+   (built-in PowerShell, no new package).
+2. **macOS signing and notarization.** Needs an Apple Developer account.
+3. **Signed update manifest.** When the registries are reachable again, move to Tauri's updater
+   (minisign signatures, public key built into the app, private key in a GitHub secret). Hand-writing
+   signature code is not worth the risk.
+4. **Build provenance.** GitHub artifact attestations (pinned action) tie each installer to the
+   workflow run that built it.
+
+## Engine file lock
+
+The engine runs as its own process (`xpando-engine.exe`). Before an update the app stops it, and
+the NSIS installer does the same again through `installer-hooks.nsh` (enabled only in
+`tauri.release.conf.json`), so the installer never meets a locked file.

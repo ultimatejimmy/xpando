@@ -303,6 +303,27 @@ fn install_blocking(app: &AppHandle, version: &str) -> Result<InstallOutcome, St
     start_or_reveal(app, &mut work, &installer, &expected)
 }
 
+/// Stops xpando's engine process so the installer can replace its file. It asks politely
+/// first, then forces; the name is xpando's own, so nothing else is touched. The installer
+/// repeats this itself (see installer-hooks.nsh) in case the engine was started meanwhile.
+#[cfg(windows)]
+fn stop_engine() {
+    use std::os::windows::process::CommandExt;
+    const NO_WINDOW: u32 = 0x0800_0000;
+    for force in [false, true] {
+        let mut cmd = Command::new("taskkill");
+        cmd.args(["/IM", "xpando-engine.exe"])
+            .creation_flags(NO_WINDOW);
+        if force {
+            cmd.arg("/F");
+        }
+        let _ = cmd.output();
+        if !force {
+            std::thread::sleep(Duration::from_millis(800));
+        }
+    }
+}
+
 #[cfg(windows)]
 fn start_or_reveal(
     app: &AppHandle,
@@ -313,6 +334,7 @@ fn start_or_reveal(
     // Check again right before running, in case the file was touched after the first check.
     let again = sha256_file_hex(installer).map_err(|e| e.to_string())?;
     update::verify_hash(&again, expected)?;
+    stop_engine();
     Command::new(installer)
         .spawn()
         .map_err(|e| format!("The installer could not be started: {e}"))?;

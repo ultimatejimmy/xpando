@@ -57,8 +57,8 @@ export interface UpdatesApi {
   closeInstall: () => void;
 }
 
-/** How often the window asks whether the daily check is due; the backend decides. */
-const DUE_POLL_MS = 30 * 60 * 1000;
+/** A window left open for days asks once a day; the backend decides whether a check is due. */
+const DUE_POLL_MS = 24 * 60 * 60 * 1000;
 
 function describe(e: unknown): string {
   return typeof e === "string" ? e : e instanceof Error ? e.message : String(e);
