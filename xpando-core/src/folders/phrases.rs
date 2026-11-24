@@ -160,11 +160,13 @@ pub fn auto_folder_name(friendly: &[String]) -> String {
             .trim_matches(['_', '-', '.'])
             .to_string()
     };
-    let names: Vec<String> = friendly
-        .iter()
-        .map(|n| clean(n))
-        .filter(|n| !n.is_empty())
-        .collect();
+    let mut names: Vec<String> = Vec::new();
+    for n in friendly.iter().map(|n| clean(n)).filter(|n| !n.is_empty()) {
+        // Two file names of one program (Teams) give one name.
+        if !names.iter().any(|x| x.eq_ignore_ascii_case(&n)) {
+            names.push(n);
+        }
+    }
     let text = match names.len() {
         0 => "Apps".to_string(),
         1..=3 => names.join(", "),

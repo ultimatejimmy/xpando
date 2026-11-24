@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { AlertTriangle, Folder as FolderIcon, Library, Panda, Search } from "lucide-react";
+import { AlertTriangle, AppWindow, Folder as FolderIcon, Library, Panda, Search } from "lucide-react";
 import {
   AdvancedSwitch,
   ConflictsPanel,
@@ -38,6 +38,8 @@ import {
   useImportOffer,
 } from "./DataFolder";
 import { UpdateBanner, useUpdates } from "./Updates";
+import { MovedNotice, WorksIn, type MoveOutcome } from "./WorksIn";
+import { splitFolders } from "./worksInLogic";
 
 interface MacroInfo {
   name: string;
@@ -235,6 +237,41 @@ export default function App() {
   }, [data.refresh]);
 
   const infos = useFolderInfo(folders);
+  const { general: generalFolders, apps: appFolders } = useMemo(() => splitFolders(folders, infos), [folders, infos]);
+
+  // After "Works in" moved a phrase: what happened, with a way to put it back.
+  const [moved, setMoved] = useState<{ outcome: MoveOutcome; name: string } | null>(null);
+  const [undoBusy, setUndoBusy] = useState(false);
+  const [undoError, setUndoError] = useState<string | null>(null);
+  const phraseMoved = async (outcome: MoveOutcome, name: string) => {
+    await load();
+    setEditing(null);
+    setScope(outcome.to_file);
+    setSelected(`${outcome.to_file}#${outcome.to_index}`);
+    setUndoError(null);
+    setMoved({ outcome, name });
+  };
+  const undoMove = async () => {
+    if (!moved) return;
+    setUndoBusy(true);
+    setUndoError(null);
+    try {
+      const out = await invoke<MoveOutcome>("set_phrase_where", {
+        file: moved.outcome.to_file,
+        index: moved.outcome.to_index,
+        place: { kind: "folder", file: moved.outcome.from_file },
+        expectedHash: folders.find((f) => f.file === moved.outcome.to_file)?.hash ?? "",
+      });
+      await load();
+      setScope(out.to_file);
+      setSelected(`${out.to_file}#${out.to_index}`);
+      setMoved(null);
+    } catch (e) {
+      setUndoError(String(e).replace(/^file-changed:\s*/, ""));
+    } finally {
+      setUndoBusy(false);
+    }
+  };
 
   /** A folder was created, renamed, deleted or given other apps: reload and show it. */
   const folderChanged = async (file: string | null) => {
@@ -343,6 +380,26 @@ export default function App() {
     ) : null;
   const warnings = folders.flatMap((f) => f.warnings.map((w) => `${f.file}: ${w}`));
 
+  const folderItem = (f: FolderData, appSpecific = false) => (
+    <li key={f.file}>
+      <button
+        type="button"
+        className="folder"
+        aria-current={scope === f.file}
+        title={f.file}
+        onClick={() => changeScope(f.file)}
+      >
+        {appSpecific ? <AppWindow size={16} aria-hidden="true" /> : <FolderIcon size={16} aria-hidden="true" />}
+        <span className="grow">
+          {f.name}
+          {advanced && <span className="adv-folder-file">{f.file}</span>}
+          <ScopeLabel info={infos[f.file]} showAll={advanced} />
+        </span>
+        <span className="count">{f.phrases.length}</span>
+      </button>
+    </li>
+  );
+
   return (
     <div className="app">
       <header className="header">
@@ -409,25 +466,14 @@ export default function App() {
                 <span className="count">{rows.length}</span>
               </button>
             </li>
-            {folders.map((f) => (
-              <li key={f.file}>
-                <button
-                  type="button"
-                  className="folder"
-                  aria-current={scope === f.file}
-                  title={f.file}
-                  onClick={() => changeScope(f.file)}
-                >
-                  <FolderIcon size={16} aria-hidden="true" />
-                  <span className="grow">
-                    {f.name}
-                    {advanced && <span className="adv-folder-file">{f.file}</span>}
-                    <ScopeLabel info={infos[f.file]} showAll={advanced} />
-                  </span>
-                  <span className="count">{f.phrases.length}</span>
-                </button>
+            {generalFolders.map((f) => folderItem(f))}
+            {appFolders.length > 0 && (
+              <li className="side-heading" role="presentation">
+                <AppWindow size={14} aria-hidden="true" />
+                Apps
               </li>
-            ))}
+            )}
+            {appFolders.map((f) => folderItem(f, true))}
           </ul>
           {/* Folder actions reload everything and close the editor, so they wait for unsaved edits. */}
           <div inert={folderActionsLocked} className={folderActionsLocked ? "folder-actions-locked" : undefined}>
@@ -514,6 +560,29 @@ export default function App() {
                 onEdit={() => setEditing({ id: current.id, file: current.folder, base: current.phrase })}
                 onDeleted={(f) => saved(f, null)}
                 onReload={load}
+              />
+              {moved && (
+                <MovedNotice
+                  outcome={moved.outcome}
+                  phraseName={moved.name}
+                  busy={undoBusy}
+                  error={undoError}
+                  onUndo={() => void undoMove()}
+                  onClose={() => setMoved(null)}
+                />
+              )}
+              <WorksIn
+                folder={{
+                  file: current.folder,
+                  name: current.folderName,
+                  hash: folders.find((f) => f.file === current.folder)?.hash ?? "",
+                }}
+                phrase={{ index: current.phrase.index, triggers: current.phrase.triggers, name: title(current.phrase) }}
+                infos={infos}
+                folders={folders}
+                advanced={advanced}
+                onMoved={(o, n) => void phraseMoved(o, n)}
+                onReload={() => void load()}
               />
               <h2 className="detail-title">{title(current.phrase)}</h2>
               {advanced && <FileMeta file={current.folder} line={current.phrase.line} />}

@@ -70,9 +70,9 @@ jobs:
       - name: Type-check and build frontend
         working-directory: xpando-app
         run: npm run build
-      - name: Test search parser
+      - name: Test search parser and the app picker logic
         working-directory: xpando-app
-        run: node --test --experimental-strip-types src/search.test.ts
+        run: node --test --experimental-strip-types src/search.test.ts src/knownApps.test.ts src/worksInLogic.test.ts
       - name: Check Tauri shell formatting and build
         working-directory: xpando-app/src-tauri
         run: |

@@ -490,6 +490,7 @@ fn names_and_keys() {
     assert_eq!(n(&["A", "B", "C", "D", "E"]), "A, B and 3 more");
     assert_eq!(n(&["Notepad++"]), "Notepad");
     assert_eq!(n(&[]), "Apps");
+    assert_eq!(n(&["Teams", "Teams", "Word"]), "Teams, Word");
     assert!(validate_name(&n(&["Word", "Excel", "PowerPoint"])).is_ok());
     assert!(validate_name(&n(&[&"x".repeat(200)])).is_ok());
 }
