@@ -165,11 +165,11 @@ Anything else is not a release tag and must not publish.
 Today updates are checked against `SHA256SUMS.txt` from the same release. That catches a corrupted
 download but not a tampered release, so signing comes in layers:
 
-1. **Windows Authenticode.** Apply to the SignPath Foundation (free for open source; espanso uses it).
+1. **Windows Authenticode.** Apply to the SignPath Foundation (free for open source; espanso uses it) once there is a public release; see [SIGNPATH.md](SIGNPATH.md).
    The release workflow submits the installer for signing. The app then checks, before running an
    update, that `Get-AuthenticodeSignature` reports a valid signature from xpando's publisher
    (built-in PowerShell, no new package).
-2. **macOS signing and notarization.** Needs an Apple Developer account.
+2. **macOS signing and notarization.** Not planned: it needs a paid Apple Developer account. macOS builds stay unsigned and the Install page explains how to open them.
 3. **Signed update manifest.** When the registries are reachable again, move to Tauri's updater
    (minisign signatures, public key built into the app, private key in a GitHub secret). Hand-writing
    signature code is not worth the risk.
