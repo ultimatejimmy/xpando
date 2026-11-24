@@ -107,6 +107,16 @@ human version. The macOS build uses the bundles `dmg,app`: the `.dmg` is for peo
 `--prerelease --latest=false` for betas and `--latest` otherwise. All actions are pinned to full
 commit SHAs. Not done yet: Authenticode / notarization, and a changelog agreement check.
 
+### When a platform does not build
+
+The three builds are independent: one that fails or never gets a runner does not stop the others
+(macOS runners on GitHub are scarce, and a macOS job can be cancelled after waiting about 15 minutes
+with no runner). The `publish` job runs anyway, as long as the signed Windows installer exists, and
+the release notes name any platform that is missing. `latest.json` then simply has no entry for it,
+so the updater offers nothing on that platform until a release includes it. To add the missing
+platform later, re-run the failed job of the same workflow run only if that run's publish step has
+not happened; otherwise tag the next beta.
+
 ## In-app updater
 
 Release selection is our own; download, signature check and install are Tauri's official
