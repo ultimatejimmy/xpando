@@ -252,7 +252,7 @@ void *ui_initialize(void *_self, UIOptions _options, int32_t *error_code) {
             variables->nid.uCallbackMessage = APPWM_ICON_CLICK;
             variables->nid.hIcon = variables->g_icons[0];
             StringCchCopyW(variables->nid.szTip,
-                           ARRAYSIZE(variables->nid.szTip), L"espanso");
+                           ARRAYSIZE(variables->nid.szTip), L"xpando");
 
             // Show the tray icon
             if (variables->options.show_icon) {

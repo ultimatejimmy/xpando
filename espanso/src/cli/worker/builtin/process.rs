@@ -26,7 +26,7 @@ use super::BuiltInMatch;
 pub fn create_match_exit() -> BuiltInMatch {
     BuiltInMatch {
         id: generate_next_builtin_id(),
-        label: "Quit xpando engine",
+        label: "Quit xpando",
         triggers: Vec::new(),
         action: |_| EventType::ExitRequested(ExitMode::ExitAllProcesses),
         ..Default::default()
@@ -36,7 +36,7 @@ pub fn create_match_exit() -> BuiltInMatch {
 pub fn create_match_restart() -> BuiltInMatch {
     BuiltInMatch {
         id: generate_next_builtin_id(),
-        label: "Restart xpando engine",
+        label: "Restart xpando",
         triggers: Vec::new(),
         action: |_| EventType::ExitRequested(ExitMode::RestartWorker),
         ..Default::default()

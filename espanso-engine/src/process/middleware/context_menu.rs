@@ -94,7 +94,7 @@ impl Middleware for ContextMenuMiddleware {
                     MenuItem::Separator,
                     MenuItem::Simple(SimpleMenuItem {
                         id: CONTEXT_ITEM_EXIT,
-                        label: "Exit espanso".to_string(),
+                        label: "Quit xpando".to_string(),
                     }),
                 ];
 
@@ -103,7 +103,7 @@ impl Middleware for ContextMenuMiddleware {
                         0,
                         MenuItem::Simple(SimpleMenuItem {
                             id: CONTEXT_ITEM_SECURE_INPUT_EXPLAIN,
-                            label: "Why is Espanso not working?".to_string(),
+                            label: "Why is xpando not working?".to_string(),
                         }),
                     );
                     items.insert(
