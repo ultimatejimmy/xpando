@@ -139,7 +139,7 @@ impl<'a> super::engine::process::middleware::match_select::MatchProvider<'a>
                     label: m.label,
                     tag: m.triggers.first().map(String::as_ref),
                     additional_search_terms: vec![],
-                    is_builtin: true,
+                    is_builtin: !m.pinned,
                 },
             })
             .collect()

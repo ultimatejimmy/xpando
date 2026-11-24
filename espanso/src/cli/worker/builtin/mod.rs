@@ -36,6 +36,8 @@ pub struct BuiltInMatch {
     pub label: &'static str,
     pub triggers: Vec<String>,
     pub hotkey: Option<String>,
+    /// Listed in the search box right away, instead of only after typing `>`.
+    pub pinned: bool,
     pub action: fn(context: &dyn Context) -> EventType,
 }
 
@@ -46,6 +48,7 @@ impl Default for BuiltInMatch {
             label: "",
             triggers: Vec::new(),
             hotkey: None,
+            pinned: false,
             action: |_| EventType::NOOP,
         }
     }

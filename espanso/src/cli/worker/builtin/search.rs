@@ -32,6 +32,7 @@ pub fn create_match_trigger_search_bar(
         label: "Open search bar",
         triggers: trigger.map(|trigger| vec![trigger]).unwrap_or_default(),
         hotkey,
+        pinned: false,
         action: |_| EventType::ShowSearchBar,
     }
 }

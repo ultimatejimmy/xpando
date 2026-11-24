@@ -47,6 +47,7 @@ pub fn create_match_open_app() -> BuiltInMatch {
     BuiltInMatch {
         id: generate_next_builtin_id(),
         label: "Open xpando",
+        pinned: true,
         triggers: Vec::new(),
         action: |_| {
             espanso_engine::open_app::open_xpando_app();

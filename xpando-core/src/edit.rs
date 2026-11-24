@@ -1199,10 +1199,26 @@ pub fn resolve_match_file(config_dir: &Path, file: &str) -> Result<PathBuf, Stri
     }
     let root = fs::canonicalize(config_dir.join("match")).map_err(|_| bad())?;
     let path = fs::canonicalize(root.join(&rel)).map_err(|_| bad())?;
-    if !path.starts_with(&root) || !path.is_file() {
-        return Err(bad());
+    if path.starts_with(&root) && path.is_file() {
+        return Ok(path);
     }
-    Ok(path)
+    // Some systems (for example a packaged Windows app, which redirects file access) report a
+    // file's real location somewhere other than under its folder, although the file is right
+    // there. Accept it when the name leads straight down from the folder and nothing on the way
+    // is a link. `rel` has no `..`, so it cannot leave the folder.
+    let mut walk = root;
+    for part in rel.components() {
+        walk.push(part);
+        match fs::symlink_metadata(&walk) {
+            Ok(m) if !m.file_type().is_symlink() => {}
+            _ => return Err(bad()),
+        }
+    }
+    if walk.is_file() {
+        Ok(walk)
+    } else {
+        Err(bad())
+    }
 }
 
 /// Loads `file`, checks it still hashes to `expected_hash`, lets `edit` turn its text into

@@ -1,36 +1,17 @@
 //! Read-only commands behind the app's "Advanced" mode.
 
 use std::fs;
-use std::path::{Component, Path, PathBuf};
+use std::path::{Path, PathBuf};
 
 use tauri::AppHandle;
 
 use crate::data::data_dir;
 
 /// Resolves `file` (relative to `<config>/match`) to a real file inside that directory.
-/// Rejects absolute paths, `..`, and symlinks that leave the directory.
+/// Rejects absolute paths, `..`, and symlinks that leave the directory. The rule lives in
+/// xpando-core, so every command applies the same one.
 fn resolve_match_file(config_dir: &Path, file: &str) -> Result<PathBuf, String> {
-    let rel = Path::new(file);
-    if file.is_empty()
-        || rel.is_absolute()
-        || !rel.components().all(|c| matches!(c, Component::Normal(_)))
-        || !matches!(
-            rel.extension().and_then(|e| e.to_str()),
-            Some("yml" | "yaml")
-        )
-    {
-        return Err("invalid match file path".into());
-    }
-    let root = config_dir
-        .join("match")
-        .canonicalize()
-        .map_err(|e| e.to_string())?;
-    let path = root.join(rel).canonicalize().map_err(|e| e.to_string())?;
-    if path.starts_with(&root) {
-        Ok(path)
-    } else {
-        Err("invalid match file path".into())
-    }
+    xpando_core::edit::resolve_match_file(config_dir, file)
 }
 
 /// The raw source of one phrase (its comment block and entry lines), with real line numbers.
