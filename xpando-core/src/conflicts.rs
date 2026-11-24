@@ -163,6 +163,27 @@ pub fn find_conflicts_in_dir(config_dir: &Path) -> io::Result<Vec<Conflict>> {
     Ok(detect(&folders, &flags))
 }
 
+/// Finds conflicts in match files given as `(file, text)` pairs, without touching the disk.
+/// Used to check a change before it is written. `word` options are taken into account.
+pub fn find_conflicts_in_texts(files: &[(String, String)]) -> Vec<Conflict> {
+    let mut folders = Vec::new();
+    let mut flags = Flags::new();
+    for (file, text) in files {
+        let (phrases, warnings) = crate::parse_match_text(text);
+        for (i, m) in word_modes(text).into_iter().enumerate() {
+            flags.insert((file.clone(), i), m);
+        }
+        folders.push(Folder {
+            name: file.clone(),
+            file: file.clone(),
+            phrases,
+            warnings,
+            hash: String::new(),
+        });
+    }
+    detect(&folders, &flags)
+}
+
 fn detect(folders: &[Folder], flags: &Flags) -> Vec<Conflict> {
     // trigger -> distinct phrases using it, in file order.
     let mut by_trigger: BTreeMap<&str, Vec<ConflictPhrase>> = BTreeMap::new();
