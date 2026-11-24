@@ -95,7 +95,7 @@ for CI), `--from-semver <semver>` (reverse mapping). Tests: `node --test "script
 
 What `release.yml` does: a `validate` job rejects tags that are not in the scheme and runs the script
 tests; a `build` job per OS (Windows NSIS, macOS universal DMG, Linux AppImage + deb on
-ubuntu-22.04) runs `version.mjs <tag>` and `--check`, `npm ci --ignore-scripts`, then `tauri build`
+ubuntu-22.04) runs `version.mjs <tag>` and `--check`, `npm ci --ignore-scripts`, builds the patched engine (`scripts/build-engine.sh`, see ENGINE.md), then `tauri build` with the release-only sidecar config
 with no secrets in the environment, and renames installers to the human version; a `publish` job
 (the only one with `contents: write`) runs `gh release create --verify-tag --generate-notes`, with
 `--prerelease --latest=false` for betas and `--latest` otherwise. All actions are pinned to full

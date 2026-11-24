@@ -139,3 +139,23 @@ pub fn convert_clipboard_hack(
         clipboard_hack::convert(text, index, &name)
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn bundled_sidecar_is_looked_up_first() {
+        let list = candidates();
+        let (first, bundled) = &list[0];
+        assert!(*bundled);
+        // Tauri installs the externalBin `binaries/xpando-engine` as `xpando-engine[.exe]`
+        // next to the app executable.
+        assert_eq!(
+            first.file_name().unwrap().to_string_lossy(),
+            exe_name("xpando-engine")
+        );
+        assert_eq!(first.parent(), std::env::current_exe().unwrap().parent());
+        assert!(list.iter().skip(2).all(|(_, b)| !*b));
+    }
+}

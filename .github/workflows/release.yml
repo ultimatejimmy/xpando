@@ -101,6 +101,14 @@ jobs:
         run: |
           node scripts/version.mjs "$VERSION"
           node scripts/version.mjs "$VERSION" --check
+      - name: Install Linux libraries for the engine
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get install -y libx11-dev libxtst-dev libxkbcommon-dev libdbus-1-dev 'libwxgtk3.*-dev'
+      # Builds the patched espanso, checks --version ends in -xpando and stages it as the
+      # sidecar xpando-engine-<triple> that tauri.release.conf.json bundles.
+      - name: Build and stage the xpando engine
+        run: bash scripts/build-engine.sh
       # No secrets are set on this job, so nothing here can read them.
       - name: Install frontend dependencies (lockfile only, no install scripts)
         working-directory: xpando-app
@@ -110,7 +118,7 @@ jobs:
         env:
           BUNDLES: ${{ matrix.bundles }}
           TARGET_ARGS: ${{ matrix.target_args }}
-        run: npx tauri build --ci --bundles "$BUNDLES" $TARGET_ARGS -- --locked
+        run: npx tauri build --ci --config src-tauri/tauri.release.conf.json --bundles "$BUNDLES" $TARGET_ARGS -- --locked
       - name: Stage artifacts under the human version
         run: |
           mkdir staged

@@ -194,8 +194,8 @@ is invisible as a feature. Replace it with a built-in action that works the same
 Implemented in the engine as variable type `set_clipboard` (see [SET-CLIPBOARD.md](SET-CLIPBOARD.md)) and offered in the
 Insert macro menu. Engine detection (`engine_status`, status line, warning for stock) and the one-click, previewed "convert the
 PowerShell hack" action are done; see [ENGINE.md](ENGINE.md). Still open: the per-OS manual test matrix (macOS,
-Linux, real clipboards), and actually building and bundling the engine (`externalBin` plan and CI outline are in
-ENGINE.md, not enabled).
+Linux, real clipboards), and building and bundling the engine is now wired into `release.yml` (`scripts/build-engine.sh` plus a
+release-only `externalBin` overlay, see ENGINE.md) but has not had its first CI run.
 
 ### M5 — Release polish (≈2 weeks)
 - [ ] First-run onboarding (permissions on macOS, start-at-login, import existing espanso config).
