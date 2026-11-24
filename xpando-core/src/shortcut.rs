@@ -49,7 +49,10 @@ pub fn validate_shortcut(value: &str) -> Result<String, String> {
         return Ok(v);
     }
     let parts: Vec<&str> = v.split('+').map(str::trim).collect();
-    if parts.iter().any(|p| p.is_empty() || !p.chars().all(|c| c.is_ascii_alphanumeric())) {
+    if parts
+        .iter()
+        .any(|p| p.is_empty() || !p.chars().all(|c| c.is_ascii_alphanumeric()))
+    {
         return Err("That is not a valid shortcut.".to_string());
     }
     let (key, mods) = parts.split_last().ok_or("That is not a valid shortcut.")?;
@@ -100,15 +103,27 @@ mod tests {
     fn reads_default_when_missing() {
         assert_eq!(read_search_shortcut(""), "ALT+SPACE");
         assert_eq!(read_search_shortcut("toggle_key: ALT\n"), "ALT+SPACE");
-        assert_eq!(read_search_shortcut("  search_shortcut: \"X+Y\"\n"), "ALT+SPACE");
+        assert_eq!(
+            read_search_shortcut("  search_shortcut: \"X+Y\"\n"),
+            "ALT+SPACE"
+        );
     }
 
     #[test]
     fn reads_values() {
-        assert_eq!(read_search_shortcut("search_shortcut: ctrl+space\n"), "CTRL+SPACE");
-        assert_eq!(read_search_shortcut("a: 1\nsearch_shortcut: \"ALT+K\" # x\n"), "ALT+K");
+        assert_eq!(
+            read_search_shortcut("search_shortcut: ctrl+space\n"),
+            "CTRL+SPACE"
+        );
+        assert_eq!(
+            read_search_shortcut("a: 1\nsearch_shortcut: \"ALT+K\" # x\n"),
+            "ALT+K"
+        );
         assert_eq!(read_search_shortcut("search_shortcut: off\n"), "OFF");
-        assert_eq!(read_search_shortcut("search_shortcut: 'CTRL+J'\n"), "CTRL+J");
+        assert_eq!(
+            read_search_shortcut("search_shortcut: 'CTRL+J'\n"),
+            "CTRL+J"
+        );
     }
 
     #[test]
@@ -122,7 +137,10 @@ mod tests {
 
     #[test]
     fn adds_when_missing() {
-        assert_eq!(set_search_shortcut("", "CTRL+K"), "search_shortcut: \"CTRL+K\"\n");
+        assert_eq!(
+            set_search_shortcut("", "CTRL+K"),
+            "search_shortcut: \"CTRL+K\"\n"
+        );
         assert_eq!(
             set_search_shortcut("a: 1", "CTRL+K"),
             "a: 1\nsearch_shortcut: \"CTRL+K\"\n"
@@ -131,7 +149,10 @@ mod tests {
 
     #[test]
     fn validates() {
-        assert_eq!(validate_shortcut(" ctrl + space "), Ok("CTRL+SPACE".to_string()));
+        assert_eq!(
+            validate_shortcut(" ctrl + space "),
+            Ok("CTRL+SPACE".to_string())
+        );
         assert_eq!(validate_shortcut("off"), Ok("OFF".to_string()));
         assert!(validate_shortcut("SPACE").is_err());
         assert!(validate_shortcut("SHIFT+A").is_err());
