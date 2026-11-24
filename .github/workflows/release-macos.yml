@@ -141,6 +141,31 @@ jobs:
       - name: Derive the version from the tag
         id: info
         run: node scripts/version.mjs --info "$TAG" | tee -a "$GITHUB_OUTPUT"
+      # The tagged source can predate fixes needed to build on a Mac runner now (a runner of another
+      # pool, a newer Xcode). The fixes are small patches kept in scripts/release-patches/ on the
+      # branch this workflow runs from. Each is applied to this build's copy only (nothing is
+      # committed), skipped when the tag already has it, and a patch that no longer applies fails
+      # the build instead of building something unexpected.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          path: build-fixes
+          persist-credentials: false
+      - name: Apply build fixes made after the tag
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          for p in build-fixes/scripts/release-patches/*.patch; do
+            if git apply --reverse --check "$p" 2>/dev/null; then
+              echo "$(basename "$p"): the tag already has it"
+            elif git apply --check "$p"; then
+              git apply "$p"
+              echo "$(basename "$p"): applied"
+            else
+              echo "::error::$(basename "$p") does not apply to $TAG; update or remove it"
+              exit 1
+            fi
+          done
       - name: Install Rust
         run: |
           rustup toolchain install stable --profile minimal

@@ -217,17 +217,23 @@ fn build_native() {
         let build_dir = out_wx_dir.join("build-cocoa");
         std::fs::create_dir_all(&build_dir).expect("unable to create build-cocoa directory");
 
-        let configure_args: [&str; 4] = [
-            "--disable-shared",
-            "--without-libtiff",
-            "--with-macosx-version-min=10.13",
+        let mut configure_args: Vec<String> = vec![
+            "--disable-shared".to_string(),
+            "--without-libtiff".to_string(),
+            "--with-macosx-version-min=10.13".to_string(),
             if is_arm64_ci {
-                "--enable-universal-binary=arm64,x86_64"
+                "--enable-universal-binary=arm64,x86_64".to_string()
             } else {
-                &format!("--enable-macosx_arch={target_arch}")
+                format!("--enable-macosx_arch={target_arch}")
             },
         ];
-
+        if !is_arm64_ci {
+            // Without these, wxWidgets' configure picks image libraries it finds on the build
+            // machine (Homebrew on an Intel runner) and the final link then cannot find `-lpng`.
+            // The bundled copies build the same everywhere. (The Apple Silicon build is unchanged.)
+            configure_args.push("--with-libpng=builtin".to_string());
+            configure_args.push("--with-libjpeg=builtin".to_string());
+        }
         let mut handle = Command::new(out_wx_dir.join("configure"))
             .current_dir(build_dir.to_string_lossy().to_string())
             .args(configure_args.iter())
