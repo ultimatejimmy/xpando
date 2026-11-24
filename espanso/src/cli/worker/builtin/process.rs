@@ -42,3 +42,16 @@ pub fn create_match_restart() -> BuiltInMatch {
         ..Default::default()
     }
 }
+
+pub fn create_match_open_app() -> BuiltInMatch {
+    BuiltInMatch {
+        id: generate_next_builtin_id(),
+        label: "Open xpando",
+        triggers: Vec::new(),
+        action: |_| {
+            espanso_engine::open_app::open_xpando_app();
+            EventType::NOOP
+        },
+        ..Default::default()
+    }
+}

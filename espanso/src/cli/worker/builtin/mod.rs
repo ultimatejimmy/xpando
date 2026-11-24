@@ -58,6 +58,7 @@ pub fn get_builtin_matches(config: &dyn Config) -> Vec<BuiltInMatch> {
         debug::create_match_show_active_config_info(),
         debug::create_match_show_active_app_info(),
         debug::create_match_show_logs(),
+        process::create_match_open_app(),
         process::create_match_exit(),
         process::create_match_restart(),
     ];
