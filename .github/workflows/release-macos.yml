@@ -17,6 +17,16 @@ on:
         required: true
         default: true
         type: boolean
+      runner:
+        description: "Mac runner pool (each has its own queue; try another if one never starts)"
+        required: true
+        default: macos-latest
+        type: choice
+        options:
+          - macos-latest
+          - macos-15
+          - macos-15-intel
+          - macos-26-intel
   schedule:
     # Nightly, when the runners are least busy (07:17 UTC is the middle of the night in the US).
     # Only runs once the repository variable RELEASE_MACOS_NIGHTLY is "true" (see RELEASING.md), so
@@ -106,7 +116,8 @@ jobs:
     name: build macOS (${{ matrix.tag }})
     needs: plan
     if: ${{ needs.plan.outputs.any == 'true' }}
-    runs-on: macos-latest
+    # By hand: the chosen pool. Nightly: the repository variable RELEASE_MACOS_RUNNER if set.
+    runs-on: ${{ inputs.runner || vars.RELEASE_MACOS_RUNNER || 'macos-latest' }}
     # A runner may take a long time to appear; once it has one the build itself takes a while.
     timeout-minutes: 120
     permissions:

@@ -127,6 +127,15 @@ fake `gh` (`scripts/add-macos-to-release.test.mjs`), including the cases that mu
   `--repo` is needed because the clone has more than one remote. If `gh` answers with a permission
   error, a restricted `GITHUB_TOKEN` is set in the shell: clear it for the command (in PowerShell,
   `$env:GITHUB_TOKEN = $null`) so `gh` uses its normal login.
+- **Which Mac runner:** each GitHub macOS pool has its own queue, and the default one
+  (`macos-latest`) is often empty-handed. The run form has a "runner" choice: `macos-latest`
+  (macOS 26, Apple Silicon), `macos-15` (Apple Silicon), `macos-15-intel` and `macos-26-intel`
+  (Intel; the universal app is cross-built, so it is the same result). From a terminal add
+  `-f runner=macos-15-intel`. If one pool never starts (GitHub cancels the job after about 15
+  minutes without a runner), try another. For the nightly run, set the repository variable
+  `RELEASE_MACOS_RUNNER` to the pool that works best. The free labels are listed in the
+  [runner-images README](https://github.com/actions/runner-images); `macos-14` was retired in
+  November 2026 and the `-large` and `-xlarge` ones are paid.
 - **Dry run first:** `dry_run` is on by default for manual runs. It builds macOS and runs every
   check (merged `latest.json`, checksums) but uploads nothing, and the log says what it would do.
   Do one dry run, then run it again with `dry_run` off.
