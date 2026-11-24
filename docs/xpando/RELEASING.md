@@ -122,7 +122,11 @@ steps that change the release are in `scripts/add-macos-to-release.sh`, which is
 fake `gh` (`scripts/add-macos-to-release.test.mjs`), including the cases that must change nothing.
 
 - **By hand:** Actions, "release-macos", Run workflow, give the tag (for example
-  `2026.11.24-beta2`). Or `gh workflow run release-macos.yml -f tag=2026.11.24-beta2 -f dry_run=false`.
+  `2026.11.24-beta2`). Or from a terminal (a dry run; add `-f dry_run=false` for the real one):
+  `gh workflow run release-macos.yml --repo ultimatejimmy/xpando -f tag=2026.11.24-beta2`.
+  `--repo` is needed because the clone has more than one remote. If `gh` answers with a permission
+  error, a restricted `GITHUB_TOKEN` is set in the shell: clear it for the command (in PowerShell,
+  `$env:GITHUB_TOKEN = $null`) so `gh` uses its normal login.
 - **Dry run first:** `dry_run` is on by default for manual runs. It builds macOS and runs every
   check (merged `latest.json`, checksums) but uploads nothing, and the log says what it would do.
   Do one dry run, then run it again with `dry_run` off.
@@ -275,3 +279,14 @@ Rotate if the private key may have leaked, or on a schedule you choose.
 The engine runs as its own process (`xpando-engine.exe`). Before an update the app stops it, and
 the NSIS installer does the same again through `installer-hooks.nsh` (enabled only in
 `tauri.release.conf.json`), so the installer never meets a locked file.
+
+## Inherited espanso workflows
+
+xpando keeps espanso's workflow files in the repository so upstream changes still merge cleanly, but
+the ones xpando does not use are **disabled on GitHub** (Actions, the workflow, "..." menu, Disable;
+or `gh workflow disable "<name>" --repo ultimatejimmy/xpando`): "ARM CI", "Create release draft",
+"Dev Release" (it would publish espanso-named builds on every push to `dev`), "nix build" and
+"Update flake". Turn one back on with `gh workflow enable`. "CI" (the engine build checks on pull
+requests) stays on. Those macOS jobs and xpando's own macOS checks wait for the same scarce
+runners as the release, so a pull request's macOS checks may be cancelled with no runner assigned;
+that is not a code failure.
