@@ -1,6 +1,6 @@
 //! The logic of the in-app updater, with no network or disk access of its own: version parsing
 //! and ordering, picking the newest release that applies, choosing the installer for this
-//! computer, reading `SHA256SUMS.txt`, and checking that a download address is really a
+//! computer, looking for the signed manifest `latest.json`, and checking that a download address is really a
 //! GitHub release of this project. The app (`xpando-app`) does the downloading and feeds the
 //! answers through here. See `docs/xpando/RELEASING.md` for the version scheme.
 
@@ -14,8 +14,9 @@ use crate::minijson::{self, Json};
 /// The releases of this project, newest first (GitHub's own order).
 pub const RELEASES_API_URL: &str =
     "https://api.github.com/repos/ultimatejimmy/xpando/releases?per_page=30";
-/// The release asset that lists the SHA-256 of every installer.
-pub const SUMS_FILE: &str = "SHA256SUMS.txt";
+/// The release asset that Tauri's updater reads: the version, and for every platform the address
+/// of the update package and its minisign signature.
+pub const MANIFEST_FILE: &str = "latest.json";
 /// The only User-Agent the updater sends: no name, version or machine details.
 pub const USER_AGENT: &str = "xpando-updater";
 /// How often the automatic check runs.
@@ -383,7 +384,8 @@ pub struct Update {
     pub beta: bool,
     pub release_url: String,
     pub installer: Asset,
-    pub sums: Asset,
+    /// The signed update manifest (`latest.json`) the plugin updater is pointed at.
+    pub manifest: Asset,
 }
 
 /// The newest release that applies to this computer, or `None`.
@@ -391,7 +393,7 @@ pub struct Update {
 /// A release applies when it is not a draft, its tag is a valid version, it is newer than
 /// `current`, it is stable unless `channel` is `Beta` (a release marked pre-release on GitHub
 /// or with a `-beta` tag counts as a beta), it is not `skipped`, and it carries both an
-/// installer for this computer and `SHA256SUMS.txt` at addresses `validate_download_url`
+/// installer for this computer and the signed manifest `latest.json` at addresses `validate_download_url`
 /// accepts. A beta user therefore also gets a newer stable release, and a stable user never
 /// gets a beta or an older version.
 pub fn pick_update(
@@ -420,11 +422,11 @@ pub fn pick_update(
         let Some(installer) = choose_installer(&r.assets, os, arch) else {
             continue;
         };
-        let Some(sums) = r.assets.iter().find(|a| a.name == SUMS_FILE) else {
+        let Some(manifest) = r.assets.iter().find(|a| a.name == MANIFEST_FILE) else {
             continue;
         };
         if validate_download_url(&installer.url, &r.tag, &installer.name).is_err()
-            || validate_download_url(&sums.url, &r.tag, &sums.name).is_err()
+            || validate_download_url(&manifest.url, &r.tag, &manifest.name).is_err()
         {
             continue;
         }
@@ -436,56 +438,11 @@ pub fn pick_update(
                 beta,
                 release_url: r.page_url.clone(),
                 installer: installer.clone(),
-                sums: sums.clone(),
+                manifest: manifest.clone(),
             },
         ));
     }
     best.map(|(_, u)| u)
-}
-
-// ---------------------------------------------------------------------------------------
-// Checksums
-// ---------------------------------------------------------------------------------------
-
-/// Finds the SHA-256 listed for `file` in the text of `SHA256SUMS.txt` (the `sha256sum` format:
-/// `<64 hex digits>  <name>` or `<hash> *<name>`). It is an error when the file is not listed,
-/// when the hash is malformed, or when the file is listed twice with different hashes.
-pub fn find_sha256(sums: &str, file: &str) -> Result<String, String> {
-    let mut found: Option<String> = None;
-    for line in sums.lines() {
-        let line = line.trim_end_matches('\r');
-        let Some((hash, rest)) = line.split_once(' ') else {
-            continue;
-        };
-        // Text mode puts a second space before the name, binary mode a `*`.
-        let name = rest
-            .strip_prefix(' ')
-            .or_else(|| rest.strip_prefix('*'))
-            .unwrap_or(rest);
-        if name != file {
-            continue;
-        }
-        if hash.len() != 64 || !hash.bytes().all(|b| b.is_ascii_hexdigit()) {
-            return Err(format!("The checksum listed for {file} is not valid."));
-        }
-        let hash = hash.to_ascii_lowercase();
-        match &found {
-            Some(prev) if *prev != hash => {
-                return Err(format!("{file} is listed with two different checksums."))
-            }
-            _ => found = Some(hash),
-        }
-    }
-    found.ok_or_else(|| format!("{file} is not in the checksum list, so it cannot be checked."))
-}
-
-/// Compares the hash of the downloaded file with the published one (case-insensitive).
-pub fn verify_hash(actual: &str, expected: &str) -> Result<(), String> {
-    if actual.eq_ignore_ascii_case(expected) {
-        Ok(())
-    } else {
-        Err("The downloaded file does not match its published checksum, so it was discarded. Nothing was installed.".to_string())
-    }
 }
 
 // ---------------------------------------------------------------------------------------
@@ -739,7 +696,8 @@ mod tests {
                 asset(tag, &format!("xpando_{tag}_universal.dmg")),
                 asset(tag, &format!("xpando_{tag}_amd64.AppImage")),
                 asset(tag, &format!("xpando_{tag}_amd64.deb")),
-                asset(tag, SUMS_FILE),
+                asset(tag, MANIFEST_FILE),
+                asset(tag, &format!("xpando_{tag}_x64-setup.exe.sig")),
             ],
         }
     }
@@ -749,7 +707,7 @@ mod tests {
        "tag_name":"2026.11.24-beta","draft":false,"prerelease":true,"body":"Notes — \"quoted\"\r\n",
        "assets":[
          {"name":"xpando_2026.11.24-beta_x64-setup.exe","size":12345,"browser_download_url":"https://github.com/ultimatejimmy/xpando/releases/download/2026.11.24-beta/xpando_2026.11.24-beta_x64-setup.exe","id":1},
-         {"name":"SHA256SUMS.txt","size":300,"browser_download_url":"https://github.com/ultimatejimmy/xpando/releases/download/2026.11.24-beta/SHA256SUMS.txt"}]},
+         {"name":"latest.json","size":300,"browser_download_url":"https://github.com/ultimatejimmy/xpando/releases/download/2026.11.24-beta/latest.json"}]},
       {"tag_name":"2026.11.23","draft":true,"prerelease":false,"assets":[]},
       {"html_url":"x","draft":false},
       {"tag_name":"2026.11.20","assets":null}
@@ -869,8 +827,8 @@ mod tests {
         let mut draft = release("2026.11.30", false);
         draft.draft = true;
         let odd = release("v2026.11.29", false);
-        let mut no_sums = release("2026.11.28", false);
-        no_sums.assets.retain(|a| a.name != SUMS_FILE);
+        let mut no_manifest = release("2026.11.28", false);
+        no_manifest.assets.retain(|a| a.name != MANIFEST_FILE);
         let mut no_installer = release("2026.11.27", false);
         no_installer
             .assets
@@ -878,7 +836,7 @@ mod tests {
         let mut off_site = release("2026.11.26", false);
         off_site.assets[0].url = "https://evil.example/x/xpando_2026.11.26_x64-setup.exe".into();
         let good = release("2026.11.25", false);
-        let rs = [draft, odd, no_sums, no_installer, off_site, good];
+        let rs = [draft, odd, no_manifest, no_installer, off_site, good];
         // The newest *usable* release wins.
         assert_eq!(
             pick("2026.11.1", Channel::Stable, &rs).as_deref(),
@@ -926,7 +884,7 @@ mod tests {
         assert!(u.beta);
         assert_eq!(u.tag, "2026.11.24-beta");
         assert_eq!(u.installer.name, "xpando_2026.11.24-beta_x64-setup.exe");
-        assert_eq!(u.sums.name, SUMS_FILE);
+        assert_eq!(u.manifest.name, MANIFEST_FILE);
         assert!(u.release_url.ends_with("/tag/2026.11.24-beta"));
         let stable = [release("2026.11.24", false)];
         let u = pick_update(
@@ -982,7 +940,7 @@ mod tests {
             a("xpando_1_x64_en-US.msi"),
             a("xpando_1_aarch64.AppImage"),
             a("xpando_1_amd64.AppImage"),
-            a("SHA256SUMS.txt"),
+            a("latest.json"),
         ];
         let n = |os, arch| choose_installer(&assets, os, arch).map(|x| x.name.clone());
         assert_eq!(
@@ -1003,60 +961,6 @@ mod tests {
         );
         assert_eq!(n(Os::MacOs, "aarch64"), None);
         assert!(choose_installer(&[], Os::Windows, "x86_64").is_none());
-    }
-
-    // ---- checksums ----
-
-    const H1: &str = "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad";
-    const H2: &str = "248d6a61d20638b8e5c026930c3e6039a33ce45964ff2167f6ecedd419db06c1";
-
-    #[test]
-    fn finds_the_hash_for_a_file() {
-        let sums = format!(
-            "{H1}  xpando_1_x64-setup.exe\n{H2} *xpando_1_universal.dmg\r\n\nsomething else\n"
-        );
-        assert_eq!(find_sha256(&sums, "xpando_1_x64-setup.exe").unwrap(), H1);
-        assert_eq!(find_sha256(&sums, "xpando_1_universal.dmg").unwrap(), H2);
-        // Upper-case hashes are accepted and normalised.
-        let up = format!("{}  a.exe\n", H1.to_uppercase());
-        assert_eq!(find_sha256(&up, "a.exe").unwrap(), H1);
-    }
-
-    #[test]
-    fn refuses_missing_malformed_or_ambiguous_entries() {
-        let sums = format!("{H1}  a.exe\n");
-        assert!(find_sha256(&sums, "b.exe").is_err());
-        assert!(find_sha256(&sums, "A.exe").is_err());
-        assert!(find_sha256(&sums, "a.ex").is_err());
-        assert!(find_sha256("", "a.exe").is_err());
-        assert!(find_sha256("abc  a.exe\n", "a.exe").is_err());
-        assert!(find_sha256(&format!("{}zz  a.exe\n", &H1[..62]), "a.exe").is_err());
-        // Same file twice with different hashes: refuse. Same hash twice: fine.
-        assert!(find_sha256(&format!("{H1}  a.exe\n{H2}  a.exe\n"), "a.exe").is_err());
-        assert_eq!(
-            find_sha256(&format!("{H1}  a.exe\n{H1}  a.exe\n"), "a.exe").unwrap(),
-            H1
-        );
-        // A name that merely ends with the wanted one does not match.
-        assert!(find_sha256(&format!("{H1}  dir/a.exe\n"), "a.exe").is_err());
-    }
-
-    #[test]
-    fn hash_verification() {
-        assert!(verify_hash(H1, H1).is_ok());
-        assert!(verify_hash(&H1.to_uppercase(), H1).is_ok());
-        let err = verify_hash(H1, H2).unwrap_err();
-        assert!(err.contains("discarded"));
-        assert!(verify_hash("", H1).is_err());
-    }
-
-    #[test]
-    fn end_to_end_hash_check_with_the_real_sha256() {
-        let data = b"abc";
-        let sums = format!("{}  setup.exe\n", crate::sha256::sha256_hex(data));
-        let expected = find_sha256(&sums, "setup.exe").unwrap();
-        assert!(verify_hash(&crate::sha256::sha256_hex(data), &expected).is_ok());
-        assert!(verify_hash(&crate::sha256::sha256_hex(b"abd"), &expected).is_err());
     }
 
     // ---- addresses ----

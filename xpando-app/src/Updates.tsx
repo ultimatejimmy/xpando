@@ -30,13 +30,14 @@ type CheckOutcome =
   | { status: "not_due" | "dev_build" | "up_to_date" }
   | { status: "available"; update: UpdateInfo };
 
-type InstallOutcome = { kind: "launched" } | { kind: "revealed"; path: string };
+type InstallOutcome = { kind: "launched" } | { kind: "installed" } | { kind: "opened_page" };
 
 export type InstallState =
   | { phase: "idle" }
   | { phase: "downloading" | "verifying" | "starting"; done: number; total: number }
   | { phase: "launched" }
-  | { phase: "revealed"; path: string }
+  | { phase: "installed" }
+  | { phase: "opened_page" }
   | { phase: "error"; message: string };
 
 export interface UpdatesApi {
@@ -171,7 +172,7 @@ export function useUpdates(): UpdatesApi {
     setInstall({ phase: "downloading", done: 0, total: available.installer.size });
     try {
       const r = await invoke<InstallOutcome>("install_update", { version: available.version });
-      setInstall(r.kind === "launched" ? { phase: "launched" } : { phase: "revealed", path: r.path });
+      setInstall({ phase: r.kind === "launched" ? "launched" : r.kind === "installed" ? "installed" : "opened_page" });
     } catch (e) {
       setInstall({ phase: "error", message: describe(e) });
     }
@@ -213,15 +214,19 @@ function InstallStatus({ u }: { u: UpdatesApi }) {
       </p>
     );
   }
-  if (install.phase === "revealed") {
+  if (install.phase === "installed") {
     return (
-      <div role="status">
-        <p>Version {version} was downloaded and checked. Open the file to install it:</p>
-        <p className="up-path">
-          <code>{install.path}</code>
-        </p>
-        <p className="fm-help">xpando cannot install itself on this system yet, so the last step is yours.</p>
-      </div>
+      <p role="status">
+        Version {version} was downloaded, checked and installed. Close xpando and start it again to use it.
+      </p>
+    );
+  }
+  if (install.phase === "opened_page") {
+    return (
+      <p role="status">
+        This copy of xpando cannot update itself. The page for version {version} was opened in your browser; download
+        and install it from there.
+      </p>
     );
   }
   if (install.phase === "launched" || install.phase === "starting") {
@@ -233,7 +238,7 @@ function InstallStatus({ u }: { u: UpdatesApi }) {
       <p>
         {install.phase === "downloading"
           ? `Downloading version ${version}${pct === null ? "..." : `... ${pct}%`}`
-          : "Checking that the download is complete and genuine..."}
+          : "Checking the update's signature..."}
       </p>
       {install.phase === "downloading" && <progress className="up-progress" max={100} value={pct ?? undefined} />}
     </div>
@@ -276,7 +281,7 @@ export function UpdateBanner({ u }: { u: UpdatesApi }) {
           </button>
         </div>
       )}
-      {(install.phase === "error" || install.phase === "revealed") && (
+      {(install.phase === "error" || install.phase === "installed" || install.phase === "opened_page") && (
         <button type="button" className="btn btn-icon" aria-label="Close this message" onClick={u.closeInstall}>
           <X size={16} aria-hidden="true" />
         </button>

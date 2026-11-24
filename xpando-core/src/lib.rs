@@ -10,7 +10,6 @@ pub mod datadir;
 pub mod engine;
 pub mod import;
 mod minijson;
-pub mod sha256;
 pub mod syncsafe;
 pub mod update;
 pub mod yamledit;
