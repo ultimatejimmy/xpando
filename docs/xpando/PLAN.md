@@ -160,6 +160,12 @@ Key principles:
       can paste reliably: bold/italic/underline, lists, links, headings, inline images, tables (stretch).
 - [ ] Serialize to `html:`; sanitize; auto-generate plain-text fallback.
 - [ ] Per-app paste testing matrix (Outlook, Word, Gmail, Slack, Teams, plain-text fields).
+- [x] Paste from Word and other programs (PhraseExpress parity): Ctrl+V cleaning, **Paste from
+      clipboard** button, **New phrase from clipboard**; full formatting kept (colour, highlight,
+      font, size, alignment, indents, spacing, sub/superscript, nested lists, tables with borders,
+      shading and merged cells, small embedded pictures) through a strict CSS allow-list in the
+      sanitiser. Unit and Cargo tests pass; **not yet tried with real Word, Outlook or Excel
+      clipboards on a person's machine**, nor the Clipboard API permission inside the Tauri window.
 - [ ] Upstream fix candidates if espanso's HTML clipboard injection has gaps.
 
 ### M4 — Macros & forms builder (≈2–3 weeks)

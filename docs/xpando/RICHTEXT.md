@@ -70,12 +70,43 @@ are written as UTF-8. Blocks are separated by a newline so the YAML stays readab
 * `script`, `style`, `textarea`, `title`, `noscript` (with their content), and `head`, `iframe`,
   `object`, `embed`, `svg`, `math`, `template`, `select`, `option`, `button`, `input`, `video`,
   `audio`, `canvas` (with their content), comments and doctypes.
-* **Every attribute not listed above**: `style`, `class`, `id`, `on*` handlers, `target`, ...
-  (colours, fonts and sizes are therefore not kept; the editor notes this).
-* Links and images with another scheme (`javascript:`, `data:`, `file:`, `vbscript:`, relative
-  addresses, a placeholder as the whole address).
-* Tables are flattened: each cell becomes a paragraph. Unknown elements are unwrapped (their text
-  is kept). Anything beyond 4 MB, and nesting beyond 64 levels, is cut.
+* **Every attribute not listed above**: `class`, `id`, `on*` handlers, `target`, ... (`style` is
+  kept only for the properties in "Formatting kept" below).
+* Links with another scheme (`javascript:`, `data:`, `file:`, `vbscript:`, relative addresses, a
+  placeholder as the whole address). Images other than `http`/`https` or a `data:image/` png, jpeg,
+  gif or webp of at most 400,000 characters (`file:`, `cid:`, svg, relative).
+* Unknown elements are unwrapped (their text is kept). Anything beyond 4 MB, and nesting beyond 64
+  levels, is cut.
+
+### Formatting kept (inline `style`, strict allow-list)
+
+espanso pastes the HTML through the clipboard, so inline styles are what reaches Outlook, Word and
+Gmail. Every value is matched against a positive pattern and rewritten in one canonical spelling
+(`11.0pt` becomes `11pt`, `Calibri` becomes `'Calibri'`); anything else (`url()`, `expression()`,
+`@import`, escapes, comments, unknown properties) is dropped.
+
+| Where | Properties |
+|---|---|
+| `<span style>` (text) | `color`, `background-color` (also `background`, `mso-highlight`), `font-family` (letters, digits, space, `.-_`, at most 6 names), `font-size` (pt, px, em, rem, %, in, cm, mm) |
+| Read from `style` or tags into `strong`/`em`/`u`/`s`/`sub`/`sup` | `font-weight`, `font-style`, `text-decoration`, `vertical-align` (sub, super), `<font color face size>` |
+| `p`, `h1`-`h3` | `text-align` (left, center, right, justify; also the `align` attribute and `<center>`), `line-height`, `margin-top`, `margin-bottom`, `margin-left`, `text-indent`. Zero values are dropped. Alignment passes down from `div`s. |
+| `table`, `td`, `th` | `width`, `border-collapse`, `border` and `-top/-right/-bottom/-left` (width, style, colour), `background-color` (also `bgcolor`), `padding`, `vertical-align`; `colspan`, `rowspan` (1 to 100). Legacy `border="1"` becomes a thin border on each cell. |
+
+Colours are `#rgb`/`#rrggbb`/`#rrggbbaa`, `rgb()`/`rgba()` with numbers, or about forty names;
+`windowtext` is black. Output order of properties is fixed, so the result is canonical.
+
+The editor (`richExtensions.ts`) keeps the exact style text next to the browser's rewritten copy
+(`data-style`) and writes it back when it hands the HTML over, because ProseMirror sets `style`
+through the CSS object model, which would turn `border: 1pt solid #000; border-top: none` into
+longhand properties the sanitiser does not accept.
+
+### Pasting
+
+`pasteClean.ts` (pure, unit tested with hand-written Word, Excel, Outlook, Google Docs and web
+fixtures) cleans clipboard HTML before the editor sees it: Word's conditional comments, `mso-*`,
+`<o:p>`, `MsoListParagraph` fake lists (rebuilt as `ul`/`ol` with nesting from `level`), spacing
+runs, comments and hidden text. Its output is already in the sanitiser's canonical spelling (a
+Cargo test keeps both in step). Plain text is escaped, never read as markup.
 
 The sanitiser is canonical and idempotent: `sanitize(sanitize(x)) == sanitize(x)` (tested on
 generated input). Output only ever contains the elements above, so it cannot contain a script,

@@ -369,6 +369,9 @@ struct Marks {
     strike: bool,
     code: bool,
     link: Option<String>,
+    /// 0 none, 1 subscript, 2 superscript.
+    script: u8,
+    style: TextStyle,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -391,8 +394,9 @@ struct Run {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum Block {
-    Para(Vec<Run>),
-    Heading(u8, Vec<Run>),
+    Para(Vec<Run>, BStyle),
+    Heading(u8, Vec<Run>, BStyle),
+    Table(Table),
     Quote(Vec<Block>),
     List {
         ordered: bool,
@@ -402,9 +406,26 @@ enum Block {
     Hr,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct Table {
+    style: BoxStyle,
+    rows: Vec<Vec<Cell>>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct Cell {
+    header: bool,
+    colspan: u32,
+    rowspan: u32,
+    style: BoxStyle,
+    blocks: Vec<Block>,
+}
+
 #[derive(Default)]
 struct Cx {
     dropped: Vec<String>,
+    /// Style of the paragraphs being created right now.
+    bs: BStyle,
 }
 
 impl Cx {
@@ -413,6 +434,605 @@ impl Cx {
             self.dropped.push(what.to_string());
         }
     }
+}
+
+// ---------------------------------------------------------------------------------------
+// CSS: a strict allow-list. Only the properties below are ever kept, each with a value
+// checked against a positive pattern and rewritten in one canonical spelling. Anything else
+// (url(), expression(), @import, escapes, comments, unknown properties) is dropped.
+// ---------------------------------------------------------------------------------------
+
+/// Character formatting that a `<span style>` carries.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+struct TextStyle {
+    color: Option<String>,
+    background: Option<String>,
+    family: Option<String>,
+    size: Option<String>,
+}
+
+/// Paragraph formatting (paragraphs and headings).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+struct BStyle {
+    align: Option<String>,
+    line_height: Option<String>,
+    margin_top: Option<String>,
+    margin_bottom: Option<String>,
+    margin_left: Option<String>,
+    text_indent: Option<String>,
+}
+
+impl BStyle {
+    fn is_empty(&self) -> bool {
+        *self == BStyle::default()
+    }
+}
+
+/// Formatting of a table or a table cell.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+struct BoxStyle {
+    background: Option<String>,
+    width: Option<String>,
+    valign: Option<String>,
+    align: Option<String>,
+    padding: Option<String>,
+    collapse: Option<String>,
+    /// `border`, `border-top`, `border-right`, `border-bottom`, `border-left`.
+    borders: [Option<String>; 5],
+}
+
+const BORDER_PROPS: [&str; 5] = [
+    "border",
+    "border-top",
+    "border-right",
+    "border-bottom",
+    "border-left",
+];
+
+const COLOR_NAMES: &[&str] = &[
+    "aqua",
+    "black",
+    "blue",
+    "fuchsia",
+    "gray",
+    "grey",
+    "green",
+    "lime",
+    "maroon",
+    "navy",
+    "olive",
+    "orange",
+    "purple",
+    "red",
+    "silver",
+    "teal",
+    "white",
+    "yellow",
+    "cyan",
+    "magenta",
+    "brown",
+    "pink",
+    "gold",
+    "darkblue",
+    "darkgreen",
+    "darkred",
+    "darkgray",
+    "darkgrey",
+    "lightgray",
+    "lightgrey",
+    "lightblue",
+    "lightgreen",
+    "lightyellow",
+    "violet",
+    "indigo",
+    "coral",
+    "crimson",
+    "transparent",
+];
+
+const GENERIC_FAMILIES: &[&str] = &[
+    "serif",
+    "sans-serif",
+    "monospace",
+    "cursive",
+    "fantasy",
+    "system-ui",
+];
+
+/// Splits `a:b; c:d` into lower-cased property names and raw values. Quotes and parentheses
+/// protect their `;`.
+fn split_decls(style: &str) -> Vec<(String, String)> {
+    let mut parts: Vec<String> = Vec::new();
+    let mut cur = String::new();
+    let mut quote: Option<char> = None;
+    let mut depth = 0usize;
+    for c in style.chars().take(4000) {
+        match (quote, c) {
+            (Some(q), c) if c == q => {
+                quote = None;
+                cur.push(c);
+            }
+            (Some(_), c) => cur.push(c),
+            (None, '"' | '\'') => {
+                quote = Some(c);
+                cur.push(c);
+            }
+            (None, '(') => {
+                depth += 1;
+                cur.push(c);
+            }
+            (None, ')') => {
+                depth = depth.saturating_sub(1);
+                cur.push(c);
+            }
+            (None, ';') if depth == 0 => parts.push(std::mem::take(&mut cur)),
+            (None, c) => cur.push(c),
+        }
+    }
+    parts.push(cur);
+    parts
+        .into_iter()
+        .filter_map(|p| {
+            let at = p.find(':')?;
+            let name = p[..at].trim().to_ascii_lowercase();
+            let mut value = p[at + 1..].trim().to_string();
+            let lower = value.to_ascii_lowercase();
+            if let Some(i) = lower.rfind("!important") {
+                if lower[i + 10..].trim().is_empty() {
+                    value = value[..i].trim().to_string();
+                }
+            }
+            (!name.is_empty() && !value.is_empty() && value.len() <= 300).then_some((name, value))
+        })
+        .collect()
+}
+
+fn css_color(v: &str) -> Option<String> {
+    let v = v.trim().to_ascii_lowercase();
+    if let Some(h) = v.strip_prefix('#') {
+        return (matches!(h.len(), 3 | 4 | 6 | 8) && h.bytes().all(|b| b.is_ascii_hexdigit()))
+            .then(|| format!("#{h}"));
+    }
+    match v.as_str() {
+        "windowtext" => return Some("#000000".to_string()),
+        "window" => return Some("#ffffff".to_string()),
+        _ => {}
+    }
+    if COLOR_NAMES.contains(&v.as_str()) {
+        return Some(v);
+    }
+    let inner = v
+        .strip_prefix("rgba(")
+        .or_else(|| v.strip_prefix("rgb("))?
+        .strip_suffix(')')?;
+    let parts: Vec<&str> = inner
+        .split([',', ' ', '/'])
+        .filter(|p| !p.is_empty())
+        .collect();
+    if parts.len() != 3 && parts.len() != 4 {
+        return None;
+    }
+    let number = |p: &str| {
+        let body = p.strip_suffix('%').unwrap_or(p);
+        let (int, frac) = body.split_once('.').unwrap_or((body, ""));
+        !int.is_empty()
+            && int.len() <= 3
+            && frac.len() <= 3
+            && int.bytes().all(|b| b.is_ascii_digit())
+            && frac.bytes().all(|b| b.is_ascii_digit())
+    };
+    if !parts.iter().all(|p| number(p)) {
+        return None;
+    }
+    let name = if parts.len() == 4 { "rgba" } else { "rgb" };
+    Some(format!("{name}({})", parts.join(",")))
+}
+
+/// A number with an optional unit. `neg` allows a minus sign, `pct` allows `%`.
+/// Zero is written `0`.
+fn css_len(v: &str, neg: bool, pct: bool) -> Option<String> {
+    let v = v.trim().to_ascii_lowercase();
+    let at = v
+        .find(|c: char| !(c.is_ascii_digit() || c == '.' || c == '+' || c == '-'))
+        .unwrap_or(v.len());
+    let (num, unit) = v.split_at(at);
+    let unit_ok = match unit {
+        "pt" | "px" | "em" | "rem" | "in" | "cm" | "mm" => true,
+        "%" => pct,
+        "" => true,
+        _ => false,
+    };
+    let digits = num.strip_prefix(['+', '-']).unwrap_or(num);
+    let (int, frac) = digits.split_once('.').unwrap_or((digits, ""));
+    let shape_ok = unit_ok
+        && (!int.is_empty() || !frac.is_empty())
+        && int.len() <= 4
+        && frac.len() <= 3
+        && int.bytes().all(|b| b.is_ascii_digit())
+        && frac.bytes().all(|b| b.is_ascii_digit())
+        && (neg || !num.starts_with('-'));
+    if !shape_ok {
+        return None;
+    }
+    let f: f64 = num.parse().ok()?;
+    if f == 0.0 {
+        return Some("0".to_string());
+    }
+    if unit.is_empty() {
+        return None; // a bare number is only valid as zero
+    }
+    Some(format!("{f}{unit}"))
+}
+
+fn nonzero(v: Option<String>) -> Option<String> {
+    v.filter(|s| s != "0")
+}
+
+fn css_font_size(v: &str) -> Option<String> {
+    let s = css_len(v, false, true)?;
+    let f: f64 = s
+        .trim_end_matches(|c: char| c.is_ascii_alphabetic() || c == '%')
+        .parse()
+        .ok()?;
+    (f > 0.0 && f <= 999.0 && s != "0").then_some(s)
+}
+
+fn css_line_height(v: &str) -> Option<String> {
+    let t = v.trim().to_ascii_lowercase();
+    if t == "normal" {
+        return None;
+    }
+    if let Some(s) = css_len(&t, false, true) {
+        return (s != "0").then_some(s);
+    }
+    // Unitless factor, 0.5 to 10.
+    let (int, frac) = t.split_once('.').unwrap_or((&t, ""));
+    let ok = !int.is_empty()
+        && int.len() <= 2
+        && frac.len() <= 3
+        && int.bytes().all(|b| b.is_ascii_digit())
+        && frac.bytes().all(|b| b.is_ascii_digit());
+    let f: f64 = t.parse().ok().filter(|_| ok)?;
+    (0.5..=10.0).contains(&f).then(|| format!("{f}"))
+}
+
+fn css_family(v: &str) -> Option<String> {
+    let mut names = Vec::new();
+    for part in v.split(',') {
+        let p = part.trim();
+        let name = if (p.starts_with('"') && p.ends_with('"')
+            || p.starts_with('\'') && p.ends_with('\''))
+            && p.len() >= 2
+        {
+            p[1..p.len() - 1].trim()
+        } else {
+            p
+        };
+        if name.is_empty() || name.chars().count() > 60 {
+            return None;
+        }
+        if !name
+            .chars()
+            .all(|c| c.is_alphanumeric() || matches!(c, ' ' | '-' | '_' | '.'))
+        {
+            return None;
+        }
+        let name: String = name.split_whitespace().collect::<Vec<_>>().join(" ");
+        if GENERIC_FAMILIES.contains(&name.to_ascii_lowercase().as_str()) {
+            names.push(name.to_ascii_lowercase());
+        } else {
+            names.push(format!("'{name}'"));
+        }
+        if names.len() > 6 {
+            return None;
+        }
+    }
+    (!names.is_empty()).then(|| names.join(","))
+}
+
+fn css_align(v: &str) -> Option<String> {
+    let t = v.trim().to_ascii_lowercase();
+    matches!(t.as_str(), "left" | "center" | "right" | "justify").then_some(t)
+}
+
+fn css_valign(v: &str) -> Option<String> {
+    let t = v.trim().to_ascii_lowercase();
+    matches!(t.as_str(), "top" | "middle" | "bottom" | "baseline").then_some(t)
+}
+
+/// `1pt solid #000` and friends: width, style and colour in any order, at most one of each.
+fn css_border(v: &str) -> Option<String> {
+    let mut squashed = String::new();
+    let mut depth = 0usize;
+    for c in v.trim().to_ascii_lowercase().chars() {
+        match c {
+            '(' => {
+                depth += 1;
+                squashed.push(c);
+            }
+            ')' => {
+                depth = depth.saturating_sub(1);
+                squashed.push(c);
+            }
+            c if c.is_whitespace() && depth > 0 => {}
+            c => squashed.push(c),
+        }
+    }
+    let (mut width, mut style, mut color) = (None, None, None);
+    let mut count = 0;
+    for tok in squashed.split_whitespace() {
+        count += 1;
+        if matches!(
+            tok,
+            "none" | "hidden" | "solid" | "dashed" | "dotted" | "double"
+        ) {
+            if style.replace(tok.to_string()).is_some() {
+                return None;
+            }
+        } else if matches!(tok, "thin" | "medium" | "thick") {
+            if width.replace(tok.to_string()).is_some() {
+                return None;
+            }
+        } else if let Some(c) = css_color(tok) {
+            if color.replace(c).is_some() {
+                return None;
+            }
+        } else if let Some(w) = css_len(tok, false, false) {
+            if width.replace(w).is_some() {
+                return None;
+            }
+        } else if tok == "auto" {
+            continue; // Word's automatic colour: the default
+        } else {
+            return None;
+        }
+    }
+    if count == 0 || count > 4 {
+        return None;
+    }
+    if style.as_deref() == Some("none") || style.as_deref() == Some("hidden") {
+        return Some("none".to_string());
+    }
+    let parts: Vec<String> = [width, style, color].into_iter().flatten().collect();
+    (!parts.is_empty()).then(|| parts.join(" "))
+}
+
+/// One to four lengths (`padding`, `margin`), expanded to top, right, bottom, left.
+fn four_lengths(v: &str, neg: bool) -> Option<[String; 4]> {
+    let vals: Vec<String> = v
+        .split_whitespace()
+        .map(|p| css_len(p, neg, true))
+        .collect::<Option<_>>()?;
+    match vals.as_slice() {
+        [a] => Some([a.clone(), a.clone(), a.clone(), a.clone()]),
+        [a, b] => Some([a.clone(), b.clone(), a.clone(), b.clone()]),
+        [a, b, c] => Some([a.clone(), b.clone(), c.clone(), b.clone()]),
+        [a, b, c, d] => Some([a.clone(), b.clone(), c.clone(), d.clone()]),
+        _ => None,
+    }
+}
+
+fn bstyle_from(decls: &[(String, String)]) -> BStyle {
+    let mut b = BStyle::default();
+    for (name, value) in decls {
+        match name.as_str() {
+            "text-align" => b.align = css_align(value),
+            "line-height" => b.line_height = css_line_height(value),
+            "margin" => {
+                if let Some([t, _, bo, l]) = four_lengths(value, false) {
+                    b.margin_top = nonzero(Some(t));
+                    b.margin_bottom = nonzero(Some(bo));
+                    b.margin_left = nonzero(Some(l));
+                }
+            }
+            "margin-top" => b.margin_top = nonzero(css_len(value, false, true)),
+            "margin-bottom" => b.margin_bottom = nonzero(css_len(value, false, true)),
+            "margin-left" => b.margin_left = nonzero(css_len(value, false, true)),
+            "text-indent" => b.text_indent = nonzero(css_len(value, true, true)),
+            _ => {}
+        }
+    }
+    b
+}
+
+fn bstyle_css(b: &BStyle) -> String {
+    let mut out = Vec::new();
+    let mut add = |name: &str, v: &Option<String>| {
+        if let Some(v) = v {
+            out.push(format!("{name}:{v}"));
+        }
+    };
+    add("text-align", &b.align);
+    add("line-height", &b.line_height);
+    add("margin-top", &b.margin_top);
+    add("margin-bottom", &b.margin_bottom);
+    add("margin-left", &b.margin_left);
+    add("text-indent", &b.text_indent);
+    out.join(";")
+}
+
+fn boxstyle_from(decls: &[(String, String)]) -> BoxStyle {
+    let mut b = BoxStyle::default();
+    for (name, value) in decls {
+        match name.as_str() {
+            "background" | "background-color" => {
+                // `background` may only be a plain colour here.
+                b.background = css_color(value).filter(|c| c != "transparent");
+            }
+            "width" => b.width = nonzero(css_len(value, false, true)),
+            "vertical-align" => b.valign = css_valign(value),
+            "text-align" => b.align = css_align(value),
+            "padding" => {
+                b.padding = four_lengths(value, false)
+                    .map(|p| p.join(" "))
+                    .filter(|p| p != "0 0 0 0");
+            }
+            "border-collapse" => {
+                let t = value.trim().to_ascii_lowercase();
+                b.collapse = matches!(t.as_str(), "collapse" | "separate").then_some(t);
+            }
+            n => {
+                if let Some(i) = BORDER_PROPS.iter().position(|p| *p == n) {
+                    b.borders[i] = css_border(value);
+                }
+            }
+        }
+    }
+    b
+}
+
+fn boxstyle_css(b: &BoxStyle) -> String {
+    let mut out = Vec::new();
+    let mut add = |name: &str, v: &Option<String>| {
+        if let Some(v) = v {
+            out.push(format!("{name}:{v}"));
+        }
+    };
+    add("width", &b.width);
+    add("border-collapse", &b.collapse);
+    for (i, name) in BORDER_PROPS.iter().enumerate() {
+        add(name, &b.borders[i]);
+    }
+    add("background-color", &b.background);
+    add("padding", &b.padding);
+    add("text-align", &b.align);
+    add("vertical-align", &b.valign);
+    out.join(";")
+}
+
+fn text_style_css(t: &TextStyle) -> String {
+    let mut out = Vec::new();
+    let mut add = |name: &str, v: &Option<String>| {
+        if let Some(v) = v {
+            out.push(format!("{name}:{v}"));
+        }
+    };
+    add("font-family", &t.family);
+    add("font-size", &t.size);
+    add("color", &t.color);
+    add("background-color", &t.background);
+    out.join(";")
+}
+
+fn style_attr(css: &str) -> String {
+    if css.is_empty() {
+        String::new()
+    } else {
+        format!(" style=\"{}\"", esc_attr(css))
+    }
+}
+
+/// What the character formatting of one element's `style` says.
+#[derive(Default)]
+struct InlineCss {
+    bold: Option<bool>,
+    italic: Option<bool>,
+    underline: bool,
+    strike: bool,
+    script: Option<u8>,
+}
+
+/// Applies the character formatting in `decls` onto `m` and returns the flag changes.
+fn apply_inline_css(m: &mut Marks, decls: &[(String, String)]) -> InlineCss {
+    let mut f = InlineCss::default();
+    for (name, value) in decls {
+        match name.as_str() {
+            "color" => {
+                if let Some(c) = css_color(value) {
+                    m.style.color = Some(c);
+                }
+            }
+            "background" | "background-color" | "mso-highlight" => {
+                if let Some(c) = css_color(value) {
+                    m.style.background = (c != "transparent").then_some(c);
+                }
+            }
+            "font-family" => {
+                if let Some(c) = css_family(value) {
+                    m.style.family = Some(c);
+                }
+            }
+            "font-size" => {
+                if let Some(c) = css_font_size(value) {
+                    m.style.size = Some(c);
+                }
+            }
+            "font-weight" => {
+                let t = value.trim().to_ascii_lowercase();
+                f.bold = match t.as_str() {
+                    "bold" | "bolder" => Some(true),
+                    "normal" | "lighter" => Some(false),
+                    n => n.parse::<u32>().ok().map(|w| w >= 600),
+                };
+            }
+            "font-style" => {
+                let t = value.trim().to_ascii_lowercase();
+                f.italic = match t.as_str() {
+                    "italic" | "oblique" => Some(true),
+                    "normal" => Some(false),
+                    _ => None,
+                };
+            }
+            "text-decoration" | "text-decoration-line" => {
+                let t = value.to_ascii_lowercase();
+                f.underline = t.contains("underline");
+                f.strike = t.contains("line-through");
+            }
+            "vertical-align" => {
+                let t = value.trim().to_ascii_lowercase();
+                f.script = match t.as_str() {
+                    "sub" => Some(1),
+                    "super" => Some(2),
+                    "baseline" => Some(0),
+                    _ => None,
+                };
+            }
+            _ => {}
+        }
+    }
+    if let Some(s) = f.script {
+        m.script = s;
+    }
+    if let Some(b) = f.bold {
+        m.bold = b;
+    }
+    if let Some(i) = f.italic {
+        m.italic = i;
+    }
+    if f.underline && m.link.is_none() {
+        m.underline = true;
+    }
+    if f.strike {
+        m.strike = true;
+    }
+    f
+}
+
+/// `<font color face size>` as the equivalent declarations.
+fn font_decls(e: &Elem) -> Vec<(String, String)> {
+    let mut d = Vec::new();
+    if let Some(c) = e.attr("color") {
+        d.push(("color".to_string(), c.to_string()));
+    }
+    if let Some(f) = e.attr("face") {
+        d.push(("font-family".to_string(), f.to_string()));
+    }
+    if let Some(s) = e.attr("size") {
+        let pt = match s.trim() {
+            "1" => Some("8pt"),
+            "2" => Some("10pt"),
+            "3" => Some("12pt"),
+            "4" => Some("14pt"),
+            "5" => Some("18pt"),
+            "6" => Some("24pt"),
+            "7" => Some("36pt"),
+            _ => None,
+        };
+        if let Some(pt) = pt {
+            d.push(("font-size".to_string(), pt.to_string()));
+        }
+    }
+    d
 }
 
 fn is_html_space(c: char) -> bool {
@@ -486,7 +1106,26 @@ pub fn safe_href(raw: &str) -> Option<String> {
     ok.then_some(href)
 }
 
+/// Largest picture kept inside the text itself (a `data:` address), in characters.
+const MAX_DATA_IMAGE: usize = 400_000;
+
 fn image_src(raw: &str) -> Option<String> {
+    let cleaned: String = raw
+        .chars()
+        .filter(|c| !c.is_control() && !c.is_whitespace())
+        .collect();
+    let lower = cleaned.to_ascii_lowercase();
+    if let Some(rest) = lower.strip_prefix("data:image/") {
+        let (kind, payload) = rest.split_once(";base64,")?;
+        let payload = &cleaned[cleaned.len() - payload.len()..];
+        let ok = matches!(kind, "png" | "jpeg" | "jpg" | "gif" | "webp")
+            && !payload.is_empty()
+            && cleaned.len() <= MAX_DATA_IMAGE
+            && payload
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'+' | b'/' | b'='));
+        return ok.then(|| format!("data:image/{kind};base64,{payload}"));
+    }
     let src = safe_href(raw)?;
     let lower = src.to_ascii_lowercase();
     (lower.starts_with("http://") || lower.starts_with("https://")).then_some(src)
@@ -534,11 +1173,11 @@ fn tidy(runs: &mut Vec<Run>) {
     }
 }
 
-fn flush(pend: &mut Vec<Run>, out: &mut Vec<Block>, force: bool) {
+fn flush(cx: &Cx, pend: &mut Vec<Run>, out: &mut Vec<Block>, force: bool) {
     let mut runs = std::mem::take(pend);
     tidy(&mut runs);
     if !runs.is_empty() || force {
-        out.push(Block::Para(runs));
+        out.push(Block::Para(runs, cx.bs.clone()));
     }
 }
 
@@ -546,16 +1185,32 @@ fn build_blocks(nodes: &[Node], marks: &Marks, cx: &mut Cx) -> Vec<Block> {
     let mut out = Vec::new();
     let mut pend = Vec::new();
     collect(nodes, marks, cx, &mut out, &mut pend);
-    flush(&mut pend, &mut out, false);
+    flush(cx, &mut pend, &mut out, false);
     out
 }
 
+/// Blocks built with `bs` as the style of the paragraphs that are created.
+fn build_styled(nodes: &[Node], marks: &Marks, cx: &mut Cx, bs: BStyle) -> Vec<Block> {
+    let saved = std::mem::replace(&mut cx.bs, bs);
+    let out = build_blocks(nodes, marks, cx);
+    cx.bs = saved;
+    out
+}
+
+/// Only the alignment passes down to nested blocks (as in CSS); margins do not.
+fn inherited(cx: &Cx) -> BStyle {
+    BStyle {
+        align: cx.bs.align.clone(),
+        ..BStyle::default()
+    }
+}
+
 fn inline_runs(nodes: &[Node], marks: &Marks, cx: &mut Cx) -> Vec<Run> {
-    let blocks = build_blocks(nodes, marks, cx);
+    let blocks = build_styled(nodes, marks, cx, BStyle::default());
     let mut runs: Vec<Run> = Vec::new();
     for b in blocks {
         match b {
-            Block::Para(r) | Block::Heading(_, r) => {
+            Block::Para(r, _) | Block::Heading(_, r, _) => {
                 if !runs.is_empty() {
                     runs.push(Run {
                         kind: RunKind::Br,
@@ -588,17 +1243,193 @@ fn collect(nodes: &[Node], marks: &Marks, cx: &mut Cx, out: &mut Vec<Block>, pen
     }
 }
 
-fn collect_elem(e: &Elem, marks: &Marks, cx: &mut Cx, out: &mut Vec<Block>, pend: &mut Vec<Run>) {
-    if e.attr("style").is_some_and(|s| !s.trim().is_empty()) || e.name == "font" {
-        cx.note("colours, fonts and sizes");
+/// The paragraph style an element asks for: its own `style`, then its `align` attribute,
+/// then what its parent passes down.
+fn block_style(e: &Elem, decls: &[(String, String)], cx: &Cx) -> BStyle {
+    let mut b = bstyle_from(decls);
+    if b.align.is_none() {
+        b.align = if e.name == "center" {
+            Some("center".to_string())
+        } else {
+            e.attr("align")
+                .and_then(css_align)
+                .or_else(|| cx.bs.align.clone())
+        };
     }
+    b
+}
+
+fn span_attr(v: Option<&str>) -> Option<u32> {
+    v.and_then(|s| s.trim().parse::<u32>().ok())
+        .filter(|n| (1..=100).contains(n))
+}
+
+fn legacy_width(v: Option<&str>) -> Option<(String, String)> {
+    let v = v?.trim();
+    let digits = v.strip_suffix('%').unwrap_or(v);
+    if digits.is_empty() || digits.len() > 4 || !digits.bytes().all(|b| b.is_ascii_digit()) {
+        return None;
+    }
+    let value = if v.ends_with('%') {
+        format!("{digits}%")
+    } else {
+        format!("{digits}px")
+    };
+    Some(("width".to_string(), value))
+}
+
+fn parse_rows(
+    nodes: &[Node],
+    marks: &Marks,
+    cx: &mut Cx,
+    rows: &mut Vec<Vec<Cell>>,
+    before: &mut Vec<Block>,
+) {
+    for n in nodes {
+        let Node::Elem(el) = n else { continue };
+        match el.name.as_str() {
+            "thead" | "tbody" | "tfoot" => parse_rows(&el.children, marks, cx, rows, before),
+            "caption" => {
+                let inner = build_styled(&el.children, marks, cx, inherited(cx));
+                before.extend(inner);
+            }
+            "tr" => {
+                let mut row_decls = el.attr("style").map(split_decls).unwrap_or_default();
+                if let Some(bg) = el.attr("bgcolor") {
+                    row_decls.push(("background-color".to_string(), bg.to_string()));
+                }
+                let row_box = boxstyle_from(&row_decls);
+                let mut cells = Vec::new();
+                for c in &el.children {
+                    let Node::Elem(cell) = c else { continue };
+                    if cell.name != "td" && cell.name != "th" {
+                        continue;
+                    }
+                    if cells.len() >= 100 {
+                        cx.note("table cells beyond 100 in a row");
+                        break;
+                    }
+                    cells.push(parse_cell(cell, &row_box, marks, cx));
+                }
+                if !cells.is_empty() && rows.len() < 2000 {
+                    rows.push(cells);
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
+fn parse_cell(cell: &Elem, row: &BoxStyle, marks: &Marks, cx: &mut Cx) -> Cell {
+    let mut decls = cell.attr("style").map(split_decls).unwrap_or_default();
+    // Legacy attributes come first so that `style` wins.
+    let mut legacy: Vec<(String, String)> = Vec::new();
+    if let Some(bg) = cell.attr("bgcolor") {
+        legacy.push(("background-color".to_string(), bg.to_string()));
+    }
+    if let Some(a) = cell.attr("align") {
+        legacy.push(("text-align".to_string(), a.to_string()));
+    }
+    if let Some(a) = cell.attr("valign") {
+        legacy.push(("vertical-align".to_string(), a.to_string()));
+    }
+    if let Some(w) = legacy_width(cell.attr("width")) {
+        legacy.push(w);
+    }
+    legacy.append(&mut decls);
+    let mut style = boxstyle_from(&legacy);
+    if style.background.is_none() {
+        style.background = row.background.clone();
+    }
+    // Text colour and font cascade into the cell; its background does not become a highlight.
+    let mut inner_marks = marks.clone();
+    let text_decls: Vec<(String, String)> = legacy
+        .iter()
+        .filter(|(n, _)| {
+            matches!(
+                n.as_str(),
+                "color" | "font-family" | "font-size" | "font-weight" | "font-style"
+            )
+        })
+        .cloned()
+        .collect();
+    apply_inline_css(&mut inner_marks, &text_decls);
+    let bs = BStyle {
+        align: style.align.clone().or_else(|| cx.bs.align.clone()),
+        ..BStyle::default()
+    };
+    let mut blocks = build_styled(&cell.children, &inner_marks, cx, bs);
+    // The cell's own alignment is carried by its paragraphs, so it is not repeated on the cell.
+    style.align = None;
+    if blocks.is_empty() {
+        blocks.push(Block::Para(Vec::new(), BStyle::default()));
+    }
+    Cell {
+        header: cell.name == "th",
+        colspan: span_attr(cell.attr("colspan")).unwrap_or(1),
+        rowspan: span_attr(cell.attr("rowspan")).unwrap_or(1),
+        style,
+        blocks,
+    }
+}
+
+fn parse_table(e: &Elem, marks: &Marks, cx: &mut Cx, out: &mut Vec<Block>) {
+    let decls = e.attr("style").map(split_decls).unwrap_or_default();
+    let mut legacy: Vec<(String, String)> = Vec::new();
+    if let Some(bg) = e.attr("bgcolor") {
+        legacy.push(("background-color".to_string(), bg.to_string()));
+    }
+    if let Some(w) = legacy_width(e.attr("width")) {
+        legacy.push(w);
+    }
+    legacy.extend(decls);
+    let mut style = boxstyle_from(&legacy);
+    let mut rows = Vec::new();
+    let mut before = Vec::new();
+    parse_rows(&e.children, marks, cx, &mut rows, &mut before);
+    // `border="1"` draws a thin border around every cell.
+    if e.attr("border")
+        .and_then(|b| b.trim().parse::<u32>().ok())
+        .is_some_and(|n| n > 0)
+    {
+        for c in rows.iter_mut().flatten() {
+            if c.style.borders.iter().all(|b| b.is_none()) {
+                c.style.borders[0] = Some("1px solid #000000".to_string());
+            }
+        }
+        style.collapse.get_or_insert_with(|| "collapse".to_string());
+    }
+    out.extend(before);
+    if !rows.is_empty() {
+        out.push(Block::Table(Table { style, rows }));
+    }
+}
+
+fn collect_elem(e: &Elem, marks: &Marks, cx: &mut Cx, out: &mut Vec<Block>, pend: &mut Vec<Run>) {
+    let mut decls = e.attr("style").map(split_decls).unwrap_or_default();
+    if e.name == "font" {
+        let mut d = font_decls(e);
+        d.append(&mut decls);
+        decls = d;
+    }
+    let cellish = matches!(
+        e.name.as_str(),
+        "table" | "tr" | "td" | "th" | "thead" | "tbody" | "tfoot"
+    );
+    let mut styled = marks.clone();
+    let css = if cellish {
+        InlineCss::default()
+    } else {
+        apply_inline_css(&mut styled, &decls)
+    };
+    let marks = &styled;
     let inline = |m: Marks, cx: &mut Cx, out: &mut Vec<Block>, pend: &mut Vec<Run>| {
         collect(&e.children, &m, cx, out, pend);
     };
     match e.name.as_str() {
         "strong" | "b" => inline(
             Marks {
-                bold: true,
+                bold: !matches!(css.bold, Some(false)),
                 ..marks.clone()
             },
             cx,
@@ -607,7 +1438,7 @@ fn collect_elem(e: &Elem, marks: &Marks, cx: &mut Cx, out: &mut Vec<Block>, pend
         ),
         "em" | "i" => inline(
             Marks {
-                italic: true,
+                italic: !matches!(css.italic, Some(false)),
                 ..marks.clone()
             },
             cx,
@@ -635,6 +1466,24 @@ fn collect_elem(e: &Elem, marks: &Marks, cx: &mut Cx, out: &mut Vec<Block>, pend
         "code" | "kbd" | "samp" | "tt" => inline(
             Marks {
                 code: true,
+                ..marks.clone()
+            },
+            cx,
+            out,
+            pend,
+        ),
+        "sub" => inline(
+            Marks {
+                script: 1,
+                ..marks.clone()
+            },
+            cx,
+            out,
+            pend,
+        ),
+        "sup" => inline(
+            Marks {
+                script: 2,
                 ..marks.clone()
             },
             cx,
@@ -677,47 +1526,73 @@ fn collect_elem(e: &Elem, marks: &Marks, cx: &mut Cx, out: &mut Vec<Block>, pend
             }),
             None => cx.note("images that are not at an http or https address"),
         },
-        "p" | "div" | "section" | "article" | "header" | "footer" | "main" | "aside" | "nav"
-        | "figure" | "figcaption" | "address" | "details" | "summary" | "form" | "fieldset"
-        | "center" | "td" | "th" | "dd" | "dt" | "dl" => {
-            flush(pend, out, false);
-            let inner = build_blocks(&e.children, marks, cx);
-            if inner.is_empty() && e.name == "p" {
-                out.push(Block::Para(Vec::new()));
+        "p" => {
+            flush(cx, pend, out, false);
+            let bs = block_style(e, &decls, cx);
+            let inner = build_styled(&e.children, marks, cx, bs.clone());
+            if inner.is_empty() {
+                out.push(Block::Para(Vec::new(), bs));
             } else {
                 out.extend(inner);
             }
         }
-        "table" | "thead" | "tbody" | "tfoot" | "tr" | "caption" => {
-            cx.note("tables (their cells became paragraphs)");
-            flush(pend, out, false);
-            let inner = build_blocks(&e.children, marks, cx);
+        "div" | "section" | "article" | "header" | "footer" | "main" | "aside" | "nav"
+        | "figure" | "figcaption" | "address" | "details" | "summary" | "form" | "fieldset"
+        | "center" | "td" | "th" | "dd" | "dt" | "dl" => {
+            flush(cx, pend, out, false);
+            let bs = BStyle {
+                align: block_style(e, &decls, cx).align,
+                ..BStyle::default()
+            };
+            let inner = build_styled(&e.children, marks, cx, bs);
+            out.extend(inner);
+        }
+        "table" => {
+            flush(cx, pend, out, false);
+            parse_table(e, marks, cx, out);
+        }
+        "thead" | "tbody" | "tfoot" | "tr" => {
+            // Rows outside a table (a copied range of cells): keep them as a table.
+            flush(cx, pend, out, false);
+            let wrapper = Elem {
+                name: "table".to_string(),
+                attrs: Vec::new(),
+                children: vec![Node::Elem(e.clone())],
+            };
+            parse_table(&wrapper, marks, cx, out);
+        }
+        "caption" => {
+            flush(cx, pend, out, false);
+            let inner = build_styled(&e.children, marks, cx, inherited(cx));
             out.extend(inner);
         }
         "h1" | "h2" | "h3" | "h4" | "h5" | "h6" => {
-            flush(pend, out, false);
+            flush(cx, pend, out, false);
             let level = e.name.as_bytes()[1] - b'0';
             if level > 3 {
                 cx.note("headings below level 3 (shown as level 3)");
             }
+            let bs = block_style(e, &decls, cx);
             let runs = inline_runs(&e.children, marks, cx);
             if runs.is_empty() {
                 // an empty heading carries nothing worth keeping
             } else {
-                out.push(Block::Heading(level.min(3), runs));
+                out.push(Block::Heading(level.min(3), runs, bs));
             }
         }
         "ul" | "ol" => {
-            flush(pend, out, false);
+            flush(cx, pend, out, false);
             let mut items: Vec<Vec<Block>> = Vec::new();
             for c in &e.children {
                 let item = match c {
-                    Node::Elem(li) if li.name == "li" => build_blocks(&li.children, marks, cx),
+                    Node::Elem(li) if li.name == "li" => {
+                        build_styled(&li.children, marks, cx, inherited(cx))
+                    }
                     Node::Text(t) if collapse(t).trim().is_empty() => continue,
-                    other => build_blocks(std::slice::from_ref(other), marks, cx),
+                    other => build_styled(std::slice::from_ref(other), marks, cx, inherited(cx)),
                 };
                 items.push(if item.is_empty() {
-                    vec![Block::Para(Vec::new())]
+                    vec![Block::Para(Vec::new(), BStyle::default())]
                 } else {
                     item
                 });
@@ -731,19 +1606,20 @@ fn collect_elem(e: &Elem, marks: &Marks, cx: &mut Cx, out: &mut Vec<Block>, pend
         }
         "li" => {
             // A stray list item outside a list: keep it as a paragraph.
-            flush(pend, out, false);
-            out.extend(build_blocks(&e.children, marks, cx));
+            flush(cx, pend, out, false);
+            let inner = build_styled(&e.children, marks, cx, inherited(cx));
+            out.extend(inner);
         }
         "blockquote" => {
-            flush(pend, out, false);
-            let inner = build_blocks(&e.children, marks, cx);
-            let empty = |b: &Block| matches!(b, Block::Para(r) if r.is_empty());
+            flush(cx, pend, out, false);
+            let inner = build_styled(&e.children, marks, cx, inherited(cx));
+            let empty = |b: &Block| matches!(b, Block::Para(r, _) if r.is_empty());
             if !inner.iter().all(empty) {
                 out.push(Block::Quote(inner));
             }
         }
         "pre" => {
-            flush(pend, out, false);
+            flush(cx, pend, out, false);
             let mut raw = String::new();
             raw_text(&e.children, &mut raw);
             let text = clean_pre(&raw).trim_matches('\n').to_string();
@@ -752,7 +1628,7 @@ fn collect_elem(e: &Elem, marks: &Marks, cx: &mut Cx, out: &mut Vec<Block>, pend
             }
         }
         "hr" => {
-            flush(pend, out, false);
+            flush(cx, pend, out, false);
             out.push(Block::Hr);
         }
         name if DROP_WITH_CONTENT.contains(&name) => cx.note(&format!("<{name}> content")),
@@ -769,10 +1645,10 @@ fn parse_blocks(input: &str, cx: &mut Cx) -> Vec<Block> {
         cx.note("text beyond 4 MB");
     }
     let mut blocks = build_blocks(&nodes, &Marks::default(), cx);
-    while blocks.len() > 1 && matches!(blocks.last(), Some(Block::Para(r)) if r.is_empty()) {
+    while blocks.len() > 1 && matches!(blocks.last(), Some(Block::Para(r, _)) if r.is_empty()) {
         blocks.pop();
     }
-    if matches!(blocks.as_slice(), [Block::Para(r)] if r.is_empty()) {
+    if matches!(blocks.as_slice(), [Block::Para(r, _)] if r.is_empty()) {
         blocks.clear();
     }
     blocks
@@ -800,16 +1676,19 @@ fn esc_attr(s: &str) -> String {
     esc_text(s).replace('"', "&quot;")
 }
 
-const TAGS: [&str; 6] = ["a", "strong", "em", "u", "s", "code"];
+const TAGS: [&str; 9] = ["a", "strong", "em", "u", "s", "code", "sub", "sup", "span"];
 
-fn mark_key(m: &Marks, level: usize) -> Option<&str> {
+fn mark_key(m: &Marks, level: usize) -> Option<String> {
     match level {
-        0 => m.link.as_deref(),
-        1 => m.bold.then_some(""),
-        2 => m.italic.then_some(""),
-        3 => m.underline.then_some(""),
-        4 => m.strike.then_some(""),
-        _ => m.code.then_some(""),
+        0 => m.link.clone(),
+        1 => m.bold.then(String::new),
+        2 => m.italic.then(String::new),
+        3 => m.underline.then(String::new),
+        4 => m.strike.then(String::new),
+        5 => m.code.then(String::new),
+        6 => (m.script == 1).then(String::new),
+        7 => (m.script == 2).then(String::new),
+        _ => Some(text_style_css(&m.style)).filter(|s| !s.is_empty()),
     }
 }
 
@@ -854,7 +1733,10 @@ fn emit_runs(runs: &[Run], level: usize) -> String {
         match key {
             None => out.push_str(&inner),
             Some(href) if level == 0 => {
-                out.push_str(&format!("<a href=\"{}\">{inner}</a>", esc_attr(href)));
+                out.push_str(&format!("<a href=\"{}\">{inner}</a>", esc_attr(&href)));
+            }
+            Some(css) if level == 8 => {
+                out.push_str(&format!("<span{}>{inner}</span>", style_attr(&css)));
             }
             Some(_) => out.push_str(&format!("<{0}>{inner}</{0}>", TAGS[level])),
         }
@@ -866,11 +1748,13 @@ fn emit_runs(runs: &[Run], level: usize) -> String {
 /// Content of a container that holds one paragraph: written without the `<p>` when possible.
 fn emit_container(blocks: &[Block]) -> String {
     match blocks {
-        [Block::Para(r)] if !r.is_empty() => emit_runs(r, 0),
-        [Block::Para(r), rest @ ..] if !r.is_empty() && rest.iter().all(is_list) => {
+        [Block::Para(r, bs)] if !r.is_empty() && bs.is_empty() => emit_runs(r, 0),
+        [Block::Para(r, bs), rest @ ..]
+            if !r.is_empty() && bs.is_empty() && rest.iter().all(is_list) =>
+        {
             format!("{}{}", emit_runs(r, 0), emit_all(rest, ""))
         }
-        [Block::Para(_)] => String::new(),
+        [Block::Para(r, bs)] if r.is_empty() && bs.is_empty() => String::new(),
         _ => emit_all(blocks, ""),
     }
 }
@@ -879,11 +1763,42 @@ fn is_list(b: &Block) -> bool {
     matches!(b, Block::List { .. })
 }
 
+fn emit_table(t: &Table) -> String {
+    let mut s = format!("<table{}>", style_attr(&boxstyle_css(&t.style)));
+    for row in &t.rows {
+        s.push_str("<tr>");
+        for c in row {
+            let tag = if c.header { "th" } else { "td" };
+            s.push('<');
+            s.push_str(tag);
+            if c.colspan > 1 {
+                s.push_str(&format!(" colspan=\"{}\"", c.colspan));
+            }
+            if c.rowspan > 1 {
+                s.push_str(&format!(" rowspan=\"{}\"", c.rowspan));
+            }
+            s.push_str(&style_attr(&boxstyle_css(&c.style)));
+            s.push('>');
+            s.push_str(&emit_container(&c.blocks));
+            s.push_str(&format!("</{tag}>"));
+        }
+        s.push_str("</tr>");
+    }
+    s.push_str("</table>");
+    s
+}
+
 fn emit_block(b: &Block) -> String {
     match b {
-        Block::Para(r) if r.is_empty() => "<p><br></p>".to_string(),
-        Block::Para(r) => format!("<p>{}</p>", emit_runs(r, 0)),
-        Block::Heading(n, r) => format!("<h{n}>{}</h{n}>", emit_runs(r, 0)),
+        Block::Para(r, bs) if r.is_empty() => {
+            format!("<p{}><br></p>", style_attr(&bstyle_css(bs)))
+        }
+        Block::Para(r, bs) => format!("<p{}>{}</p>", style_attr(&bstyle_css(bs)), emit_runs(r, 0)),
+        Block::Heading(n, r, bs) => format!(
+            "<h{n}{}>{}</h{n}>",
+            style_attr(&bstyle_css(bs)),
+            emit_runs(r, 0)
+        ),
         Block::Quote(inner) => format!("<blockquote>{}</blockquote>", emit_container(inner)),
         Block::List { ordered, items } => {
             let tag = if *ordered { "ol" } else { "ul" };
@@ -893,6 +1808,7 @@ fn emit_block(b: &Block) -> String {
                 .collect();
             format!("<{tag}>{lis}</{tag}>")
         }
+        Block::Table(t) => emit_table(t),
         Block::Code(t) => format!("<pre><code>{}</code></pre>", esc_text(t)),
         Block::Hr => "<hr>".to_string(),
     }
@@ -905,7 +1821,7 @@ fn emit_all(blocks: &[Block], sep: &str) -> String {
 fn emit_document(blocks: &[Block]) -> String {
     match blocks {
         [] => String::new(),
-        [Block::Para(r)] => emit_runs(r, 0),
+        [Block::Para(r, bs)] if bs.is_empty() => emit_runs(r, 0),
         _ => emit_all(blocks, "\n"),
     }
 }
@@ -971,7 +1887,26 @@ fn blocks_text(blocks: &[Block], sep: &str) -> String {
     blocks
         .iter()
         .map(|b| match b {
-            Block::Para(r) | Block::Heading(_, r) => runs_text(r),
+            Block::Para(r, _) | Block::Heading(_, r, _) => runs_text(r),
+            Block::Table(t) => t
+                .rows
+                .iter()
+                .map(|row| {
+                    row.iter()
+                        .map(|c| {
+                            blocks_text(
+                                &c.blocks, "
+",
+                            )
+                        })
+                        .collect::<Vec<_>>()
+                        .join("	")
+                })
+                .collect::<Vec<_>>()
+                .join(
+                    "
+",
+                ),
             Block::Quote(inner) => prefix_lines(&blocks_text(inner, "\n\n"), "> ", "> "),
             Block::List { ordered, items } => items
                 .iter()
@@ -1018,14 +1953,47 @@ fn features(blocks: &[Block], out: &mut BTreeSet<&'static str>) {
             if matches!(r.kind, RunKind::Img { .. }) {
                 out.insert("images");
             }
+            if r.marks.script != 0 {
+                out.insert("subscript and superscript");
+            }
+            let st = &r.marks.style;
+            if st.color.is_some() || st.background.is_some() {
+                out.insert("colours");
+            }
+            if st.family.is_some() || st.size.is_some() {
+                out.insert("fonts and sizes");
+            }
+        }
+    };
+    let para_style = |bs: &BStyle, out: &mut BTreeSet<&'static str>| {
+        if bs.align.is_some() {
+            out.insert("alignment");
+        }
+        if bs.line_height.is_some()
+            || bs.margin_top.is_some()
+            || bs.margin_bottom.is_some()
+            || bs.margin_left.is_some()
+            || bs.text_indent.is_some()
+        {
+            out.insert("indents and spacing");
         }
     };
     for b in blocks {
         match b {
-            Block::Para(r) => runs(r, out),
-            Block::Heading(_, r) => {
-                out.insert("headings");
+            Block::Para(r, bs) => {
+                para_style(bs, out);
                 runs(r, out);
+            }
+            Block::Heading(_, r, bs) => {
+                out.insert("headings");
+                para_style(bs, out);
+                runs(r, out);
+            }
+            Block::Table(t) => {
+                out.insert("tables");
+                for c in t.rows.iter().flatten() {
+                    features(&c.blocks, out);
+                }
             }
             Block::Quote(inner) => {
                 out.insert("quotes");
@@ -1140,7 +2108,7 @@ pub fn plain_to_html(text: &str) -> Result<HtmlConversion, String> {
                     marks: Marks::default(),
                 });
             }
-            Block::Para(runs)
+            Block::Para(runs, BStyle::default())
         })
         .collect();
     let html = emit_document(&blocks);
@@ -1714,7 +2682,14 @@ mod tests {
         );
         assert_eq!(s("<iframe src=\"https://e.com\">hi</iframe>x"), "x");
         assert_eq!(s("<svg><script>1</script></svg>y"), "y");
-        assert_eq!(s("<p style=\"color:red\" onmouseover=\"x\">t</p>"), "t");
+        assert_eq!(
+            s("<p style=\"color:red\" onmouseover=\"x\">t</p>"),
+            "<span style=\"color:red\">t</span>"
+        );
+        assert_eq!(
+            s("<p style=\"behavior:url(x.htc)\" onmouseover=\"x\">t</p>"),
+            "t"
+        );
         assert_eq!(s("<!-- c --><!DOCTYPE html>t"), "t");
     }
 
@@ -1752,10 +2727,19 @@ mod tests {
             s("<img src=\"https://x.com/a.png\" alt=\"A &amp; B\" width=\"10\" height=\"abc\" onerror=\"x\">"),
             "<img src=\"https://x.com/a.png\" alt=\"A &amp; B\" width=\"10\">"
         );
-        assert_eq!(s("<img src=\"data:image/png;base64,AAAA\">"), "");
+        assert_eq!(
+            s("<img src=\"data:image/png;base64,AAAA\">"),
+            "<img src=\"data:image/png;base64,AAAA\">"
+        );
+        assert_eq!(s("<img src=\"data:text/html;base64,AAAA\">"), "");
+        assert_eq!(s("<img src=\"data:image/svg+xml;base64,AAAA\">"), "");
+        assert_eq!(
+            s("<img src=\"data:image/png;base64,AA\" onerror=1>"),
+            "<img src=\"data:image/png;base64,AA\">"
+        );
         assert_eq!(s("<img src=\"file:///c:/a.png\">"), "");
         assert_eq!(s("<img src=\"javascript:alert(1)\">"), "");
-        let r = sanitize_html("<img src=\"data:image/png;base64,AAAA\">");
+        let r = sanitize_html("<img src=\"file:///c:/a.png\">");
         assert!(!r.dropped.is_empty());
     }
 
@@ -1856,13 +2840,15 @@ mod tests {
     }
 
     #[test]
-    fn tables_and_styles_are_flattened_with_a_note() {
+    fn tables_and_styles_are_kept() {
         let r = sanitize_html(
             "<table><tr><td>a</td><td>b</td></tr></table><span style=\"color:red\">c</span>",
         );
-        assert_eq!(r.html, "<p>a</p>\n<p>b</p>\n<p>c</p>");
-        assert!(r.dropped.iter().any(|d| d.contains("tables")));
-        assert!(r.dropped.iter().any(|d| d.contains("colours")));
+        assert_eq!(
+            r.html,
+            "<table><tr><td>a</td><td>b</td></tr></table>\n<p><span style=\"color:red\">c</span></p>"
+        );
+        assert!(r.dropped.is_empty());
     }
 
     #[test]
@@ -2339,5 +3325,465 @@ mod tests {
             }
         }
         eprintln!("checked {seen} html phrases");
+    }
+}
+
+#[cfg(test)]
+mod style_tests {
+    use super::*;
+
+    fn s(html: &str) -> String {
+        sanitize_html(html).html
+    }
+
+    /// Wraps `value` as the given declaration on a span and returns the sanitised result.
+    fn span(decl: &str) -> String {
+        s(&format!("<span style=\"{decl}\">x</span>"))
+    }
+
+    #[test]
+    fn text_colours() {
+        assert_eq!(
+            span("color:#FF0000"),
+            "<span style=\"color:#ff0000\">x</span>"
+        );
+        assert_eq!(span("color:#f00"), "<span style=\"color:#f00\">x</span>");
+        assert_eq!(span("color: Red"), "<span style=\"color:red\">x</span>");
+        assert_eq!(
+            span("color:rgb(10, 20, 30)"),
+            "<span style=\"color:rgb(10,20,30)\">x</span>"
+        );
+        assert_eq!(
+            span("color:rgba(10,20,30,0.5)"),
+            "<span style=\"color:rgba(10,20,30,0.5)\">x</span>"
+        );
+        assert_eq!(
+            span("color:windowtext"),
+            "<span style=\"color:#000000\">x</span>"
+        );
+        for bad in [
+            "color:expression(alert(1))",
+            "color:url(http://x/y)",
+            "color:red url(x)",
+            "color:#ggg",
+            "color:#12345",
+            "color:rgb(1,2,3,4,5)",
+            "color:rgb(a,b,c)",
+            "color:javascript:alert(1)",
+            "color:\\72ed",
+            "color:var(--x)",
+            "color:notacolour",
+            "color:",
+        ] {
+            assert_eq!(span(bad), "x", "{bad}");
+        }
+    }
+
+    #[test]
+    fn highlight_and_background() {
+        assert_eq!(
+            span("background:yellow;mso-highlight:yellow"),
+            "<span style=\"background-color:yellow\">x</span>"
+        );
+        assert_eq!(
+            span("background-color:#ffff00"),
+            "<span style=\"background-color:#ffff00\">x</span>"
+        );
+        assert_eq!(span("background:url(javascript:alert(1))"), "x");
+        assert_eq!(span("background:url(x) no-repeat red"), "x");
+        assert_eq!(span("background-image:url(x)"), "x");
+        assert_eq!(span("background:transparent"), "x");
+    }
+
+    #[test]
+    fn font_families() {
+        assert_eq!(
+            s("<span style='font-family:\"Times New Roman\",serif'>x</span>"),
+            "<span style=\"font-family:'Times New Roman',serif\">x</span>"
+        );
+        assert_eq!(
+            span("font-family:Calibri, sans-serif"),
+            "<span style=\"font-family:'Calibri',sans-serif\">x</span>"
+        );
+        assert_eq!(
+            span("font-family:'Segoe UI'"),
+            "<span style=\"font-family:'Segoe UI'\">x</span>"
+        );
+        for bad in [
+            "font-family:Arial;}</style><script>",
+            "font-family:a(b)",
+            "font-family:url(x)",
+            "font-family:\"a;b\"",
+            "font-family:a\\62",
+            "font-family:expression(1)",
+            "font-family:",
+            "font-family:,",
+            "font-family:a<b",
+        ] {
+            let out = span(bad);
+            assert!(
+                !out.contains("script") && !out.contains("url") && !out.contains('('),
+                "{bad}: {out}"
+            );
+        }
+        assert_eq!(span("font-family:url(x)"), "x");
+        assert_eq!(span("font-family:a(b)"), "x");
+    }
+
+    #[test]
+    fn font_sizes() {
+        assert_eq!(
+            span("font-size:11.0pt"),
+            "<span style=\"font-size:11pt\">x</span>"
+        );
+        assert_eq!(
+            span("font-size:14px"),
+            "<span style=\"font-size:14px\">x</span>"
+        );
+        assert_eq!(
+            span("font-size:1.5em"),
+            "<span style=\"font-size:1.5em\">x</span>"
+        );
+        assert_eq!(
+            span("font-size:120%"),
+            "<span style=\"font-size:120%\">x</span>"
+        );
+        for bad in [
+            "font-size:0",
+            "font-size:0pt",
+            "font-size:-5pt",
+            "font-size:12",
+            "font-size:99999pt",
+            "font-size:1e3px",
+            "font-size:calc(1px+2px)",
+            "font-size:12pt}",
+            "font-size:xx-large",
+            "font-size:expression(1)",
+        ] {
+            assert_eq!(span(bad), "x", "{bad}");
+        }
+    }
+
+    #[test]
+    fn weight_style_decoration_script() {
+        assert_eq!(span("font-weight:bold"), "<strong>x</strong>");
+        assert_eq!(span("font-weight:700"), "<strong>x</strong>");
+        assert_eq!(span("font-weight:400"), "x");
+        assert_eq!(span("font-style:italic"), "<em>x</em>");
+        assert_eq!(span("text-decoration:underline"), "<u>x</u>");
+        assert_eq!(span("text-decoration:line-through"), "<s>x</s>");
+        assert_eq!(span("vertical-align:super"), "<sup>x</sup>");
+        assert_eq!(span("vertical-align:sub"), "<sub>x</sub>");
+        assert_eq!(s("<sup>2</sup><sub>i</sub>"), "<sup>2</sup><sub>i</sub>");
+        // Google Docs wraps everything in a bold tag that says it is not bold.
+        assert_eq!(
+            s("<b style=\"font-weight:normal\" id=\"docs-internal-guid-1\"><span style=\"font-weight:700\">a</span> b</b>"),
+            "<strong>a</strong> b"
+        );
+        // Underlined link spans stay a plain link.
+        assert_eq!(
+            s("<a href=\"https://x.com\"><span style=\"text-decoration:underline;color:#0563c1\">l</span></a>"),
+            "<a href=\"https://x.com\"><span style=\"color:#0563c1\">l</span></a>"
+        );
+    }
+
+    #[test]
+    fn font_element() {
+        assert_eq!(
+            s("<font color=\"#00f\" face=\"Arial\" size=\"5\">x</font>"),
+            "<span style=\"font-family:'Arial';font-size:18pt;color:#00f\">x</span>"
+        );
+        assert_eq!(s("<font color=\"red;x:y\">x</font>"), "x");
+    }
+
+    #[test]
+    fn paragraph_alignment_indent_spacing() {
+        assert_eq!(
+            s("<p style=\"text-align:Center\">a</p>"),
+            "<p style=\"text-align:center\">a</p>"
+        );
+        assert_eq!(
+            s("<p align=\"right\">a</p>"),
+            "<p style=\"text-align:right\">a</p>"
+        );
+        assert_eq!(
+            s("<div style=\"text-align:justify\"><p>a</p><p>b</p></div>"),
+            "<p style=\"text-align:justify\">a</p>\n<p style=\"text-align:justify\">b</p>"
+        );
+        assert_eq!(
+            s("<p style=\"margin:0in 0in 8pt .5in;line-height:107%;text-indent:-.25in\">a</p>"),
+            "<p style=\"line-height:107%;margin-bottom:8pt;margin-left:0.5in;text-indent:-0.25in\">a</p>"
+        );
+        assert_eq!(s("<p style=\"margin:0;line-height:normal\">a</p>"), "a");
+        assert_eq!(
+            s("<h2 style=\"text-align:center\">T</h2>"),
+            "<h2 style=\"text-align:center\">T</h2>"
+        );
+        assert_eq!(
+            s("<center>c</center>"),
+            "<p style=\"text-align:center\">c</p>"
+        );
+        assert_eq!(s("<p style=\"text-align:start\">a</p>"), "a");
+        assert_eq!(
+            s("<p style=\"line-height:1.5\">a</p>"),
+            "<p style=\"line-height:1.5\">a</p>"
+        );
+        assert_eq!(s("<p style=\"line-height:50\">a</p>"), "a");
+        assert_eq!(s("<p style=\"margin-left:expression(1)\">a</p>"), "a");
+        assert_eq!(s("<p style=\"margin-left:-5pt\">a</p>"), "a");
+        assert_eq!(s("<p style=\"text-indent:99999pt\">a</p>"), "a");
+    }
+
+    #[test]
+    fn tables_keep_borders_shading_widths_and_merges() {
+        let html = "<table class=MsoTableGrid border=1 cellspacing=0 cellpadding=0 width=\"100%\" style=\"border-collapse:collapse;border:none\">\
+            <tr><td colspan=2 width=300 valign=top style=\"border:solid windowtext 1.0pt;background:#D9E2F3;padding:0in 5.4pt 0in 5.4pt\"><p style=\"text-align:center\"><b>Head</b></p></td></tr>\
+            <tr><td rowspan=\"2\" style=\"border:solid #000 1pt\">a</td><td style=\"border-left:none;border-top:solid red 2px\">b</td></tr>\
+            <tr><td>c</td></tr></table>";
+        let out = s(html);
+        assert_eq!(
+            out,
+            "<table style=\"width:100%;border-collapse:collapse;border:none\">\
+<tr><td colspan=\"2\" style=\"width:300px;border:1pt solid #000000;background-color:#d9e2f3;padding:0 5.4pt 0 5.4pt;vertical-align:top\">\
+<p style=\"text-align:center\"><strong>Head</strong></p></td></tr>\
+<tr><td rowspan=\"2\" style=\"border:1pt solid #000\">a</td><td style=\"border-top:2px solid red;border-left:none\">b</td></tr>\
+<tr><td style=\"border:1px solid #000000\">c</td></tr></table>"
+        );
+        assert_eq!(s(&out), out);
+    }
+
+    #[test]
+    fn table_values_are_validated() {
+        let out = s("<table style=\"width:expression(1);border:url(x) solid;background:url(x)\"><tr><td colspan=\"9999\" rowspan=\"x\" style=\"background:red url(x);behavior:url(x)\" onclick=\"x()\">a</td></tr></table>");
+        assert_eq!(out, "<table><tr><td>a</td></tr></table>");
+        assert_eq!(s("<table></table>"), "");
+        assert_eq!(s("<table><tr></tr></table>"), "");
+        // cells of a copied range, without a table around them
+        assert_eq!(
+            s("<tr><td>1</td><td>2</td></tr>"),
+            "<table><tr><td>1</td><td>2</td></tr></table>"
+        );
+        assert_eq!(
+            s("<table><caption>Cap</caption><tr><td>1</td></tr></table>"),
+            "Cap\n<table><tr><td>1</td></tr></table>".replace("Cap\n", "<p>Cap</p>\n")
+        );
+        // plain text of a table: cells separated by tabs
+        assert_eq!(
+            html_to_text(
+                "<table><tr><td>1</td><td>2</td></tr><tr><td>3</td><td>4</td></tr></table>"
+            ),
+            "1\t2\n3\t4"
+        );
+    }
+
+    #[test]
+    fn data_images_have_a_size_limit() {
+        let ok = format!("<img src=\"data:image/png;base64,{}\">", "A".repeat(1000));
+        assert_eq!(s(&ok), ok);
+        let big = format!(
+            "<img src=\"data:image/png;base64,{}\">",
+            "A".repeat(MAX_DATA_IMAGE)
+        );
+        assert_eq!(s(&big), "");
+        assert_eq!(
+            s("<img src=\"data:image/png;base64,AA AA\n\">"),
+            "<img src=\"data:image/png;base64,AAAA\">"
+        );
+        assert_eq!(s("<img src=\"data:image/png,AAAA\">"), "");
+        assert_eq!(s("<img src=\"data:image/png;base64,AA<script>\">"), "");
+        assert_eq!(s("<img src=\"cid:image001.png@01D\">"), "");
+        assert_eq!(s("<img src=\"file:///C:/x.png\">"), "");
+    }
+
+    #[test]
+    fn hostile_markup_never_survives() {
+        let hostile = [
+            "<span style=\"color:red;background:url(javascript:alert(1))\" onmouseover=\"alert(1)\">x</span>",
+            "<p style=\"text-align:center\" onclick=\"x()\"><script>alert(1)</script>t</p>",
+            "<table onclick=\"x()\"><tr><td style=\"x:y\"><iframe src=\"x\"></iframe>c</td></tr></table>",
+            "<span style=\"font-family:'a';}</style><script>alert(1)</script>\">t</span>",
+            "<span style=\"color:red\"><style>p{color:blue}</style>t</span>",
+            "<a href=\"javascript:alert(1)\" style=\"color:red\">t</a>",
+        ];
+        for h in hostile {
+            let out = s(h).to_ascii_lowercase();
+            for bad in [
+                "script",
+                "onclick",
+                "onmouse",
+                "javascript",
+                "url(",
+                "expression",
+                "iframe",
+                "<style",
+            ] {
+                assert!(!out.contains(bad), "{bad} survived in {out:?} (from {h:?})");
+            }
+        }
+    }
+
+    #[test]
+    fn styled_samples_are_idempotent_and_stable() {
+        let samples = [
+            "<p style=\"text-align:center;margin-left:36pt\"><span style=\"font-family:Calibri;font-size:11pt;color:#C00000;background:yellow\"><b>Hi</b> <i>there</i></span></p>",
+            "<p style=\"text-align:right\"></p>",
+            "<ul><li><p style=\"text-align:center\">a</p></li><li>b<ul><li>c</li></ul></li></ul>",
+            "<table border=1><tr><th>h</th><td style=\"background:red\"><p style=\"text-align:right\">x</p></td></tr><tr><td colspan=2><table><tr><td>in</td></tr></table></td></tr></table>",
+            "<h1 style=\"text-align:center;margin-top:12pt\">Title</h1>text<sub>2</sub><sup>3</sup>",
+            "<font color=red><b>a</b></font><span style=\"font-size:9pt\">b</span>",
+            "<img src=\"data:image/png;base64,iVBORw0KGgo=\" width=\"10\">",
+            "<blockquote style=\"margin-left:5pt\"><p style=\"text-align:center\">q</p></blockquote>",
+        ];
+        for sample in samples {
+            let once = s(sample);
+            assert_eq!(s(&once), once, "not idempotent for {sample:?}");
+        }
+    }
+
+    #[test]
+    fn idempotent_on_generated_styled_input() {
+        let parts = [
+            "<p style=\"text-align:center\">",
+            "</p>",
+            "<span style=\"color:red;font-size:12pt\">",
+            "<span style=\"background:#ff0;font-family:Arial\">",
+            "</span>",
+            "<b>",
+            "</b>",
+            "<table><tr>",
+            "<td colspan=2 style=\"border:1px solid black\">",
+            "</td>",
+            "</tr></table>",
+            "<sub>",
+            "</sub>",
+            "<ul><li>",
+            "</li></ul>",
+            "<h2 style=\"margin-left:10px\">",
+            "</h2>",
+            "<a href=\"https://a.b\">",
+            "</a>",
+            "text",
+            " ",
+            "<br>",
+            "<div align=center>",
+            "</div>",
+        ];
+        let mut seed: u64 = 12345;
+        for _ in 0..4000 {
+            let mut input = String::new();
+            for _ in 0..14 {
+                seed = seed
+                    .wrapping_mul(6364136223846793005)
+                    .wrapping_add(1442695040888963407);
+                input.push_str(parts[(seed >> 33) as usize % parts.len()]);
+            }
+            let once = s(&input);
+            assert_eq!(s(&once), once, "not idempotent for {input:?}");
+        }
+    }
+
+    #[test]
+    fn plain_conversion_reports_what_it_loses() {
+        let c = html_to_plain("<p style=\"text-align:center\"><span style=\"color:red\">a</span></p><table><tr><td>b</td></tr></table>");
+        assert!(c.lost.iter().any(|l| l == "colours"));
+        assert!(c.lost.iter().any(|l| l == "alignment"));
+        assert!(c.lost.iter().any(|l| l == "tables"));
+    }
+}
+
+#[cfg(test)]
+mod paste_tests {
+    use super::*;
+
+    /// Output of the paste cleaner (`xpando-app/src/pasteClean.ts`) for the Word, Excel, Outlook,
+    /// Google Docs and web page clipboard fixtures (`pasteFixtures.ts`). The sanitiser must keep
+    /// every one unchanged, so a pasted phrase is saved exactly as the editor showed it.
+    const CLEANED: &[&str] = &[
+        // EXCEL_CELL
+        "<table><tr><td style=\"width:48pt\">Hello cell</td></tr></table>",
+        // EXCEL_RANGE
+        "<table><tr><td style=\"width:48pt\">A1</td><td style=\"width:48pt;background-color:#c6e0b4\"><strong><span style=\"color:#375623\">B1</span></strong></td></tr><tr><td><p style=\"text-align:right\">1,5</p></td><td></td></tr></table>",
+        // GOOGLE_DOCS
+        "<h2 style=\"line-height:1.38;margin-top:18pt;margin-bottom:6pt\"><span style=\"font-family:'Arial',sans-serif;font-size:16pt;color:#000000\">Heading</span></h2>\n<p style=\"text-align:justify;line-height:1.38\"><strong><em><u><span style=\"font-family:'Arial',sans-serif;font-size:11pt;color:#000000;background-color:#ffff00\">Bold italic underlined yellow</span></u></em></strong><span style=\"font-family:'Arial',sans-serif;font-size:11pt;color:#000000\">, then plain.</span></p>\n<ul><li><p style=\"line-height:1.38\"><span style=\"font-family:'Arial',sans-serif;font-size:11pt;color:#000000\">One</span></p></li><li><span style=\"font-size:11pt\">Two</span></li></ul>",
+        // OUTLOOK
+        "<p><span style=\"font-family:'Segoe UI',sans-serif;color:#1f3864\">Hi team,</span></p>\n<p><br><span style=\"font-family:'Segoe UI',sans-serif\">Best regards,</span><br><span style=\"font-family:'Segoe UI',sans-serif\">Alex</span></p>",
+        // WEB_PAGE
+        "<h3>Release <em>notes</em></h3>\n<p>Read the guide or <a href=\"https://example.com/x\">the site</a>.</p>\n<ul><li>one</li><li>two <strong>bold</strong></li></ul>\n<blockquote>Quoted</blockquote>\n<pre><code>line 1\n  line 2</code></pre>\n<hr>",
+        // WORD_FORMATTED
+        "<h1 style=\"text-align:center\"><span style=\"font-family:'Calibri Light',sans-serif;font-size:20pt;color:#2f5496\">Monthly&nbsp;report</span></h1>\n<p><span style=\"font-family:'Calibri',sans-serif;font-size:11pt\">Dear </span><strong><span style=\"font-family:'Calibri',sans-serif;font-size:11pt;color:#c00000\">Customer</span></strong><span style=\"font-family:'Calibri',sans-serif;font-size:11pt\">,</span></p>\n<p><span style=\"font-family:'Calibri',sans-serif;font-size:11pt\">It’s </span><em><span style=\"font-family:'Calibri',sans-serif;font-size:11pt\">very</span></em><span style=\"font-family:'Calibri',sans-serif;font-size:11pt\"> </span><u><span style=\"font-family:'Calibri',sans-serif;font-size:11pt\">important</span></u><span style=\"font-family:'Calibri',sans-serif;font-size:11pt\"> that you “read this”&nbsp; today – </span><span style=\"font-family:'Calibri',sans-serif;font-size:11pt;background-color:yellow\">highlighted</span><span style=\"font-family:'Calibri',sans-serif;font-size:11pt\">, </span><s><span style=\"font-family:'Calibri',sans-serif;font-size:11pt\">old</span></s><span style=\"font-family:'Calibri',sans-serif;font-size:11pt\"> and H</span><sub><span style=\"font-family:'Calibri',sans-serif;font-size:11pt\">2</span></sub><span style=\"font-family:'Calibri',sans-serif;font-size:11pt\">O, x</span><sup><span style=\"font-family:'Calibri',sans-serif;font-size:11pt\">2</span></sup><span style=\"font-family:'Calibri',sans-serif;font-size:11pt\">.</span></p>\n<p style=\"text-align:right;line-height:150%;margin-left:0.5in\"><span style=\"font-family:'Arial',sans-serif;font-size:9pt\">Visit </span><a href=\"https://example.com/a?b=1&amp;c=2\"><span style=\"font-family:'Arial',sans-serif;font-size:9pt;color:#0563c1\">our site</span></a><span style=\"font-family:'Arial',sans-serif;font-size:9pt\"> or </span><a href=\"mailto:help@example.com\"><span style=\"font-family:'Arial',sans-serif;font-size:9pt\">email us</span></a><span style=\"font-family:'Arial',sans-serif;font-size:9pt\">.</span></p>\n<p><br></p>\n<p><span style=\"font-size:11pt\">Last line</span></p>",
+        // WORD_IMAGES
+        "<p>Logo:</p>\n<p>Mail: and web: <img src=\"https://example.com/logo.png\" alt=\"Logo\" width=\"40\" height=\"20\"></p>",
+        // WORD_LISTS
+        "<ul><li>First item<ul><li>Nested one</li><li>Nested <strong>two</strong></li></ul></li><li>Second item</li></ul>\n<p>Steps:</p>\n<ol><li>Open it</li><li>Press <em>go</em></li></ol>",
+        // WORD_LITERAL_TAG
+        "<p><span style=\"font-family:'Courier New'\">&lt;wr:forEach select=\"/Report/Survey\"&gt;</span></p>\n<p>Name: {{name}} &amp; &lt;b&gt;not bold&lt;/b&gt; 5 &lt; 6</p>\n<p>&lt;/wr:forEach&gt;</p>",
+        // WORD_TABLE
+        "<table style=\"width:351pt;border-collapse:collapse;border:none\"><tr><td colspan=\"2\" style=\"width:351pt;border:1pt solid #000000;background-color:#d9e2f3;padding:0 5.4pt 0 5.4pt;vertical-align:top\"><p style=\"text-align:center\"><strong>Quarter</strong></p></td></tr><tr><td rowspan=\"2\" style=\"width:175.5pt;border:1pt solid #000000;border-top:none;padding:0 5.4pt 0 5.4pt;vertical-align:top\">Q1</td><td style=\"width:175.5pt;border-top:none;border-right:1pt solid #000000;border-bottom:1pt solid #000000;border-left:none;background-color:#fff2cc;padding:0 5.4pt 0 5.4pt;vertical-align:top\"><span style=\"color:red\">10&nbsp;%</span></td></tr><tr><td style=\"width:175.5pt;border-top:none;border-right:1pt solid #000000;border-bottom:1pt solid #000000;border-left:none;padding:0 5.4pt 0 5.4pt;vertical-align:top\">12 %</td></tr></table>",
+    ];
+
+    #[test]
+    fn cleaned_paste_is_unchanged_by_the_sanitiser() {
+        for html in CLEANED {
+            let r = sanitize_html(html);
+            assert_eq!(&r.html, html);
+            assert!(r.dropped.is_empty(), "{:?} for {html}", r.dropped);
+        }
+    }
+
+    #[test]
+    fn literal_tag_text_stays_text() {
+        let html = "<p>&lt;wr:forEach select=\"/Report/Survey\"&gt;</p>";
+        assert_eq!(
+            sanitize_html(html).html,
+            "&lt;wr:forEach select=\"/Report/Survey\"&gt;"
+        );
+        assert_eq!(html_to_text(html), "<wr:forEach select=\"/Report/Survey\">");
+    }
+}
+
+#[cfg(test)]
+mod editor_roundtrip_tests {
+    use super::*;
+
+    /// (what the paste cleaner produced, what the editor (TipTap) wrote after pasting it into
+    /// a paragraph holding "x"). Captured from a real browser run of `RichTextEditor`. After the
+    /// sanitiser both are the same text: the editor keeps every formatting the cleaner makes.
+    const PAIRS: &[(&str, &str)] = &[
+        // EXCEL_CELL
+        ("<table><tr><td style=\"width:48pt\">Hello cell</td></tr></table>", "<table><tbody><tr><td style=\"width:48pt\"><p>Hello cell</p></td></tr></tbody></table><p>x</p>"),
+        // EXCEL_RANGE
+        ("<table><tr><td style=\"width:48pt\">A1</td><td style=\"width:48pt;background-color:#c6e0b4\"><strong><span style=\"color:#375623\">B1</span></strong></td></tr><tr><td><p style=\"text-align:right\">1,5</p></td><td></td></tr></table>", "<table><tbody><tr><td style=\"width:48pt\"><p>A1</p></td><td style=\"width:48pt;background-color:#c6e0b4\"><p><strong><span style=\"color:#375623\">B1</span></strong></p></td></tr><tr><td><p style=\"text-align:right\">1,5</p></td><td><p></p></td></tr></tbody></table><p>x</p>"),
+        // GOOGLE_DOCS
+        ("<h2 style=\"line-height:1.38;margin-top:18pt;margin-bottom:6pt\"><span style=\"font-family:'Arial',sans-serif;font-size:16pt;color:#000000\">Heading</span></h2>\n<p style=\"text-align:justify;line-height:1.38\"><strong><em><u><span style=\"font-family:'Arial',sans-serif;font-size:11pt;color:#000000;background-color:#ffff00\">Bold italic underlined yellow</span></u></em></strong><span style=\"font-family:'Arial',sans-serif;font-size:11pt;color:#000000\">, then plain.</span></p>\n<ul><li><p style=\"line-height:1.38\"><span style=\"font-family:'Arial',sans-serif;font-size:11pt;color:#000000\">One</span></p></li><li><span style=\"font-size:11pt\">Two</span></li></ul>", "<h2 style=\"line-height:1.38;margin-top:18pt;margin-bottom:6pt\"><span style=\"font-family:'Arial',sans-serif;font-size:16pt;color:#000000\">Heading</span></h2><p style=\"text-align:justify;line-height:1.38\"><strong><em><u><span style=\"font-family:'Arial',sans-serif;font-size:11pt;color:#000000;background-color:#ffff00\">Bold italic underlined yellow</span></u></em></strong><span style=\"font-family:'Arial',sans-serif;font-size:11pt;color:#000000\">, then plain.</span></p><ul><li><p style=\"line-height:1.38\"><span style=\"font-family:'Arial',sans-serif;font-size:11pt;color:#000000\">One</span></p></li><li><p><span style=\"font-size:11pt\">Two</span>x</p></li></ul>"),
+        // OUTLOOK
+        ("<p><span style=\"font-family:'Segoe UI',sans-serif;color:#1f3864\">Hi team,</span></p>\n<p><br><span style=\"font-family:'Segoe UI',sans-serif\">Best regards,</span><br><span style=\"font-family:'Segoe UI',sans-serif\">Alex</span></p>", "<p><span style=\"font-family:'Segoe UI',sans-serif;color:#1f3864\">Hi team,</span></p><p><br><span style=\"font-family:'Segoe UI',sans-serif\">Best regards,</span><br><span style=\"font-family:'Segoe UI',sans-serif\">Alex</span>x</p>"),
+        // WEB_PAGE
+        ("<h3>Release <em>notes</em></h3>\n<p>Read the guide or <a href=\"https://example.com/x\">the site</a>.</p>\n<ul><li>one</li><li>two <strong>bold</strong></li></ul>\n<blockquote>Quoted</blockquote>\n<pre><code>line 1\n  line 2</code></pre>\n<hr>", "<h3>Release <em>notes</em></h3><p>Read the guide or <a href=\"https://example.com/x\">the site</a>.</p><ul><li><p>one</p></li><li><p>two <strong>bold</strong></p></li></ul><blockquote><p>Quoted</p></blockquote><pre><code>line 1\n  line 2</code></pre><hr><p>x</p>"),
+        // WORD_FORMATTED
+        ("<h1 style=\"text-align:center\"><span style=\"font-family:'Calibri Light',sans-serif;font-size:20pt;color:#2f5496\">Monthly&nbsp;report</span></h1>\n<p><span style=\"font-family:'Calibri',sans-serif;font-size:11pt\">Dear </span><strong><span style=\"font-family:'Calibri',sans-serif;font-size:11pt;color:#c00000\">Customer</span></strong><span style=\"font-family:'Calibri',sans-serif;font-size:11pt\">,</span></p>\n<p><span style=\"font-family:'Calibri',sans-serif;font-size:11pt\">It’s </span><em><span style=\"font-family:'Calibri',sans-serif;font-size:11pt\">very</span></em><span style=\"font-family:'Calibri',sans-serif;font-size:11pt\"> </span><u><span style=\"font-family:'Calibri',sans-serif;font-size:11pt\">important</span></u><span style=\"font-family:'Calibri',sans-serif;font-size:11pt\"> that you “read this”&nbsp; today – </span><span style=\"font-family:'Calibri',sans-serif;font-size:11pt;background-color:yellow\">highlighted</span><span style=\"font-family:'Calibri',sans-serif;font-size:11pt\">, </span><s><span style=\"font-family:'Calibri',sans-serif;font-size:11pt\">old</span></s><span style=\"font-family:'Calibri',sans-serif;font-size:11pt\"> and H</span><sub><span style=\"font-family:'Calibri',sans-serif;font-size:11pt\">2</span></sub><span style=\"font-family:'Calibri',sans-serif;font-size:11pt\">O, x</span><sup><span style=\"font-family:'Calibri',sans-serif;font-size:11pt\">2</span></sup><span style=\"font-family:'Calibri',sans-serif;font-size:11pt\">.</span></p>\n<p style=\"text-align:right;line-height:150%;margin-left:0.5in\"><span style=\"font-family:'Arial',sans-serif;font-size:9pt\">Visit </span><a href=\"https://example.com/a?b=1&amp;c=2\"><span style=\"font-family:'Arial',sans-serif;font-size:9pt;color:#0563c1\">our site</span></a><span style=\"font-family:'Arial',sans-serif;font-size:9pt\"> or </span><a href=\"mailto:help@example.com\"><span style=\"font-family:'Arial',sans-serif;font-size:9pt\">email us</span></a><span style=\"font-family:'Arial',sans-serif;font-size:9pt\">.</span></p>\n<p><br></p>\n<p><span style=\"font-size:11pt\">Last line</span></p>", "<h1 style=\"text-align:center\"><span style=\"font-family:'Calibri Light',sans-serif;font-size:20pt;color:#2f5496\">Monthly&nbsp;report</span></h1><p><span style=\"font-family:'Calibri',sans-serif;font-size:11pt\">Dear </span><strong><span style=\"font-family:'Calibri',sans-serif;font-size:11pt;color:#c00000\">Customer</span></strong><span style=\"font-family:'Calibri',sans-serif;font-size:11pt\">,</span></p><p><span style=\"font-family:'Calibri',sans-serif;font-size:11pt\">It’s </span><em><span style=\"font-family:'Calibri',sans-serif;font-size:11pt\">very</span></em><span style=\"font-family:'Calibri',sans-serif;font-size:11pt\"> </span><u><span style=\"font-family:'Calibri',sans-serif;font-size:11pt\">important</span></u><span style=\"font-family:'Calibri',sans-serif;font-size:11pt\"> that you “read this”&nbsp; today – </span><span style=\"font-family:'Calibri',sans-serif;font-size:11pt;background-color:yellow\">highlighted</span><span style=\"font-family:'Calibri',sans-serif;font-size:11pt\">, </span><s><span style=\"font-family:'Calibri',sans-serif;font-size:11pt\">old</span></s><span style=\"font-family:'Calibri',sans-serif;font-size:11pt\"> and H<sub>2</sub>O, x<sup>2</sup>.</span></p><p style=\"text-align:right;line-height:150%;margin-left:0.5in\"><span style=\"font-family:'Arial',sans-serif;font-size:9pt\">Visit </span><a href=\"https://example.com/a?b=1&amp;c=2\"><span style=\"font-family:'Arial',sans-serif;font-size:9pt;color:#0563c1\">our site</span></a><span style=\"font-family:'Arial',sans-serif;font-size:9pt\"> or </span><a href=\"mailto:help@example.com\"><span style=\"font-family:'Arial',sans-serif;font-size:9pt\">email us</span></a><span style=\"font-family:'Arial',sans-serif;font-size:9pt\">.</span></p><p></p><p><span style=\"font-size:11pt\">Last line</span>x</p>"),
+        // WORD_IMAGES
+        ("<p>Logo:</p>\n<p>Mail: and web: <img src=\"https://example.com/logo.png\" alt=\"Logo\" width=\"40\" height=\"20\"></p>", "<p>Logo:</p><p>Mail: and web: <img src=\"https://example.com/logo.png\" alt=\"Logo\" width=\"40\" height=\"20\">x</p>"),
+        // WORD_LISTS
+        ("<ul><li>First item<ul><li>Nested one</li><li>Nested <strong>two</strong></li></ul></li><li>Second item</li></ul>\n<p>Steps:</p>\n<ol><li>Open it</li><li>Press <em>go</em></li></ol>", "<ul><li><p>First item</p><ul><li><p>Nested one</p></li><li><p>Nested <strong>two</strong></p></li></ul></li><li><p>Second item</p></li></ul><p>Steps:</p><ol><li><p>Open it</p></li><li><p>Press <em>go</em>x</p></li></ol>"),
+        // WORD_LITERAL_TAG
+        ("<p><span style=\"font-family:'Courier New'\">&lt;wr:forEach select=\"/Report/Survey\"&gt;</span></p>\n<p>Name: {{name}} &amp; &lt;b&gt;not bold&lt;/b&gt; 5 &lt; 6</p>\n<p>&lt;/wr:forEach&gt;</p>", "<p><span style=\"font-family:'Courier New'\">&lt;wr:forEach select=\"/Report/Survey\"&gt;</span></p><p>Name: {{name}} &amp; &lt;b&gt;not bold&lt;/b&gt; 5 &lt; 6</p><p>&lt;/wr:forEach&gt;x</p>"),
+        // WORD_TABLE
+        ("<table style=\"width:351pt;border-collapse:collapse;border:none\"><tr><td colspan=\"2\" style=\"width:351pt;border:1pt solid #000000;background-color:#d9e2f3;padding:0 5.4pt 0 5.4pt;vertical-align:top\"><p style=\"text-align:center\"><strong>Quarter</strong></p></td></tr><tr><td rowspan=\"2\" style=\"width:175.5pt;border:1pt solid #000000;border-top:none;padding:0 5.4pt 0 5.4pt;vertical-align:top\">Q1</td><td style=\"width:175.5pt;border-top:none;border-right:1pt solid #000000;border-bottom:1pt solid #000000;border-left:none;background-color:#fff2cc;padding:0 5.4pt 0 5.4pt;vertical-align:top\"><span style=\"color:red\">10&nbsp;%</span></td></tr><tr><td style=\"width:175.5pt;border-top:none;border-right:1pt solid #000000;border-bottom:1pt solid #000000;border-left:none;padding:0 5.4pt 0 5.4pt;vertical-align:top\">12 %</td></tr></table>", "<table style=\"width:351pt;border-collapse:collapse;border:none\"><tbody><tr><td colspan=\"2\" style=\"width:351pt;border:1pt solid #000000;background-color:#d9e2f3;padding:0 5.4pt 0 5.4pt;vertical-align:top\"><p style=\"text-align:center\"><strong>Quarter</strong></p></td></tr><tr><td rowspan=\"2\" style=\"width:175.5pt;border:1pt solid #000000;border-top:none;padding:0 5.4pt 0 5.4pt;vertical-align:top\"><p>Q1</p></td><td style=\"width:175.5pt;border-top:none;border-right:1pt solid #000000;border-bottom:1pt solid #000000;border-left:none;background-color:#fff2cc;padding:0 5.4pt 0 5.4pt;vertical-align:top\"><p><span style=\"color:red\">10&nbsp;%</span></p></td></tr><tr><td style=\"width:175.5pt;border-top:none;border-right:1pt solid #000000;border-bottom:1pt solid #000000;border-left:none;padding:0 5.4pt 0 5.4pt;vertical-align:top\"><p>12 %</p></td></tr></tbody></table><p>x</p>"),
+    ];
+
+    #[test]
+    fn editor_output_sanitises_to_the_cleaned_paste() {
+        for (cleaned, saved) in PAIRS {
+            let c = sanitize_html(cleaned).html;
+            assert_eq!(&c, cleaned);
+            let mut s = sanitize_html(saved).html;
+            // Take out the "x" that was in the paragraph the paste went into.
+            if let Some(rest) = s.strip_suffix("\n<p>x</p>") {
+                s = rest.to_string();
+            } else if let Some(i) = s.rfind("x</") {
+                s.remove(i);
+            }
+            assert_eq!(s, c);
+        }
     }
 }
