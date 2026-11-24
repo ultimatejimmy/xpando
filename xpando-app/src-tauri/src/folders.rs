@@ -4,7 +4,9 @@
 //! names are validated (no separators, no `..`). Errors are plain text the UI shows as is.
 
 use tauri::AppHandle;
-use xpando_core::folders::{self, Change, FolderInfo, Outcome, ScopeSpec};
+use xpando_core::folders::{
+    self, Change, FolderInfo, MoveOutcome, MovePreview, Outcome, PhraseWhere, ScopeSpec,
+};
 
 use crate::data::data_dir;
 
@@ -75,4 +77,30 @@ pub fn set_folder_scope(
     expected_hash: String,
 ) -> Result<Outcome, String> {
     folders::set_scope(&data_dir(&app)?, &file, &spec, &expected_hash)
+}
+
+/// What moving one phrase to the folder that fits "Works in" would do, without changing
+/// anything. Refusals (a clashing trigger, a folder with its own filters, a read-only file) come
+/// back inside the preview as `blocked`.
+#[tauri::command]
+pub fn preview_phrase_where(
+    app: AppHandle,
+    file: String,
+    index: usize,
+    place: PhraseWhere,
+) -> Result<MovePreview, String> {
+    folders::preview_phrase_where(&data_dir(&app)?, &file, index, &place)
+}
+
+/// Moves one phrase to the folder that fits "Works in", creating an app folder if none matches.
+/// `expected_hash` is the hash the phrase's folder had when the UI loaded it.
+#[tauri::command]
+pub fn set_phrase_where(
+    app: AppHandle,
+    file: String,
+    index: usize,
+    place: PhraseWhere,
+    expected_hash: String,
+) -> Result<MoveOutcome, String> {
+    folders::set_phrase_where(&data_dir(&app)?, &file, index, &place, &expected_hash)
 }
