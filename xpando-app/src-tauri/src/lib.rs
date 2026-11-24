@@ -1,4 +1,5 @@
 mod advanced;
+mod apps;
 mod data;
 mod edit;
 mod engine;
@@ -82,6 +83,11 @@ pub fn run() {
             folders::delete_folder,
             folders::preview_folder_scope,
             folders::set_folder_scope,
+            folders::preview_phrase_where,
+            folders::set_phrase_where,
+            apps::list_running_programs,
+            apps::list_installed_programs,
+            apps::pick_program,
             richtext::save_rich_phrase,
             richtext::create_rich_phrase,
             richtext::sanitize_html,

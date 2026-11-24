@@ -169,10 +169,10 @@ pub fn validate_name(name: &str) -> Result<String, String> {
     }
     if let Some(bad) = n
         .chars()
-        .find(|c| !(c.is_alphanumeric() || matches!(c, ' ' | '_' | '-' | '.')))
+        .find(|c| !(c.is_alphanumeric() || matches!(c, ' ' | '_' | '-' | '.' | ',')))
     {
         return Err(format!(
-            "The name cannot contain \"{bad}\". Use letters, digits, spaces, \"-\" and \"_\"."
+            "The name cannot contain \"{bad}\". Use letters, digits, spaces, \",\", \"-\" and \"_\"."
         ));
     }
     if n.contains("  ") {
@@ -1427,6 +1427,12 @@ enum Op {
         from: String,
         to: String,
     },
+    /// Replaces the text of a match file that still hashes to `expect`.
+    WriteMatch {
+        name: String,
+        text: String,
+        expect: String,
+    },
 }
 
 #[derive(Debug)]
@@ -1524,6 +1530,20 @@ impl Plan {
             format!("Renamed to match/{to}."),
             None,
         );
+    }
+
+    /// Replaces the text of match file `name`, which must still be `original` when applied.
+    fn write_match(&mut self, name: &str, text: String, original: &str, detail: String) {
+        let first_backup = format!("match/{name}.bak");
+        let backup =
+            (!self.after.other_files.contains(&first_backup)).then(|| first_backup.clone());
+        self.after.other_files.insert(first_backup);
+        self.ops.push(Op::WriteMatch {
+            name: name.to_string(),
+            text,
+            expect: content_hash(original.as_bytes()),
+        });
+        self.change(format!("match/{name}"), "edit", detail, backup);
     }
 
     fn create_match(&mut self, name: &str, text: String) {
@@ -2095,6 +2115,17 @@ fn run_op(dir: &Path, before: &Layout, op: &Op, undo: &mut Vec<Undo>) -> Result<
             fs::remove_file(mat(name)).map_err(io)?;
             undo.push(Undo::Restore(mat(name), bytes));
         }
+        Op::WriteMatch { name, text, expect } => {
+            let path = mat(name);
+            let bytes = fs::read(&path).map_err(io)?;
+            undo.push(Undo::Restore(path.clone(), bytes));
+            save_file(&path, text, expect).map_err(|e| match e {
+                SaveError::Conflict => format!(
+                    "{CONFLICT_PREFIX} match/{name} was changed outside xpando. Reload and try again."
+                ),
+                e => e.to_string(),
+            })?;
+        }
         Op::RenameMatch { from, to } => {
             rename_checked(&mat(from), &mat(to)).map_err(io)?;
             undo.push(Undo::Rename(mat(to), mat(from)));
@@ -2264,6 +2295,12 @@ pub fn set_scope(
         file: Some(new_file),
     })
 }
+
+mod phrases;
+pub use phrases::{
+    auto_folder_name, exe_key, preview_phrase_where, set_phrase_where, MoveConflict, MoveOutcome,
+    MovePreview, PhraseWhere,
+};
 
 #[cfg(test)]
 mod tests;

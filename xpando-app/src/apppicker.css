@@ -1,0 +1,233 @@
+/* App picker and "Works in". Uses the variables from styles.css (and --field-border and the
+   warning colours from editor.css, with fallbacks) so it follows light and dark mode. */
+
+.ap {
+  display: grid;
+  gap: 8px;
+}
+
+.ap-label {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.ap-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ap-search > svg {
+  flex: none;
+  color: var(--muted);
+}
+
+.ap-search .field {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.ap-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  border-bottom: 1px solid var(--border);
+}
+
+.ap-tab {
+  padding: 6px 12px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.ap-tab[aria-selected="true"] {
+  border-bottom-color: var(--accent);
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.ap-tab:hover {
+  color: var(--ink);
+}
+
+.ap-tab:focus-visible,
+.ap-row:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.ap-refresh {
+  margin-left: auto;
+  padding: 2px 8px;
+  font-size: 12px;
+}
+
+.ap-status {
+  min-height: 1.3em;
+}
+
+/* The folder dialogs sit inside a pane, whose "ul" rule (grid, no padding) would win otherwise. */
+.fm-dialog .fm-chips {
+  display: flex;
+}
+
+.fm-dialog .ap-list {
+  display: block;
+  max-height: 240px;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  list-style: none;
+}
+
+.fm-dialog .ap-list:empty {
+  display: none;
+}
+
+.ap-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 32px;
+  padding: 4px 10px;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: 14px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.ap-list li:last-child .ap-row {
+  border-bottom: 0;
+}
+
+.ap-row:hover {
+  background: var(--bg);
+}
+
+.ap-row[aria-pressed="true"] {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+.ap-check {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border: 1px solid var(--field-border, #747a86);
+  border-radius: 4px;
+  color: var(--accent);
+}
+
+.ap-row[aria-pressed="true"] .ap-check {
+  border-color: var(--accent);
+}
+
+.ap-name {
+  flex: 1 1 auto;
+  overflow-wrap: anywhere;
+}
+
+.ap-exe {
+  flex: none;
+  color: var(--muted);
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 12px;
+}
+
+.ap-typed {
+  display: grid;
+  gap: 6px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--border);
+}
+
+.ap-typed > label {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+/* "Works in" on the phrase detail */
+.wi {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  margin: 0 0 12px;
+  font-size: 13px;
+}
+
+.wi-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+}
+
+.wi-note {
+  flex-basis: 100%;
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.wi-select {
+  width: 100%;
+}
+
+.fm-dialog .wi-list {
+  display: block;
+  margin: 0 0 8px;
+  padding-left: 20px;
+  list-style: disc;
+  font-size: 13px;
+}
+
+.fm-dialog .wi-list li {
+  margin: 4px 0;
+  overflow-wrap: anywhere;
+}
+
+.wi-warn {
+  color: var(--warn-text, #7a4b00);
+}
+
+.wi-toast {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+  margin: 0 0 12px;
+  padding: 8px 10px;
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  font-size: 13px;
+}
+
+/* App folders in the folder list */
+.side-heading {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 10px 8px 2px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}

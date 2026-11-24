@@ -7,6 +7,7 @@ import "./advanced.css";
 import "./yamledit.css";
 import "./folders.css";
 import "./data.css";
+import "./apppicker.css";
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>

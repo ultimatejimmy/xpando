@@ -21,6 +21,7 @@ phrase management.
 | Relationship to espanso | xpando is its own app with its own engine; it does not support running on stock espanso. People coming from espanso get their YAML imported automatically (see M6) |
 | Data location | xpando keeps its data in its own folder, not espanso's. The user can choose that folder (including OneDrive, Google Drive, etc.) to back up or share between devices (see M6) |
 | Visual direction | **A + D hybrid**: Windows 11 Fluent look (A) with an **Advanced** switch that reveals Workbench (D) power tools — see below |
+| App limits per phrase | espanso limits apps per folder only and the engine is not changed. A phrase's "Works in" setting moves it to a folder whose apps are exactly the chosen programs (plain program lists only; created on demand, auto-named, one folder per app set). Edits reuse the format-preserving, hash-checked, atomic, rolled-back file code. The word "folder" is kept (Group, Collection, Library and Set were considered; each reads as something a phrase belongs to by choice, not by app rule, and Library/Set are already used elsewhere). One shared app picker (curated list, open now, installed, Browse) serves folders and phrases |
 
 ## Iconography and branding
 
