@@ -363,6 +363,7 @@
 .var-notice {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 8px;
   padding: 8px 12px;
   border: 1px solid var(--border);

@@ -430,6 +430,8 @@ interface Notice {
   tone: "info" | "error";
   text: string;
   undo?: UndoInfo;
+  /** Macros the message is about; each gets a "Show" button that jumps to its card. */
+  show?: string[];
 }
 
 interface UseVarsOptions {
@@ -613,10 +615,17 @@ export function useVars(opts: UseVarsOptions): VarsApi {
     const item = items[at];
     const users = usedBy(items, item.name, usesOf);
     if (users.length > 0) {
+      const many = users.length > 1;
       setNotice({
         tone: "error",
-        text: `{{${item.name}}} is used by ${listNames(users)}; change that first.`,
+        text:
+          `Can't remove {{${item.name}}} yet: ${listNames(users)} ${many ? "use" : "uses"} its result. ` +
+          `Remove ${many ? "those macros" : `{{${users[0]}}}`} first, or change ${many ? "them" : "it"} so ${many ? "they stop" : "it stops"} using {{${item.name}}}, then try again.`,
+        show: users,
       });
+      requestAnimationFrame(() =>
+        document.querySelector<HTMLElement>(".var-notice-error")?.scrollIntoView({ block: "nearest" }),
+      );
       return;
     }
     const r = bodyEditable ? removePlaceholders(body, item.name, bodyIsHtml) : { text: body, count: 0 };
@@ -958,6 +967,22 @@ function NoticeBar({ p }: { p: SectionProps }) {
         <div className={`var-notice${n.tone === "error" ? " var-notice-error" : ""}`}>
           {n.tone === "error" ? <AlertTriangle size={16} aria-hidden="true" /> : <Info size={16} aria-hidden="true" />}
           <span className="grow">{n.text}</span>
+          {n.show?.map((name) => (
+            <button
+              type="button"
+              className="btn"
+              key={name}
+              onClick={() => {
+                const card = [...document.querySelectorAll<HTMLElement>(".var-card")].find(
+                  (c) => c.getAttribute("aria-label") === `Macro ${name}`,
+                );
+                card?.scrollIntoView({ block: "center" });
+                card?.querySelector<HTMLElement>("input, textarea, select, button")?.focus();
+              }}
+            >
+              Show {`{{${name}}}`}
+            </button>
+          ))}
           {n.undo && (
             <button type="button" className="btn" id={`${p.sectionId}-undo`} onClick={p.onUndo}>
               <Undo2 size={16} aria-hidden="true" />
