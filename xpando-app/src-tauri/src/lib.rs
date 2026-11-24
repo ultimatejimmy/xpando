@@ -10,7 +10,7 @@ mod update;
 mod vars;
 mod yamledit;
 
-use tauri::{AppHandle, Manager};
+use tauri::AppHandle;
 
 /// Reads every match file in xpando's data folder into folders of phrases (read-only).
 #[tauri::command]
@@ -32,8 +32,10 @@ pub fn run() {
                     handle.exit(0);
                 });
             } else {
-                if let Some(window) = app.get_webview_window("main") {
-                    let _ = window.show();
+                // The window is not created from the config alone, so the sign-in start above
+                // never loads a web view.
+                if let Some(cfg) = app.config().app.windows.first() {
+                    tauri::WebviewWindowBuilder::from_config(app.handle(), cfg)?.build()?;
                 }
                 std::thread::spawn(move || engine_run::start_if_wanted(&handle));
             }

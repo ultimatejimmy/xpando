@@ -13,7 +13,7 @@
     "windows": [
       {
         "label": "main",
-        "visible": false,
+        "create": false,
         "title": "xpando",
         "width": 1280,
         "height": 800,
