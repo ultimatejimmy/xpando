@@ -22,6 +22,7 @@ import {
   PhraseEditor,
   UnsavedChangesDialog,
   normalizeOptions,
+  type ClipboardStart,
   type EditorOptions,
 } from "./PhraseEditor";
 import { FolderToolbar, NewFolderButton, ScopeLabel, useFolderInfo } from "./FolderManager";
@@ -172,7 +173,7 @@ export default function App() {
   // Editing: an existing phrase (by row id) or a new phrase in a file.
   // The phrase is a snapshot taken when editing started; the editor compares it with the file.
   const [editing, setEditing] = useState<
-    { id: string; file: string; base: Phrase } | { newIn: string; n: number } | null
+    { id: string; file: string; base: Phrase } | { newIn: string; n: number; start?: ClipboardStart } | null
   >(null);
   // Unsaved-changes guard: the editor reports `dirty`; a blocked action waits in `pendingLeave`.
   const [dirty, setDirty] = useState(false);
@@ -322,6 +323,7 @@ export default function App() {
         folders={folders}
         file={editing.newIn}
         phrase={null}
+        start={editing.start}
         onSaved={saved}
         onCancel={() => guard(closeEditor)}
         onReload={load}
@@ -462,6 +464,9 @@ export default function App() {
             disabled={folders.length === 0}
             onClick={() =>
               guard(() => setEditing({ newIn: scopeFolder?.file ?? folders[0].file, n: Date.now() }))
+            }
+            onFromClipboard={(start) =>
+              guard(() => setEditing({ newIn: scopeFolder?.file ?? folders[0].file, n: Date.now(), start }))
             }
           />
           {loaded && visible.length === 0 && (

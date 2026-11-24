@@ -5,6 +5,7 @@ import {
   AlertTriangle,
   Check,
   ChevronRight,
+  ClipboardPaste,
   Copy,
   Info,
   Pencil,
@@ -20,6 +21,7 @@ import { useAdvanced } from "./AdvancedPanels";
 import { HelpTip } from "./HelpTip";
 import { BodyModeSwitch, RichBodyEditor } from "./RichLazy"; // xpando:richtext
 import type { BodyMode } from "./RichLazy"; // xpando:richtext
+import { readClipboard } from "./clipboard"; // xpando:richtext
 import { isBlankHtml, listWords } from "./richtextUtil"; // xpando:richtext
 import type { RichHandle } from "./richtextUtil"; // xpando:richtext
 
@@ -226,12 +228,63 @@ function ErrorMessage({ message, onReload }: { message: string; onReload: () => 
   );
 }
 
-export function NewPhraseButton({ onClick, disabled }: { onClick: () => void; disabled?: boolean }) {
+/** What "New phrase from clipboard" starts the editor with. */
+export interface ClipboardStart {
+  mode: BodyMode;
+  /** HTML in rich mode, plain text in plain mode. */
+  body: string;
+  /** What could not be kept, in plain words. */
+  notes: string[];
+}
+
+/** "New phrase" and, next to it, "New phrase from clipboard". */
+export function NewPhraseButton({
+  onClick,
+  onFromClipboard,
+  disabled,
+}: {
+  onClick: () => void;
+  onFromClipboard: (start: ClipboardStart) => void;
+  disabled?: boolean;
+}) {
+  const [message, setMessage] = useState<string | null>(null);
+  async function fromClipboard() {
+    setMessage(null);
+    const r = await readClipboard();
+    if (!r.ok) {
+      setMessage(r.message);
+      return;
+    }
+    const c = r.content;
+    onFromClipboard(
+      c.kind === "rich" ? { mode: "rich", body: c.html, notes: c.notes } : { mode: "plain", body: c.text, notes: [] },
+    );
+  }
   return (
-    <button type="button" className="btn btn-primary new-phrase" onClick={onClick} disabled={disabled}>
-      <Plus size={16} aria-hidden="true" />
-      New phrase
-    </button>
+    <>
+      <div className="new-phrase-row">
+        <button type="button" className="btn btn-primary" onClick={onClick} disabled={disabled}>
+          <Plus size={16} aria-hidden="true" />
+          New phrase
+        </button>
+        <button
+          type="button"
+          className="btn"
+          onClick={() => void fromClipboard()}
+          disabled={disabled}
+          title="Start a new phrase with what you copied, keeping its formatting"
+        >
+          <ClipboardPaste size={16} aria-hidden="true" />
+          From clipboard
+        </button>
+      </div>
+      {message && (
+        <p className="rt-error new-phrase-message" role="alert">
+          <AlertTriangle size={16} aria-hidden="true" />
+          {message}
+        </p>
+      )}
+    </>
   );
 }
 
@@ -297,6 +350,8 @@ interface EditorProps {
   onReload: () => Promise<EditorFolder[] | null>;
   /** Reports whether the editor holds unsaved changes. */
   onDirtyChange: (dirty: boolean) => void;
+  /** A new phrase that starts with the clipboard's text (xpando:richtext). */
+  start?: ClipboardStart;
 }
 
 /** Plain text of a draft, for the copy button. */
@@ -317,16 +372,16 @@ function draftText(
   return lines.join("\n");
 }
 
-export function PhraseEditor({ folders, file, phrase, onSaved, onCancel, onReload, onDirtyChange }: EditorProps) {
+export function PhraseEditor({ folders, file, phrase, onSaved, onCancel, onReload, onDirtyChange, start }: EditorProps) {
   const folder = folders.find((f) => f.file === file);
   const baseOptions = useMemo(() => normalizeOptions(phrase?.options), [phrase]);
   const [triggers, setTriggers] = useState<string[]>(phrase ? phrase.triggers : [""]);
   const [label, setLabel] = useState(phrase?.label ?? "");
   const [description, setDescription] = useState(phrase?.comment ?? "");
-  const [body, setBody] = useState(phrase?.content ?? "");
+  const [body, setBody] = useState(start?.body ?? phrase?.content ?? "");
   // xpando:richtext — `body` holds HTML in rich mode and plain text in plain mode.
   const originalMode: BodyMode = phrase?.kind === "html" ? "rich" : "plain";
-  const [mode, setMode] = useState<BodyMode>(originalMode);
+  const [mode, setMode] = useState<BodyMode>(start?.mode ?? originalMode);
   const [switches, setSwitches] = useState(0);
   const [opts, setOpts] = useState<EditorOptions>(baseOptions);
   const [termDraft, setTermDraft] = useState("");
@@ -870,6 +925,16 @@ export function PhraseEditor({ folders, file, phrase, onSaved, onCancel, onReloa
             )}
           </div>
           {vars.menu /* xpando:vars (inserts into whichever editor is showing) */}
+          {start && start.notes.length > 0 && (
+            <div role="status">
+              {start.notes.map((line) => (
+                <p key={line} className="rt-hint">
+                  <Info size={16} aria-hidden="true" />
+                  {line}
+                </p>
+              ))}
+            </div>
+          )}
           {mode === "rich" ? (
             <RichBodyEditor
               // A new editor after each switch, so it starts from the converted body.
