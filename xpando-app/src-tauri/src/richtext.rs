@@ -10,7 +10,7 @@ use xpando_core::edit::{self, NewPhrase, PhraseEdit};
 use xpando_core::htmledit::{self, HtmlConversion, PlainConversion, Sanitized};
 use xpando_core::{parse_match_text, Folder};
 
-use crate::espanso_config_dir;
+use crate::data::data_dir;
 
 /// Saves changes to an existing phrase whose body is, or is becoming, rich text.
 ///
@@ -31,7 +31,7 @@ pub fn save_rich_phrase(
     html: Option<String>,
     expected_hash: String,
 ) -> Result<Folder, String> {
-    let dir = espanso_config_dir(&app)?;
+    let dir = data_dir(&app)?;
     edit::edit_file(&dir, &file, &expected_hash, |text| {
         match convert.as_deref() {
             None => {
@@ -75,7 +75,7 @@ pub fn create_rich_phrase(
     html: String,
     expected_hash: String,
 ) -> Result<Folder, String> {
-    let dir = espanso_config_dir(&app)?;
+    let dir = data_dir(&app)?;
     edit::edit_file(&dir, &file, &expected_hash, |text| {
         // Add it as plain text, find it again, then turn it into rich text.
         let seed = htmledit::html_to_text(&html);

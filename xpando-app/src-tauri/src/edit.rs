@@ -6,7 +6,7 @@ use tauri::AppHandle;
 use xpando_core::edit::{self, NewPhrase, PhraseEdit};
 use xpando_core::Folder;
 
-use crate::espanso_config_dir;
+use crate::data::data_dir;
 
 /// Saves new values for entry `index` of `file` (a path relative to the `match` directory).
 /// `expected_hash` is the hash the folder had when the UI loaded it.
@@ -18,7 +18,7 @@ pub fn save_phrase(
     edit: PhraseEdit,
     expected_hash: String,
 ) -> Result<Folder, String> {
-    let dir = espanso_config_dir(&app)?;
+    let dir = data_dir(&app)?;
     edit::edit_file(&dir, &file, &expected_hash, |text| {
         edit::update_phrase(text, index, &edit)
     })
@@ -32,7 +32,7 @@ pub fn create_phrase(
     phrase: NewPhrase,
     expected_hash: String,
 ) -> Result<Folder, String> {
-    let dir = espanso_config_dir(&app)?;
+    let dir = data_dir(&app)?;
     edit::edit_file(&dir, &file, &expected_hash, |text| {
         edit::add_phrase(text, &phrase)
     })
@@ -46,7 +46,7 @@ pub fn delete_phrase(
     index: usize,
     expected_hash: String,
 ) -> Result<Folder, String> {
-    let dir = espanso_config_dir(&app)?;
+    let dir = data_dir(&app)?;
     edit::edit_file(&dir, &file, &expected_hash, |text| {
         edit::delete_phrase(text, index)
     })

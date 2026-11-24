@@ -7,7 +7,9 @@
 * Is the folder limited to an app that is not in front?
 * **Only expand when I type it as a whole word** is on and the trigger is inside a word.
 * A macro only runs if `{{name}}` is in the text.
-* Is xpando editing the same configuration folder the engine uses? In [[Advanced Mode]] the status bar shows the path.
+* Is the engine using the folder xpando edits? In [[Advanced Mode]] the status bar shows the data folder path. See [[Data Folder]].
+* Is a stock espanso still running? It would also expand your triggers, or conflict with xpando.
+* A banner says xpando cannot reach the data folder, or lists conflicted copies? See [[Data Folder]] and [[Sync Tips]].
 
 ## "Can't save yet"
 

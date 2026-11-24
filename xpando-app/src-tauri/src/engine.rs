@@ -14,7 +14,7 @@ use xpando_core::edit;
 use xpando_core::engine::{classify_version_output, EngineKind, EngineStatus};
 use xpando_core::Folder;
 
-use crate::espanso_config_dir;
+use crate::data::data_dir;
 
 fn exe_name(base: &str) -> String {
     if cfg!(windows) {
@@ -55,8 +55,12 @@ fn candidates() -> Vec<(PathBuf, bool)> {
 }
 
 /// Runs `<path> --version`, giving up after a few seconds.
-fn version_output(path: &Path) -> Option<String> {
+fn version_output(path: &Path, data_dir: Option<&Path>) -> Option<String> {
     let mut cmd = Command::new(path);
+    // The engine must only ever see xpando's data folder, never espanso's own.
+    if let Some(dir) = data_dir {
+        cmd.env("ESPANSO_CONFIG_DIR", dir);
+    }
     cmd.arg("--version")
         .stdin(Stdio::null())
         .stderr(Stdio::null());
@@ -78,13 +82,15 @@ fn version_output(path: &Path) -> Option<String> {
 /// Finds the engine and says whether it is xpando's build. A stock espanso is reported only
 /// if no xpando build is found, so a bundled engine always wins.
 #[tauri::command]
-pub fn engine_status() -> EngineStatus {
+pub fn engine_status(app: AppHandle) -> EngineStatus {
+    // If the data folder cannot be reached the check still runs, just without the variable.
+    let data = data_dir(&app).ok();
     let mut stock: Option<EngineStatus> = None;
     for (path, bundled) in candidates() {
         if path.is_absolute() && !path.is_file() {
             continue;
         }
-        let Some(output) = version_output(&path) else {
+        let Some(output) = version_output(&path, data.as_deref()) else {
             continue;
         };
         let (kind, version) = classify_version_output(&output);
@@ -118,7 +124,7 @@ pub fn preview_clipboard_hack(
     file: String,
     index: usize,
 ) -> Result<Option<Preview>, String> {
-    let dir = espanso_config_dir(&app)?;
+    let dir = data_dir(&app)?;
     let path = edit::resolve_match_file(&dir, &file)?;
     let text = fs::read_to_string(path).map_err(|e| format!("Could not read the file: {e}"))?;
     clipboard_hack::preview(&text, index)
@@ -134,7 +140,7 @@ pub fn convert_clipboard_hack(
     name: String,
     expected_hash: String,
 ) -> Result<Folder, String> {
-    let dir = espanso_config_dir(&app)?;
+    let dir = data_dir(&app)?;
     edit::edit_file(&dir, &file, &expected_hash, |text| {
         clipboard_hack::convert(text, index, &name)
     })

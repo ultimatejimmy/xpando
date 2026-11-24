@@ -6,6 +6,7 @@ import "./browser.css";
 import "./advanced.css";
 import "./yamledit.css";
 import "./folders.css";
+import "./data.css";
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>

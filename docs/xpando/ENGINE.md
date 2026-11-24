@@ -21,6 +21,10 @@ The patched engine reports its version with an `-xpando` suffix: `espanso --vers
 * UI: in Advanced mode the status bar shows `Engine: ...`. In any mode, a phrase that has a Set
   clipboard macro shows a warning when the engine is stock or missing.
 
+Every time the app runs the engine it sets `ESPANSO_CONFIG_DIR` to xpando's data folder
+(see `data::data_dir`; M6 in [PLAN.md](PLAN.md)), so the engine never reads or writes the stock
+espanso folder. Any future `service`/`daemon` launch must set it the same way.
+
 Limit: this finds the binary xpando would use, not the process that is running. If a stock
 daemon is already running and the xpando engine sits elsewhere, restart the daemon from the app
 (M5 covers the service/start-up flow).

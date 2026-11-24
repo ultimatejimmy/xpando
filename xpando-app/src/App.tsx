@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { AlertTriangle, Folder as FolderIcon, Library, Panda, Search } from "lucide-react";
 import {
@@ -28,6 +28,14 @@ import { FolderToolbar, NewFolderButton, ScopeLabel, useFolderInfo } from "./Fol
 import { RichTextView } from "./RichLazy";
 import { VarsAka, macroLabel } from "./VarsEditor";
 import { ClipboardHackOffer, EngineWarning, useEngine } from "./EnginePanels";
+import {
+  DataBanners,
+  ImportDialog,
+  SettingsButton,
+  SettingsDialog,
+  useDataInfo,
+  useImportOffer,
+} from "./DataFolder";
 
 interface MacroInfo {
   name: string;
@@ -193,6 +201,36 @@ export default function App() {
     void load();
   }, []);
 
+  // The data folder: where it is, whether it can be reached, sync conflict copies, first-run import.
+  const data = useDataInfo();
+  const dataProblem = data.info?.problem ?? data.error;
+  const importOffer = useImportOffer(data.info !== null && !data.info.problem);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+
+  /** The data folder changed or files were imported: start over from what is on disk. */
+  const dataChanged = async () => {
+    await data.refresh();
+    await load();
+    setEditing(null);
+    setDirty(false);
+    setSelected(null);
+    setScope(ALL);
+  };
+
+  // A cloud folder can change while the window is in the background: look again on return,
+  // unless an edit is open (saving checks the file hash, so nothing is overwritten either way).
+  const editingRef = useRef(false);
+  editingRef.current = editing !== null;
+  useEffect(() => {
+    const onFocus = () => {
+      void data.refresh();
+      if (!editingRef.current) void load();
+    };
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data.refresh]);
+
   const infos = useFolderInfo(folders);
 
   /** A folder was created, renamed, deleted or given other apps: reload and show it. */
@@ -322,10 +360,17 @@ export default function App() {
           />
         </div>
         <AdvancedSwitch on={advanced} onChange={setAdvanced} />
+        <SettingsButton onClick={() => setSettingsOpen(true)} />
       </header>
       {advanced && (searchFocused || !query) && <SearchHint />}
 
-      {error && (
+      <DataBanners
+        info={data.info}
+        error={data.error}
+        onRetry={() => void dataChanged()}
+        onOpenSettings={() => setSettingsOpen(true)}
+      />
+      {error && !dataProblem && (
         <p className="error" role="alert">
           {error}
         </p>
@@ -418,7 +463,11 @@ export default function App() {
           />
           {loaded && visible.length === 0 && (
             <p className="empty">
-              {query ? "No phrases match your search." : "No phrases found in your espanso match files."}
+              {query
+                ? "No phrases match your search."
+                : folders.length === 0
+                  ? "No folders yet. Use New folder to start, or open Settings to bring in your espanso phrases."
+                  : "No phrases yet."}
             </p>
           )}
           <ul>
@@ -559,6 +608,21 @@ export default function App() {
           ))}
         </section>
       </div>
+      {importOffer.preview && (
+        <ImportDialog
+          preview={importOffer.preview}
+          onClose={importOffer.close}
+          onImported={() => void dataChanged()}
+        />
+      )}
+      {settingsOpen && (
+        <SettingsDialog
+          info={data.info}
+          onClose={() => setSettingsOpen(false)}
+          onChanged={() => void dataChanged()}
+          onOffer={importOffer.open}
+        />
+      )}
       {pendingLeave && (
         <UnsavedChangesDialog
           onKeep={() => setPendingLeave(null)}

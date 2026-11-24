@@ -9,6 +9,9 @@
 * [[Rich Text]]
 * [[Macros]]
 * [[Folders and Apps]]
+* [[Data Folder]]
+* [[Import from espanso]]
+* [[Sync Tips]]
 
 **Advanced**
 * [[Advanced Mode]]

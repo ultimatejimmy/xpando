@@ -236,6 +236,18 @@ The user-facing documentation lives in the repository's GitHub Wiki.
 - **Single engine:** detect and warn if a stock espanso daemon is running (it would also expand the same triggers).
 - Remove the temporary stock-espanso handling once the engine is bundled.
 
+### Status of M6
+Implemented (wiki: [Data folder](../wiki/Data-Folder.md), [Import from espanso](../wiki/Import-from-espanso.md), [Sync tips](../wiki/Sync-Tips.md)):
+
+- **`xpando_core::datadir`**: default folder per OS (`%APPDATA%\xpando`, `~/Library/Application Support/xpando`, `$XDG_CONFIG_HOME/xpando` or `~/.config/xpando`); `Settings` (`data_dir`, `import_handled`) in `settings.yml` inside the app's own config folder (Tauri `app_config_dir`), separate from the data and written atomically (YAML rather than JSON so no new crate is needed; a corrupt file is an error, never a silent fallback to the default); `prepare`/`ensure_layout` (create `match/` and `config/`, but never recreate a missing chosen folder); `check_dir`/`is_reachable`/`is_writable`/`describe_status`; `check_choice` (validates a typed/picked folder: full path, exists or its parent exists, writable, not the same, not nested); `copy_data` and `change_data_dir` (copy only, no overwrite, a copy with failures does not switch).
+- **`xpando_core::import`**: per-OS espanso folder candidates (`ESPANSO_CONFIG_DIR`, `%APPDATA%\espanso`, `~/.config/espanso`, macOS Application Support), `preview_import` (files, which would be kept, what is skipped and why) and `run_import` (`match/**` and `config/**` YAML including `_` files and packages; non-YAML, links and conflict copies are reported as skipped; create-new-only writes so nothing is overwritten; the source is only read).
+- **`xpando_core::syncsafe`**: `is_conflicted_copy` / `original_name` (Dropbox/Nextcloud "conflicted copy", "case conflict", "Selective Sync Conflict"; Syncthing `.sync-conflict-`; OneDrive `-DESKTOP-`/`-LAPTOP-`; Google Drive/Windows `name (1)`), `find_conflicted_copies`, and re-exports of `is_reachable`/`check_dir`.
+- **App**: every command (load, save, folders, advanced, engine checks) resolves its folder through `data::data_dir`, so the espanso folder is never used; `engine_status` starts the engine with `ESPANSO_CONFIG_DIR` set to that folder. UI: first-run import dialog (preview list, Import / Not now / Don't ask again), Settings (gear icon) with data folder, **Change...** (Browse plus a text box, validation, then "Copy my phrases?"), **Use the default folder** and **Find espanso phrases**; banners for an unreachable folder (no fallback; Try again / Settings) and for conflicted copies; the window re-reads the folder when it regains focus.
+- **Folder picker without a new package**: the `pick_folder` command runs what the OS already has (PowerShell folder dialog on Windows, `osascript` on macOS, `zenity` or `kdialog` on Linux). The text box always works, so a missing picker is not a dead end. Switching to `tauri-plugin-dialog` later needs a Cargo and npm dependency.
+- No new Rust crates and no new npm packages.
+
+Still open: a live file watcher (today the folder is re-read on window focus, and saves keep the hash check); running the daemon from the app with the data folder (the engine is only queried for `--version` so far, with `ESPANSO_CONFIG_DIR` set); detecting a running stock espanso daemon; per-OS manual tests (macOS and Linux paths and pickers are untested here; the Windows picker and the full app flow were not exercised in a running window); removing the stock-espanso handling once the engine is bundled.
+
 ### Later (post-0.1)
 - Modern hotkey popup / search bar replacing espanso-modulo's wxWidgets search UI.
 - Modern forms window replacing modulo forms.
@@ -256,7 +268,7 @@ The user-facing documentation lives in the repository's GitHub Wiki.
 
 ## Open questions
 
-1. Share espanso's config directory, or use a separate `xpando` dir with an importer?
+1. ~~Share espanso's config directory, or use a separate `xpando` dir with an importer?~~ Decided: separate xpando folder plus importer (M6).
 2. Ship our own build of the espanso daemon (rebranded) or depend on users installing espanso?
    (Recommendation: ship it bundled — single installer is far better UX.)
 3. Frontend framework: React (largest ecosystem, TipTap/Lexical support) vs Svelte (lighter).
