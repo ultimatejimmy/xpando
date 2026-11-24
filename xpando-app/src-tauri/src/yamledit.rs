@@ -6,7 +6,7 @@ use tauri::AppHandle;
 use xpando_core::yamledit::{self, SaveFailure, Validation};
 use xpando_core::Folder;
 
-use crate::espanso_config_dir;
+use crate::data::data_dir;
 
 /// Checks new text for entry `index` of `file` (a path relative to `match`) without saving.
 /// `index` of `None` checks a new entry that is not in the file yet. An `Err` means the file
@@ -19,7 +19,7 @@ pub fn validate_entry_yaml(
     text: String,
     expected_hash: String,
 ) -> Result<Validation, String> {
-    let dir = espanso_config_dir(&app)?;
+    let dir = data_dir(&app)?;
     let current = yamledit::read_for_validation(&dir, &file, &expected_hash)?;
     Ok(yamledit::validate_entry_source(&current, index, &text))
 }
@@ -33,7 +33,7 @@ pub fn validate_file_yaml(
     confirm_loss: bool,
     expected_hash: String,
 ) -> Result<Validation, String> {
-    let dir = espanso_config_dir(&app)?;
+    let dir = data_dir(&app)?;
     let current = yamledit::read_for_validation(&dir, &file, &expected_hash)?;
     Ok(yamledit::validate_file_source(
         &current,
@@ -51,7 +51,7 @@ pub fn save_entry_yaml(
     text: String,
     expected_hash: String,
 ) -> Result<Folder, SaveFailure> {
-    let dir = espanso_config_dir(&app).map_err(|m| SaveFailure {
+    let dir = data_dir(&app).map_err(|m| SaveFailure {
         kind: "other".into(),
         message: m,
         error: None,
@@ -71,7 +71,7 @@ pub fn save_file_yaml(
     confirm_loss: bool,
     expected_hash: String,
 ) -> Result<Folder, SaveFailure> {
-    let dir = espanso_config_dir(&app).map_err(|m| SaveFailure {
+    let dir = data_dir(&app).map_err(|m| SaveFailure {
         kind: "other".into(),
         message: m,
         error: None,
@@ -89,7 +89,7 @@ pub fn get_file_source(
     file: String,
     expected_hash: String,
 ) -> Result<String, String> {
-    let dir = espanso_config_dir(&app)?;
+    let dir = data_dir(&app)?;
     let text = yamledit::read_for_validation(&dir, &file, &expected_hash)?;
     Ok(text.replace("\r\n", "\n"))
 }

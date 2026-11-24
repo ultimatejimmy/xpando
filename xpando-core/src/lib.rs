@@ -4,7 +4,12 @@
 pub mod advanced;
 pub mod clipboard_hack;
 pub mod conflicts;
+mod copytree;
+pub use copytree::{CopyReport, Problem};
+pub mod datadir;
 pub mod engine;
+pub mod import;
+pub mod syncsafe;
 pub mod yamledit;
 
 use std::fs;

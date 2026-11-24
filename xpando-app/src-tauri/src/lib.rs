@@ -1,4 +1,5 @@
 mod advanced;
+mod data;
 mod edit;
 mod engine;
 mod folders;
@@ -6,23 +7,12 @@ mod richtext;
 mod vars;
 mod yamledit;
 
-use std::path::PathBuf;
+use tauri::AppHandle;
 
-use tauri::{AppHandle, Manager};
-
-/// espanso's config directory: `%APPDATA%\espanso` on Windows,
-/// `~/Library/Application Support/espanso` on macOS, `~/.config/espanso` on Linux.
-fn espanso_config_dir(app: &AppHandle) -> Result<PathBuf, String> {
-    app.path()
-        .config_dir()
-        .map(|dir| dir.join("espanso"))
-        .map_err(|e| e.to_string())
-}
-
-/// Reads every espanso match file into folders of phrases (read-only).
+/// Reads every match file in xpando's data folder into folders of phrases (read-only).
 #[tauri::command]
 fn list_phrases(app: AppHandle) -> Result<Vec<xpando_core::Folder>, String> {
-    let dir = espanso_config_dir(&app)?;
+    let dir = data::data_dir(&app)?;
     xpando_core::load_folders(&dir).map_err(|e| e.to_string())
 }
 
@@ -31,6 +21,13 @@ pub fn run() {
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![
             list_phrases,
+            data::data_info,
+            data::import_offer,
+            data::import_espanso,
+            data::skip_import,
+            data::check_data_dir,
+            data::change_data_dir,
+            data::pick_folder,
             advanced::get_entry_source,
             advanced::list_conflicts,
             advanced::config_path,

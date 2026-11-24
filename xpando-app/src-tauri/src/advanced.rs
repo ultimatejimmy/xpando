@@ -5,7 +5,7 @@ use std::path::{Component, Path, PathBuf};
 
 use tauri::AppHandle;
 
-use crate::espanso_config_dir;
+use crate::data::data_dir;
 
 /// Resolves `file` (relative to `<config>/match`) to a real file inside that directory.
 /// Rejects absolute paths, `..`, and symlinks that leave the directory.
@@ -41,7 +41,7 @@ pub fn get_entry_source(
     file: String,
     index: usize,
 ) -> Result<Option<xpando_core::advanced::EntrySource>, String> {
-    let path = resolve_match_file(&espanso_config_dir(&app)?, &file)?;
+    let path = resolve_match_file(&data_dir(&app)?, &file)?;
     let text = fs::read_to_string(path).map_err(|e| e.to_string())?;
     Ok(xpando_core::advanced::entry_source(&text, index))
 }
@@ -49,14 +49,14 @@ pub fn get_entry_source(
 /// Trigger conflicts across all match files.
 #[tauri::command]
 pub fn list_conflicts(app: AppHandle) -> Result<Vec<xpando_core::conflicts::Conflict>, String> {
-    let dir = espanso_config_dir(&app)?;
+    let dir = data_dir(&app)?;
     xpando_core::conflicts::find_conflicts_in_dir(&dir).map_err(|e| e.to_string())
 }
 
 /// Where espanso's config directory is, for the status bar.
 #[tauri::command]
 pub fn config_path(app: AppHandle) -> Result<String, String> {
-    Ok(espanso_config_dir(&app)?.to_string_lossy().into_owned())
+    Ok(data_dir(&app)?.to_string_lossy().into_owned())
 }
 
 #[cfg(test)]

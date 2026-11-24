@@ -31,6 +31,6 @@ Behind the scenes xpando writes a file in your `config` folder. File names and p
 
 ## Limits
 
-* Folders inside subfolders of `match`, and the `packages` folder, are managed by espanso and cannot be changed here.
+* Folders inside subfolders of `match`, and the `packages` folder, cannot be changed here.
 * If a configuration is too unusual for xpando to change safely, the command is disabled and says why. Nothing is changed.
 * Only one configuration is active at a time: the first app-specific one that matches the window, otherwise the default. A folder works in an app only if that configuration loads it.

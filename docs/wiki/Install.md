@@ -22,7 +22,7 @@ Releases whose version ends in `-beta` (for example `2026.11.23-beta2`) are **pr
 
 ## Already using espanso?
 
-xpando is meant to share espanso's configuration folder, so your existing phrases show up right away with no import. xpando keeps comments and layout in your files, and keeps a backup before it changes a file. See [[FAQ]].
+xpando keeps its own data and offers to copy your espanso phrases the first time it starts. Your espanso files are never changed. See [[Import from espanso]] and [[Data Folder]].
 
 ## Next
 

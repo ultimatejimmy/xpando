@@ -9,13 +9,13 @@ use xpando_core::edit::{self, NewPhrase, PhraseEdit};
 use xpando_core::vars::{self, VarSpec, VarsChange};
 use xpando_core::Folder;
 
-use crate::espanso_config_dir;
+use crate::data::data_dir;
 
 /// The variables of entry `index` of `file`, in a form the editor can write back. An error
 /// means they use a layout that can only be edited in a text editor.
 #[tauri::command]
 pub fn get_phrase_vars(app: AppHandle, file: String, index: usize) -> Result<Vec<VarSpec>, String> {
-    let dir = espanso_config_dir(&app)?;
+    let dir = data_dir(&app)?;
     let path = edit::resolve_match_file(&dir, &file)?;
     let text = fs::read_to_string(path).map_err(|e| format!("Could not read the file: {e}"))?;
     vars::read_vars(&text, index)
@@ -32,7 +32,7 @@ pub fn save_phrase_vars(
     edit: Option<PhraseEdit>,
     expected_hash: String,
 ) -> Result<Folder, String> {
-    let dir = espanso_config_dir(&app)?;
+    let dir = data_dir(&app)?;
     edit::edit_file(&dir, &file, &expected_hash, |text| {
         let text = match edit {
             Some(mut e) => {
@@ -54,7 +54,7 @@ pub fn create_phrase_with_vars(
     variables: Vec<VarSpec>,
     expected_hash: String,
 ) -> Result<Folder, String> {
-    let dir = espanso_config_dir(&app)?;
+    let dir = data_dir(&app)?;
     edit::edit_file(&dir, &file, &expected_hash, |text| {
         let before = xpando_core::parse_match_text(text).0.len();
         let added = edit::add_phrase(text, &phrase)?;

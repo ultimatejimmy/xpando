@@ -16,9 +16,9 @@ Quick answers. Can't find yours? [Open an issue](https://github.com/ultimatejimm
 
 | Question | Answer |
 | :------- | :----- |
-| **Where are my phrases?** | In xpando's data folder, one file per folder. The default is `%APPDATA%\xpando` on Windows. You can change it in Settings. |
-| **Can I keep them in OneDrive or Google Drive?** | Yes. Point the data folder at a synced folder to back it up or share it between your devices. xpando shows a notice if the sync service leaves a "conflicted copy" file. |
-| **I used espanso before. Can I bring my phrases?** | Yes. On first run xpando offers to import your espanso files. It only copies them and never changes the originals. |
+| **Where are my phrases?** | In xpando's data folder, one file per folder. The default is `%APPDATA%\xpando` on Windows. You can change it in Settings. See [[Data Folder]]. |
+| **Can I keep them in OneDrive or Google Drive?** | Yes. Point the data folder at a synced folder to back it up or share it between your devices. xpando shows a notice if the sync service leaves a "conflicted copy" file. See [[Sync Tips]]. |
+| **I used espanso before. Can I bring my phrases?** | Yes. xpando offers to import your espanso files the first time it starts, and you can do it later from Settings. It only copies them and never changes the originals. See [[Import from espanso]]. |
 | **Can I still edit the files by hand?** | Yes. The YAML files are the source of truth, and there is no separate database. Comments and layout are kept when xpando saves. |
 | **Will xpando damage my files?** | It is built not to. Saves are atomic, a one-time `.bak` backup is made before the first edit, and a save is refused if the file changed underneath you. |
 

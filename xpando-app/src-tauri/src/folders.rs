@@ -6,18 +6,18 @@
 use tauri::AppHandle;
 use xpando_core::folders::{self, Change, FolderInfo, Outcome, ScopeSpec};
 
-use crate::espanso_config_dir;
+use crate::data::data_dir;
 
 /// Scope, lock reasons and config references for every match file.
 #[tauri::command]
 pub fn list_folder_info(app: AppHandle) -> Result<Vec<FolderInfo>, String> {
-    folders::list_folder_info(&espanso_config_dir(&app)?)
+    folders::list_folder_info(&data_dir(&app)?)
 }
 
 /// Creates an empty folder `match/<name>.yml`.
 #[tauri::command]
 pub fn create_folder(app: AppHandle, name: String) -> Result<Outcome, String> {
-    folders::create_folder(&espanso_config_dir(&app)?, &name)
+    folders::create_folder(&data_dir(&app)?, &name)
 }
 
 /// The files a rename would touch, without changing anything.
@@ -27,7 +27,7 @@ pub fn preview_rename_folder(
     file: String,
     new_name: String,
 ) -> Result<Vec<Change>, String> {
-    folders::preview_rename(&espanso_config_dir(&app)?, &file, &new_name)
+    folders::preview_rename(&data_dir(&app)?, &file, &new_name)
 }
 
 #[tauri::command]
@@ -37,13 +37,13 @@ pub fn rename_folder(
     new_name: String,
     expected_hash: String,
 ) -> Result<Outcome, String> {
-    folders::rename_folder(&espanso_config_dir(&app)?, &file, &new_name, &expected_hash)
+    folders::rename_folder(&data_dir(&app)?, &file, &new_name, &expected_hash)
 }
 
 /// The files a delete would touch and the backups it would keep.
 #[tauri::command]
 pub fn preview_delete_folder(app: AppHandle, file: String) -> Result<Vec<Change>, String> {
-    folders::preview_delete(&espanso_config_dir(&app)?, &file)
+    folders::preview_delete(&data_dir(&app)?, &file)
 }
 
 /// Deletes a folder; `confirm` must be true.
@@ -54,7 +54,7 @@ pub fn delete_folder(
     confirm: bool,
     expected_hash: String,
 ) -> Result<Outcome, String> {
-    folders::delete_folder(&espanso_config_dir(&app)?, &file, confirm, &expected_hash)
+    folders::delete_folder(&data_dir(&app)?, &file, confirm, &expected_hash)
 }
 
 /// The files a change of apps would touch, without changing anything.
@@ -64,7 +64,7 @@ pub fn preview_folder_scope(
     file: String,
     spec: ScopeSpec,
 ) -> Result<Vec<Change>, String> {
-    folders::preview_scope(&espanso_config_dir(&app)?, &file, &spec)
+    folders::preview_scope(&data_dir(&app)?, &file, &spec)
 }
 
 #[tauri::command]
@@ -74,5 +74,5 @@ pub fn set_folder_scope(
     spec: ScopeSpec,
     expected_hash: String,
 ) -> Result<Outcome, String> {
-    folders::set_scope(&espanso_config_dir(&app)?, &file, &spec, &expected_hash)
+    folders::set_scope(&data_dir(&app)?, &file, &spec, &expected_hash)
 }

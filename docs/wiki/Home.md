@@ -31,6 +31,7 @@ Under the hood xpando is a fork of [espanso](https://espanso.org), so it works i
 * [[Rich Text]]
 * [[Macros]]
 * [[Folders and Apps]]
+* [[Data Folder]], [[Import from espanso]], [[Sync Tips]]
 * [[Advanced Mode]], [[Editing YAML]], [[Search Operators]]
 * [[Set Clipboard]] (xpando's own engine only)
 * [[Troubleshooting]] and [[FAQ]]

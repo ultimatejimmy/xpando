@@ -10,7 +10,7 @@ xpando has three parts you will meet:
 
 ![The three panes](images/main-window-annotated.png)
 
-* **Header**: the xpando name, a search box ("Search triggers, names and text") and the **Advanced** switch.
+* **Header**: the xpando name, a search box ("Search triggers, names and text"), the **Advanced** switch and **Settings** (the gear), where you see or change the [[Data Folder]].
 * **Folders** (left): **All phrases**, then your folders. **New folder** adds one.
 * **Phrase list** (middle): the phrases of the selected folder. **New phrase** adds one.
 * **Details** (right): the selected phrase with **Edit** and **Delete**, its text, its **Macros** and its **Options**.
