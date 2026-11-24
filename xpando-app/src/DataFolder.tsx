@@ -3,6 +3,11 @@ import { invoke } from "@tauri-apps/api/core";
 import { AlertTriangle, FolderInput, FolderOpen, RefreshCw, Settings as SettingsIcon, X } from "lucide-react";
 import "./data.css";
 
+/** A pasted path: surrounding spaces and quotes ("Copy as path" adds quotes) are removed. */
+export function cleanPath(raw: string): string {
+  return raw.trim().replace(/^["'“‘]+|["'”’]+$/g, "").trim();
+}
+
 // ---------------------------------------------------------------------------------------
 // Types (the backend's JSON)
 // ---------------------------------------------------------------------------------------
@@ -393,11 +398,14 @@ export function SettingsDialog({
     invoke<string | null>("pick_folder", { start: info?.path ?? null })
       .then((p) => {
         if (p) {
-          setText(p);
-          validate(p);
+          const clean = cleanPath(p);
+          setText(clean);
+          validate(clean);
         }
       })
-      .catch(() => undefined);
+      .catch((e) =>
+        setError(String(e) || "The folder dialog could not be opened. Type the folder path in the box instead."),
+      );
   };
 
   const apply = (path: string | null, copy: boolean) => {
@@ -516,10 +524,14 @@ export function SettingsDialog({
                   setText(e.target.value);
                   setCheck(null);
                 }}
-                onBlur={() => validate(text)}
+                onBlur={() => {
+                  const clean = cleanPath(text);
+                  if (clean !== text) setText(clean);
+                  validate(clean);
+                }}
               />
               <button type="button" className="btn" onClick={browse}>
-                Browse...
+                <FolderOpen size={16} aria-hidden="true" /> Browse…
               </button>
             </div>
             {check && !check.ok && (
@@ -548,7 +560,7 @@ export function SettingsDialog({
               className="btn btn-primary"
               disabled={busy || !text.trim()}
               onClick={() =>
-                invoke<PathCheck>("check_data_dir", { path: text })
+                invoke<PathCheck>("check_data_dir", { path: cleanPath(text) })
                   .then((c) => {
                     setCheck(c);
                     if (c.ok) setStep({ kind: "ask", check: c });

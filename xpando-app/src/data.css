@@ -121,3 +121,10 @@
   margin: 4px 0 0;
   padding-left: 20px;
 }
+
+.df-row .btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
