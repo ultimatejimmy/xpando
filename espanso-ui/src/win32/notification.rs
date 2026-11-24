@@ -61,8 +61,8 @@ pub fn initialize_notification_thread(notification_icon_path: PathBuf) -> Result
 
     while let Ok(message) = receiver.recv() {
       if let Err(err) = Toast::new(&APP_USER_MODEL_ID)
-        .icon(&notification_icon_path, IconCrop::Square, "Espanso")
-        .title("Espanso")
+        .icon(&notification_icon_path, IconCrop::Square, "xpando")
+        .title("xpando")
         .text1(&message)
         .sound(None)
         .show()

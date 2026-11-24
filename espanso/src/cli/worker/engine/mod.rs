@@ -299,7 +299,8 @@ pub fn initialize_and_spawn(
                 }
             }
 
-            let mut welcome_handle = None;
+            // xpando has its own app, so the engine never shows its welcome window.
+            let welcome_handle: Option<std::process::Child> = None;
             match start_reason.as_deref() {
                 Some(flag) if flag == WORKER_START_REASON_CONFIG_CHANGED => {
                     notification_manager.notify_config_reloaded(false);
@@ -314,7 +315,6 @@ pub fn initialize_and_spawn(
                     notification_manager.notify_start();
 
                     if !preferences.has_displayed_welcome() {
-                        welcome_handle = super::ui::welcome::show_welcome_screen();
                         preferences.set_has_displayed_welcome(true);
                     }
                 }

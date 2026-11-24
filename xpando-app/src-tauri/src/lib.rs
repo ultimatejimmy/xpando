@@ -2,13 +2,14 @@ mod advanced;
 mod data;
 mod edit;
 mod engine;
+mod engine_run;
 mod folders;
 mod richtext;
 mod update;
 mod vars;
 mod yamledit;
 
-use tauri::AppHandle;
+use tauri::{AppHandle, Manager};
 
 /// Reads every match file in xpando's data folder into folders of phrases (read-only).
 #[tauri::command]
@@ -21,6 +22,22 @@ fn list_phrases(app: AppHandle) -> Result<Vec<xpando_core::Folder>, String> {
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_updater::Builder::new().build())
+        .setup(|app| {
+            let handle = app.handle().clone();
+            if std::env::args().any(|a| a == engine_run::BACKGROUND_FLAG) {
+                // Start at sign-in: only the engine, no window.
+                std::thread::spawn(move || {
+                    engine_run::start_if_wanted(&handle);
+                    handle.exit(0);
+                });
+            } else {
+                if let Some(window) = app.get_webview_window("main") {
+                    let _ = window.show();
+                }
+                std::thread::spawn(move || engine_run::start_if_wanted(&handle));
+            }
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             list_phrases,
             data::data_info,
@@ -39,6 +56,11 @@ pub fn run() {
             advanced::list_conflicts,
             advanced::config_path,
             engine::engine_status,
+            engine_run::engine_run_state,
+            engine_run::engine_start,
+            engine_run::engine_stop,
+            engine_run::engine_restart,
+            engine_run::engine_set_at_login,
             engine::preview_clipboard_hack,
             engine::convert_clipboard_hack,
             edit::save_phrase,

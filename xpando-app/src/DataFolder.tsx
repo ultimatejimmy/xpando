@@ -2,6 +2,7 @@ import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from 
 import { invoke } from "@tauri-apps/api/core";
 import { AlertTriangle, FolderInput, FolderOpen, RefreshCw, Settings as SettingsIcon, X } from "lucide-react";
 import { UpdatesSection, type UpdatesApi } from "./Updates";
+import { ExpansionSection } from "./EnginePanels";
 import "./data.css";
 
 /** A pasted path: surrounding spaces and quotes ("Copy as path" adds quotes) are removed. */
@@ -496,6 +497,8 @@ export function SettingsDialog({
             </button>
           </div>
           {note && <p className="fm-help">{note}</p>}
+
+          <ExpansionSection />
 
           <UpdatesSection u={updates} />
           {error && (

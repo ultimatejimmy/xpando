@@ -144,3 +144,85 @@ export function ClipboardHackOffer<F>({
     </div>
   );
 }
+
+export interface EngineRun {
+  running: boolean;
+  stopped_by_user: boolean;
+  at_login: boolean;
+  problem: string | null;
+}
+
+/** Settings: is expansion on, start/stop it, and whether it starts when you sign in. */
+export function ExpansionSection() {
+  const [run, setRun] = useState<EngineRun | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    invoke<EngineRun>("engine_run_state")
+      .then((r) => alive && setRun(r))
+      .catch(() => alive && setRun(null));
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  async function act(command: string, args?: Record<string, unknown>) {
+    setBusy(true);
+    setError(null);
+    try {
+      const next = await invoke<EngineRun>(command, args);
+      setRun(next);
+      if (next.problem) setError(next.problem);
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (!run) return null;
+  return (
+    <>
+      <h3 className="df-h3">Expansion</h3>
+      <p className="fm-help" role="status">
+        {run.running
+          ? "On. Your phrases expand as you type, in any program."
+          : run.stopped_by_user
+            ? "Off. You turned it off. Phrases do not expand until you turn it on."
+            : "Off. Phrases are not expanding."}
+      </p>
+      <div className="fm-buttons">
+        {run.running ? (
+          <>
+            <button type="button" className="btn" disabled={busy} onClick={() => act("engine_restart")}>
+              Restart
+            </button>
+            <button type="button" className="btn" disabled={busy} onClick={() => act("engine_stop")}>
+              Turn off
+            </button>
+          </>
+        ) : (
+          <button type="button" className="btn btn-primary" disabled={busy} onClick={() => act("engine_start")}>
+            Turn on
+          </button>
+        )}
+      </div>
+      <label className="eng-check">
+        <input
+          type="checkbox"
+          checked={run.at_login}
+          disabled={busy}
+          onChange={(e) => act("engine_set_at_login", { on: e.target.checked })}
+        />
+        Start expanding when I sign in to this computer
+      </label>
+      {error && (
+        <p className="fm-problem" role="alert">
+          {error}
+        </p>
+      )}
+    </>
+  );
+}
