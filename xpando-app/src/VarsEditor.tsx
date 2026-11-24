@@ -720,6 +720,12 @@ export function useVars(opts: UseVarsOptions): VarsApi {
     const el = document.getElementById(bodyId) as HTMLTextAreaElement | null;
     const start = el ? el.selectionStart : body.length;
     const end = el ? el.selectionEnd : body.length;
+    // Through the browser's own editing path, so Ctrl+Z still undoes it (and earlier typing).
+    if (el) {
+      el.focus();
+      el.setSelectionRange(start, end);
+      if (document.execCommand("insertText", false, snippet)) return;
+    }
     setBody(body.slice(0, start) + snippet + body.slice(end));
     if (el) {
       const pos = start + snippet.length;
