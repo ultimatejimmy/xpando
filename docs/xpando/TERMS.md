@@ -12,6 +12,7 @@ The app uses one word for each idea. Use the same words in the wiki, the README 
 | **Macro** | A dynamic piece inside the text that is filled in when the phrase expands, such as today's date, whatever is on the clipboard, or the output of a command. It shows in the text as `{{name}}`. |
 | **Setting** | One field of a macro, for example the date format of a Date macro or the command of a Command output macro. Not to be confused with a config file. |
 | **Folder** | A group of phrases. Each folder is one file, and can be limited to certain apps. |
+| **Works in** | The apps a phrase works in: **All apps** or **Only these apps**. Changing it moves the phrase to the folder that has those apps. |
 | **Update** | A newer version of xpando. xpando tells you when one exists; you choose when to install it. |
 | **Beta** | An early version of xpando that is offered only to people who turn on "Get beta versions". It may have problems. |
 | **Advanced mode** | A switch in the header. It shows the technical side: file names, line numbers, YAML, option details, macro names and every setting. Everything stays reachable in normal mode through "More options" or Advanced mode, nothing is removed. |

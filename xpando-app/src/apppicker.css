@@ -73,7 +73,13 @@
   min-height: 1.3em;
 }
 
-.ap-list {
+/* The folder dialogs sit inside a pane, whose "ul" rule (grid, no padding) would win otherwise. */
+.fm-dialog .fm-chips {
+  display: flex;
+}
+
+.fm-dialog .ap-list {
+  display: block;
   max-height: 240px;
   margin: 0;
   padding: 0;
@@ -83,7 +89,7 @@
   list-style: none;
 }
 
-.ap-list:empty {
+.fm-dialog .ap-list:empty {
   display: none;
 }
 
@@ -184,13 +190,15 @@
   width: 100%;
 }
 
-.wi-list {
+.fm-dialog .wi-list {
+  display: block;
   margin: 0 0 8px;
   padding-left: 20px;
+  list-style: disc;
   font-size: 13px;
 }
 
-.wi-list li {
+.fm-dialog .wi-list li {
   margin: 4px 0;
   overflow-wrap: anywhere;
 }
