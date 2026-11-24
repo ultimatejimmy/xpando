@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { AlertTriangle, FolderInput, FolderOpen, RefreshCw, Settings as SettingsIcon, X } from "lucide-react";
 import { UpdatesSection, type UpdatesApi } from "./Updates";
 import { ExpansionSection } from "./EnginePanels";
+import { SettingsGroup, SettingsRow } from "./SettingsParts";
 import "./data.css";
 
 /** A pasted path: surrounding spaces and quotes ("Copy as path" adds quotes) are removed. */
@@ -445,58 +446,65 @@ export function SettingsDialog({
     <Dialog title="Settings" dialog={dialog}>
       {step.kind === "view" && (
         <>
-          <h3 className="df-h3">Data folder</h3>
-          <p className="fm-help">
-            Your phrases are saved here. {info?.is_default ? "This is the default folder." : "You chose this folder."}
-          </p>
-          <p className="df-path">
-            <FolderOpen size={16} aria-hidden="true" />
-            <code>{info?.path ?? "..."}</code>
-          </p>
-          {info?.problem && (
-            <p className="fm-problem" role="alert">
-              {info.problem}
-            </p>
-          )}
-          <div className="fm-buttons">
-            <button
-              type="button"
-              className="btn"
-              onClick={() => {
-                setStep({ kind: "choose" });
-                setText("");
-                setCheck(null);
-                setError(null);
-              }}
+          <SettingsGroup title="Data folder">
+            <SettingsRow
+              title="Your phrases are saved here"
+              help={
+                <>
+                  {info?.is_default ? "Default folder. " : "You chose this folder. "}
+                  Pick a folder in OneDrive, Google Drive or Dropbox to back up your phrases or use them on another
+                  computer.
+                </>
+              }
+              below={
+                <>
+                  <code className="st-path" title={info?.path}>
+                    {info?.path ?? "..."}
+                  </code>
+                  {info?.problem && (
+                    <p className="fm-problem" role="alert">
+                      {info.problem}
+                    </p>
+                  )}
+                </>
+              }
             >
-              Change...
-            </button>
-            {info && !info.is_default && (
+              {info && !info.is_default && (
+                <button
+                  type="button"
+                  className="btn"
+                  onClick={() => {
+                    setError(null);
+                    apply(null, false);
+                  }}
+                >
+                  Use default
+                </button>
+              )}
               <button
                 type="button"
                 className="btn"
                 onClick={() => {
+                  setStep({ kind: "choose" });
+                  setText("");
+                  setCheck(null);
                   setError(null);
-                  apply(null, false);
                 }}
               >
-                Use the default folder
+                Change...
               </button>
-            )}
-          </div>
-          <p className="fm-help df-tip">
-            Tip: pick a folder in OneDrive, Google Drive or Dropbox to back your phrases up or use them on another computer.
-          </p>
-
-          <h3 className="df-h3">Import from espanso</h3>
-          <p className="fm-help">Copy phrases from an espanso setup on this computer. Your espanso files are not changed.</p>
-          <div className="fm-buttons">
-            <button type="button" className="btn" onClick={findEspanso}>
-              <FolderInput size={16} aria-hidden="true" />
-              Find espanso phrases
-            </button>
-          </div>
-          {note && <p className="fm-help">{note}</p>}
+            </SettingsRow>
+            <SettingsRow
+              title="Import from espanso"
+              help="Copies phrases from an espanso setup on this computer. Your espanso files are not changed."
+              below={note ? <p className="st-notice">{note}</p> : undefined}
+            >
+              <button type="button" className="btn" onClick={findEspanso}>
+                <FolderInput size={16} aria-hidden="true" />
+                Find phrases
+              </button>
+            </SettingsRow>
+          </SettingsGroup>
 
           <ExpansionSection />
 
@@ -506,7 +514,7 @@ export function SettingsDialog({
               {error}
             </p>
           )}
-          <div className="fm-buttons">
+          <div className="st-footer">
             <button type="button" className="btn btn-primary" autoFocus onClick={close}>
               Close
             </button>

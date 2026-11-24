@@ -55,34 +55,6 @@
   width: min(600px, calc(100vw - 32px));
 }
 
-.df-h3 {
-  margin: 16px 0 4px;
-  font-size: 14px;
-}
-
-.df-h3:first-of-type {
-  margin-top: 0;
-}
-
-.df-path {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin: 8px 0;
-  padding: 8px 10px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: var(--bg);
-}
-
-.df-path svg {
-  flex: none;
-}
-
-.df-tip {
-  margin-top: 8px;
-}
-
 .df-row {
   display: flex;
   gap: 6px;

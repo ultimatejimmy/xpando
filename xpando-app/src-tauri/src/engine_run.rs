@@ -13,6 +13,7 @@ use std::time::{Duration, Instant};
 use tauri::{AppHandle, Manager};
 use xpando_core::engine::EngineKind;
 use xpando_core::serde::Serialize;
+use xpando_core::shortcut;
 
 use crate::data::data_dir;
 use crate::engine::engine_status;
@@ -355,6 +356,42 @@ pub async fn engine_set_at_login(app: AppHandle, on: bool) -> Result<EngineRun, 
     tauri::async_runtime::spawn_blocking(move || {
         set_at_login(on)?;
         Ok(snapshot(&app, None))
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+// ---- search shortcut ---------------------------------------------------------------------
+
+fn default_yml(app: &AppHandle) -> Result<PathBuf, String> {
+    Ok(data_dir(app)?.join("config").join("default.yml"))
+}
+
+/// The shortcut that opens the search box (`OFF` when it is turned off).
+#[tauri::command]
+pub fn search_shortcut_get(app: AppHandle) -> Result<String, String> {
+    let path = default_yml(&app)?;
+    let text = fs::read_to_string(&path).unwrap_or_default();
+    Ok(shortcut::read_search_shortcut(&text))
+}
+
+/// Saves a new search shortcut and restarts the engine (if it is on) so it takes effect.
+#[tauri::command]
+pub async fn search_shortcut_set(app: AppHandle, value: String) -> Result<String, String> {
+    let value = shortcut::validate_shortcut(&value)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        let path = default_yml(&app)?;
+        let text = fs::read_to_string(&path).unwrap_or_default();
+        let new_text = shortcut::set_search_shortcut(&text, &value);
+        if new_text != text {
+            fs::write(&path, new_text)
+                .map_err(|e| format!("Could not save {}: {e}", path.display()))?;
+            if is_running(&app) {
+                stop(&app)?;
+                start(&app)?;
+            }
+        }
+        Ok(value)
     })
     .await
     .map_err(|e| e.to_string())?

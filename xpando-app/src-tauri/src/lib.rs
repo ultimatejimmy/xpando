@@ -64,6 +64,8 @@ pub fn run() {
             engine_run::engine_stop,
             engine_run::engine_restart,
             engine_run::engine_set_at_login,
+            engine_run::search_shortcut_get,
+            engine_run::search_shortcut_set,
             engine::preview_clipboard_hack,
             engine::convert_clipboard_hack,
             edit::save_phrase,

@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { ArrowUpCircle, X } from "lucide-react";
+import { SettingsGroup, SettingsRow, SwitchRow } from "./SettingsParts";
 import "./updates.css";
 
 // ---------------------------------------------------------------------------------------
@@ -292,57 +293,47 @@ export function UpdateBanner({ u }: { u: UpdatesApi }) {
 
 /** The "Updates" part of the Settings dialog. */
 export function UpdatesSection({ u }: { u: UpdatesApi }) {
-  const autoId = useId();
-  const betaId = useId();
   const s = u.state;
   const installing = u.install.phase !== "idle" && u.install.phase !== "error";
   return (
-    <>
-      <h3 className="df-h3">Updates</h3>
-      <p className="fm-help">
-        You have version {s?.current ?? "..."}
-        {s?.dev_build ? " (a development build)" : ""}.
-      </p>
-      <div className="fm-buttons">
-        <button type="button" className="btn" disabled={u.checking || installing} onClick={() => void u.check(true)}>
-          {u.checking ? "Checking..." : "Check for updates"}
-        </button>
+    <SettingsGroup title="Updates">
+      <SettingsRow
+        title={`Version ${s?.current ?? "..."}`}
+        help={s?.dev_build ? "Development build" : undefined}
+        below={
+          <>
+            {u.message && (
+              <p className="st-notice" role="status">
+                {u.message}
+              </p>
+            )}
+            <InstallStatus u={u} />
+            {s?.note && <p className="st-notice">{s.note}</p>}
+          </>
+        }
+      >
         {u.available && u.install.phase === "idle" && (
           <button type="button" className="btn btn-primary" onClick={() => void u.startInstall()}>
             {s?.can_install ? "Update now" : "Download"}
           </button>
         )}
-      </div>
-      {u.message && (
-        <p className="fm-help" role="status">
-          {u.message}
-        </p>
-      )}
-      <InstallStatus u={u} />
-      <div className="fm-check up-check">
-        <input
-          id={autoId}
-          type="checkbox"
-          checked={s?.auto_check ?? true}
-          disabled={!s}
-          onChange={(e) => void u.setPrefs(e.target.checked, s?.beta ?? false)}
-        />
-        <label htmlFor={autoId}>Check automatically every day</label>
-      </div>
-      <div className="fm-check up-check">
-        <input
-          id={betaId}
-          type="checkbox"
-          checked={s?.beta ?? false}
-          disabled={!s}
-          onChange={(e) => void u.setPrefs(s?.auto_check ?? true, e.target.checked)}
-        />
-        <label htmlFor={betaId}>Get beta versions</label>
-      </div>
-      <p className="fm-help up-help">
-        Betas are early versions that may have problems. Leave this off to get only finished versions.
-      </p>
-      {s?.note && <p className="fm-help">{s.note}</p>}
-    </>
+        <button type="button" className="btn" disabled={u.checking || installing} onClick={() => void u.check(true)}>
+          {u.checking ? "Checking..." : "Check for updates"}
+        </button>
+      </SettingsRow>
+      <SwitchRow
+        title="Check automatically every day"
+        checked={s?.auto_check ?? true}
+        disabled={!s}
+        onChange={(on) => void u.setPrefs(on, s?.beta ?? false)}
+      />
+      <SwitchRow
+        title="Get beta versions"
+        help="Early versions that may have problems."
+        checked={s?.beta ?? false}
+        disabled={!s}
+        onChange={(on) => void u.setPrefs(s?.auto_check ?? true, on)}
+      />
+    </SettingsGroup>
   );
 }

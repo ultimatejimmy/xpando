@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
+import { Fragment, useCallback, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { AlertTriangle } from "lucide-react";
+import { SettingsGroup, SettingsRow, SwitchRow } from "./SettingsParts";
 import "./engine.css";
 
 export type EngineKind = "stock" | "xpando" | "missing";
@@ -152,7 +153,132 @@ export interface EngineRun {
   problem: string | null;
 }
 
-/** Settings: is expansion on, start/stop it, and whether it starts when you sign in. */
+/** The key name the engine uses for a pressed key, or null for keys it cannot take. */
+function engineKey(e: KeyboardEvent): string | null {
+  const c = e.code;
+  if (/^Key[A-Z]$/.test(c)) return c.slice(3);
+  if (/^Digit[0-9]$/.test(c)) return c.slice(5);
+  if (/^F([1-9]|1[0-9]|2[0-4])$/.test(c)) return c;
+  const named: Record<string, string> = {
+    Space: "SPACE",
+    Enter: "ENTER",
+    Tab: "TAB",
+    ArrowUp: "UP",
+    ArrowDown: "DOWN",
+    ArrowLeft: "LEFT",
+    ArrowRight: "RIGHT",
+    Home: "HOME",
+    End: "END",
+    PageUp: "PAGEUP",
+    PageDown: "PAGEDOWN",
+    Insert: "INSERT",
+    Delete: "DELETE",
+  };
+  return named[c] ?? null;
+}
+
+function prettyKey(k: string): string {
+  return k.length === 1 ? k : k.charAt(0) + k.slice(1).toLowerCase();
+}
+
+/** "Press the keys you want" row for the shortcut that opens the search box. */
+function SearchShortcutRow() {
+  const [value, setValue] = useState<string | null>(null);
+  const [recording, setRecording] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    invoke<string>("search_shortcut_get")
+      .then(setValue)
+      .catch(() => setValue(null));
+  }, []);
+
+  const save = useCallback(async (next: string) => {
+    setBusy(true);
+    setError(null);
+    try {
+      setValue(await invoke<string>("search_shortcut_set", { value: next }));
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setBusy(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!recording) return;
+    const onKey = (e: KeyboardEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (["Control", "Alt", "Shift", "Meta", "AltGraph"].includes(e.key)) return;
+      if (e.key === "Escape") {
+        setRecording(false);
+        return;
+      }
+      const key = engineKey(e);
+      const mods = [e.ctrlKey && "CTRL", e.altKey && "ALT", e.shiftKey && "SHIFT"].filter(Boolean) as string[];
+      if (!key) {
+        setError("That key cannot be used. Try a letter, number, F key or Space.");
+        setRecording(false);
+        return;
+      }
+      if (mods.length === 0) {
+        setError("Hold Ctrl or Alt while you press the key.");
+        setRecording(false);
+        return;
+      }
+      setRecording(false);
+      void save([...mods, key].join("+"));
+    };
+    document.addEventListener("keydown", onKey, true);
+    return () => document.removeEventListener("keydown", onKey, true);
+  }, [recording, save]);
+
+  if (value === null) return null;
+  const parts = value === "OFF" ? [] : value.split("+");
+  return (
+    <SettingsRow
+      title="Open the search box"
+      help={value === "OFF" ? "Off. Choose a shortcut to turn it on." : "Press this anywhere to find a phrase."}
+      below={
+        error ? (
+          <p className="st-notice" role="alert">
+            {error}
+          </p>
+        ) : undefined
+      }
+    >
+      {recording ? (
+        <span className="st-keys" role="status">
+          Press the keys you want…
+        </span>
+      ) : (
+        <span className="st-keys">
+          {parts.map((p, i) => (
+            <Fragment key={p + i}>
+              {i > 0 && "+"}
+              <kbd className="st-cap">{prettyKey(p)}</kbd>
+            </Fragment>
+          ))}
+        </span>
+      )}
+      <button
+        type="button"
+        className="btn st-key"
+        disabled={busy}
+        onClick={() => {
+          setError(null);
+          setRecording((r) => !r);
+        }}
+      >
+        {recording ? "Cancel" : busy ? "Saving..." : "Change"}
+      </button>
+    </SettingsRow>
+  );
+}
+
+/** Settings: is expansion on, whether it starts at sign-in, and the search box shortcut. */
 export function ExpansionSection() {
   const [run, setRun] = useState<EngineRun | null>(null);
   const [busy, setBusy] = useState(false);
@@ -184,45 +310,28 @@ export function ExpansionSection() {
 
   if (!run) return null;
   return (
-    <>
-      <h3 className="df-h3">Expansion</h3>
-      <p className="fm-help" role="status">
-        {run.running
-          ? "On. Your phrases expand as you type, in any program."
-          : run.stopped_by_user
-            ? "Off. You turned it off. Phrases do not expand until you turn it on."
-            : "Off. Phrases are not expanding."}
-      </p>
-      <div className="fm-buttons">
-        {run.running ? (
-          <>
-            <button type="button" className="btn" disabled={busy} onClick={() => act("engine_restart")}>
-              Restart
-            </button>
-            <button type="button" className="btn" disabled={busy} onClick={() => act("engine_stop")}>
-              Turn off
-            </button>
-          </>
-        ) : (
-          <button type="button" className="btn btn-primary" disabled={busy} onClick={() => act("engine_start")}>
-            Turn on
-          </button>
-        )}
-      </div>
-      <label className="eng-check">
-        <input
-          type="checkbox"
-          checked={run.at_login}
-          disabled={busy}
-          onChange={(e) => act("engine_set_at_login", { on: e.target.checked })}
-        />
-        Start expanding when I sign in to this computer
-      </label>
+    <SettingsGroup title="Expansion and search">
+      <SwitchRow
+        title="Expand phrases as I type"
+        help={run.running ? "On. Works in any program." : run.stopped_by_user ? "Off. You turned it off." : "Off. Phrases are not expanding."}
+        checked={run.running}
+        disabled={busy}
+        onChange={(on) => void act(on ? "engine_start" : "engine_stop")}
+      />
+      <SwitchRow
+        title="Start when I sign in to this computer"
+        checked={run.at_login}
+        disabled={busy}
+        onChange={(on) => void act("engine_set_at_login", { on })}
+      />
+      <SearchShortcutRow />
       {error && (
-        <p className="fm-problem" role="alert">
-          {error}
-        </p>
+        <div className="st-row">
+          <p className="fm-problem" role="alert" style={{ margin: 0 }}>
+            {error}
+          </p>
+        </div>
       )}
-    </>
+    </SettingsGroup>
   );
 }
