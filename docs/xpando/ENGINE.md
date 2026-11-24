@@ -25,22 +25,28 @@ Limit: this finds the binary xpando would use, not the process that is running. 
 daemon is already running and the xpando engine sits elsewhere, restart the daemon from the app
 (M5 covers the service/start-up flow).
 
-## Shipping it with the app (plan, not enabled yet)
+## Shipping it with the app (wired in CI, first run pending)
 
-Tauri's `bundle.externalBin` copies a binary next to the app executable and the build script
-fails when the file is missing, so it is deliberately **not** enabled in `tauri.conf.json` until
-CI produces the binaries. When it does:
+xpando always uses its own engine; stock espanso is not supported (the stock fallbacks in
+`engine_status` go away with M6). The release workflow builds the engine on each OS runner and
+bundles it as a Tauri sidecar:
 
-1. Build the engine per target (below) and copy it to
-   `xpando-app/src-tauri/binaries/xpando-engine-<target-triple>[.exe]`
-   (for example `xpando-engine-x86_64-pc-windows-msvc.exe`).
-2. Add to `tauri.conf.json` under `bundle`: `"externalBin": ["binaries/xpando-engine"]`.
-3. `.gitignore` the `binaries/` folder; the release workflow builds it, it is not committed.
-4. The app starts `xpando-engine` (not `espanso`) for `service`/`daemon` commands, and the
-   installer must not register a second copy as a competing service. On Windows the engine
-   needs `espanso.exe`'s companion files (`espansod`-style worker is the same binary).
-5. macOS: sign and notarize the engine with the app. Linux: Wayland needs the
-   `wayland` feature build.
+1. `scripts/build-engine.sh` builds `espanso` (flags below), fails unless `--version` ends in
+   `-xpando`, and stages `xpando-app/src-tauri/binaries/xpando-engine-<target-triple>[.exe]`
+   (macOS: aarch64, x86_64 and a `lipo` universal copy). The folder is `.gitignore`d.
+2. `xpando-app/src-tauri/tauri.release.conf.json` holds `bundle.externalBin:
+   ["binaries/xpando-engine"]`. It is **not** in `tauri.conf.json`: `tauri-build` fails when a
+   listed sidecar is missing, which would break local `cargo check` and `tauri dev`. Only
+   `release.yml` passes it: `tauri build --config src-tauri/tauri.release.conf.json`.
+3. Tauri installs the sidecar as `xpando-engine[.exe]` next to the app executable, which is the
+   first place `engine_status` looks (unit-tested), so the bundled engine always wins.
+4. To test a bundled build locally: run `scripts/build-engine.sh`, then
+   `npx tauri build --config src-tauri/tauri.release.conf.json`.
+
+Still open: starting the engine from the app (`service`/`daemon`, M5/M6) and making sure the
+installer does not register a second competing service; macOS signing/notarization of the
+engine; Linux: the engine links wxWidgets dynamically, so the deb needs a `libwxgtk3.*`
+dependency and the AppImage must bundle it, and the Wayland variant needs the `wayland` feature.
 
 ## Building the engine
 
@@ -57,29 +63,20 @@ The flags are the ones upstream's `.github/workflows/ci.yml` uses for its builds
 `target/release/espanso[.exe]`. Check it with `target/release/espanso --version`, which must end
 in `-xpando`.
 
-## CI job outline (not added to `.github/workflows` yet)
+## CI
 
-```yaml
-engine:
-  name: engine (${{ matrix.os }})
-  strategy:
-    matrix:
-      include:
-        - { os: windows-latest, triple: x86_64-pc-windows-msvc }
-        - { os: macos-latest,   triple: aarch64-apple-darwin }
-        - { os: ubuntu-latest,  triple: x86_64-unknown-linux-gnu }
-  steps:
-    - checkout (pinned by SHA like the other jobs)
-    - install the OS libraries listed in upstream's ci.yml
-    - cargo build --release --locked   # Linux: add the --no-default-features flags above
-    - run: target/release/espanso --version | grep -- '-xpando'
-    - copy to xpando-engine-${{ matrix.triple }} and upload as an artifact
-# The release workflow downloads these into xpando-app/src-tauri/binaries/ before `tauri build`.
-```
+* `xpando.yml` job `engine`: Ubuntu, `cargo check -p espanso --no-default-features --features
+  vendored-tls` (no wxWidgets), a grep that `-xpando` is still in `espanso/src/main.rs`, and
+  `cargo test -p espanso-render`. Also runs when engine crates change.
+* `release.yml` job `build`: after installing the Linux libraries (`libx11-dev libxtst-dev
+  libxkbcommon-dev libdbus-1-dev libwxgtk3.*-dev`; Windows and macOS need nothing extra),
+  runs `scripts/build-engine.sh` before `tauri build`.
 
-Not verified: no engine build was run for this change (heavy, needs per-OS libraries), so the
-job must be confirmed by its first CI run. The `-xpando` version suffix compiles in theory
-(`concat!` of two constants) but was not built here either.
+Not verified: no engine build was run for this change (Windows needs MSVC and compiles
+wxWidgets; heavy), so the release job's engine step, the `lipo` step, the Ubuntu 22.04 wxWidgets
+package name and the sidecar bundling must be confirmed by the first CI run (try a `-beta` tag).
+Locally verified: `cargo check --locked` and `npm run build` still pass without a sidecar, and
+the detection unit test passes.
 
 ## Converting the PowerShell hack
 

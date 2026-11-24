@@ -6,6 +6,10 @@ on:
     paths: &paths
       - "xpando-core/**"
       - "xpando-app/**"
+      - "espanso*/**"
+      - "scripts/build-engine.sh"
+      - "Cargo.toml"
+      - "Cargo.lock"
       - ".github/workflows/xpando.yml"
   pull_request:
     paths: *paths
@@ -74,3 +78,21 @@ jobs:
         run: |
           cargo fmt --check
           cargo check --locked
+
+  # Lighter than the release build: type-checks the patched engine (no wxWidgets/modulo, no link).
+  # The full build, the -xpando version check and staging run in release.yml.
+  engine:
+    name: engine check (ubuntu-latest)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Install Linux libraries
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libx11-dev libxtst-dev libxkbcommon-dev libdbus-1-dev libssl-dev
+      - name: Check the engine and its version suffix
+        run: |
+          cargo check -p espanso --locked --no-default-features --features vendored-tls
+          grep -q '"-xpando"' espanso/src/main.rs
+      - name: Test the render extensions (set_clipboard)
+        run: cargo test -p espanso-render --locked

@@ -65,5 +65,8 @@ Espanso-Mac-Universal.zip
 mutants.out*
 tarpaulin-report.html
 
+# xpando engine sidecar staged by scripts/build-engine.sh (built in CI, never committed)
+xpando-app/src-tauri/binaries/
+
 # direnv
 .direnv/
