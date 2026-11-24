@@ -534,3 +534,8 @@ textarea.field {
   font-size: 12px;
   cursor: pointer;
 }
+
+/* The folder menu in the editor */
+.editor-dest {
+  max-width: 360px;
+}

@@ -235,27 +235,80 @@
   color: var(--warn-text, #7a4b00);
 }
 
+/* A strip along the bottom of the window, outside any phrase. */
 .wi-toast {
   display: flex;
+  flex: none;
   flex-wrap: wrap;
   align-items: center;
   gap: 6px 12px;
-  margin: 0 0 12px;
-  padding: 8px 10px;
-  border: 1px solid var(--accent);
-  border-radius: 6px;
+  padding: 6px 16px;
+  border-top: 1px solid var(--border);
+  background: var(--bg);
   font-size: 13px;
 }
 
+.wi-toast > span {
+  flex: 1 1 auto;
+}
+
 /* App folders in the folder list */
+.side-apps {
+  margin-top: 12px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border-strong, var(--border));
+}
+
+/* The group header: a button that folds the app folders away */
 .side-heading {
   display: flex;
   align-items: center;
-  gap: 6px;
-  margin: 10px 8px 2px;
-  color: var(--muted);
-  font-size: 12px;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 10px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ink);
   font-weight: 600;
-  letter-spacing: 0.02em;
-  text-transform: uppercase;
+  text-align: left;
+  cursor: pointer;
+}
+
+.side-heading:hover {
+  background: var(--bg);
+}
+
+.side-heading:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.side-chev {
+  flex: none;
+  transition: transform 0.12s;
+}
+
+.side-heading[aria-expanded="false"] .side-chev {
+  transform: rotate(-90deg);
+}
+
+/* App folders sit indented under the header */
+.pane .side-apps-list {
+  margin: 2px 0 0 14px;
+  padding-left: 6px;
+  border-left: 1px solid var(--border);
+}
+
+/* A program's own icon in the folder list */
+.app-icon {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  object-fit: contain;
+}
+
+/* New folder, right under the folders and above Apps */
+.side-new {
+  margin-top: 8px;
 }

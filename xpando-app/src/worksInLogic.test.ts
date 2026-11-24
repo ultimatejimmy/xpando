@@ -7,6 +7,7 @@ import {
   isAppFolder,
   rememberOrigin,
   returnFolder,
+  appCategories,
   splitFolders,
   worksIn,
   worksInLabel,
@@ -64,15 +65,23 @@ test("friendly names: curated, then what the app reported, then the file name", 
 });
 
 test("the folder list puts app folders under their own heading", () => {
-  const list = [{ file: "base.yml" }, { file: "_word.yml" }, { file: "notes.yml" }, { file: "a.yml" }];
+  const list = [
+    { file: "base.yml", name: "base" },
+    { file: "_word.yml", name: "Word" },
+    { file: "notes.yml", name: "notes" },
+    { file: "a.yml", name: "a" },
+    { file: "work.yml", name: "Client work" },
+  ];
   const infos = {
     "base.yml": folder("base.yml", "all"),
     "_word.yml": folder("_word.yml", "only", [app(["winword"])]),
     "notes.yml": folder("notes.yml", "nowhere"),
     "a.yml": folder("a.yml", "except", [app(["x"])]),
+    // A folder the user named and filled stays a folder even though it is limited to one app.
+    "work.yml": folder("work.yml", "only", [app(["winword"])]),
   };
   const { general, apps } = splitFolders(list, infos);
-  assert.deepEqual(general.map((f) => f.file), ["base.yml", "notes.yml", "a.yml"]);
+  assert.deepEqual(general.map((f) => f.file), ["a.yml", "base.yml", "work.yml", "notes.yml"].sort((x, y) => list.find((f) => f.file === x)!.name.localeCompare(list.find((f) => f.file === y)!.name)));
   assert.deepEqual(apps.map((f) => f.file), ["_word.yml"]);
   assert.ok(isAppFolder(infos["_word.yml"]));
   assert.ok(!isAppFolder(undefined));
@@ -90,4 +99,26 @@ test("a phrase goes back to where it came from, else base.yml, else the first al
   // The origin folder is gone or no longer works everywhere.
   assert.equal(returnFolder(o, "_word.yml", ":sig", [{ file: "notes.yml" }]), "notes.yml");
   assert.equal(returnFolder(o, "_word.yml", ":sig", []), null);
+});
+
+test("the Apps list has one entry per program, and a shared folder counts under each", () => {
+  const list = [
+    { file: "_word.yml", name: "Word" },
+    { file: "_office.yml", name: "Word, Excel" },
+    { file: "work.yml", name: "Client work" },
+    { file: "_title.yml", name: "Browser tab" },
+  ];
+  const infos = {
+    "_word.yml": folder("_word.yml", "only", [app(["winword"])]),
+    "_office.yml": folder("_office.yml", "only", [app(["winword", "excel"])]),
+    "work.yml": folder("work.yml", "only", [app(["excel"])]),
+    "_title.yml": folder("_title.yml", "only", [app([])]),
+  };
+  const cats = appCategories(list, infos);
+  const by = (k: string) => cats.find((c) => c.key === k);
+  assert.deepEqual(by("app:winword")?.files, ["_word.yml", "_office.yml"]);
+  assert.deepEqual(by("app:excel")?.files, ["_office.yml", "work.yml"]);
+  assert.equal(by("app:winword")?.name, "Word");
+  // A folder with a hand-written filter has no program names, so it is its own entry.
+  assert.deepEqual(by("_title.yml")?.files, ["_title.yml"]);
 });

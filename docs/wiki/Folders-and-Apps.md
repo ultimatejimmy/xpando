@@ -1,41 +1,24 @@
 # Folders and Apps
 
-A **folder** is a group of phrases. Each folder is one file in your `match` folder. A folder can work in **all apps** or only in certain ones.
+**Folders** and **apps** are two separate ways to organize phrases.
 
-![Folder options](images/folder-options.png)
+* A **folder** is only a label you put on a phrase, such as "Client work". It has nothing to do with where the phrase works. Put a phrase in a folder, or take it out, from the **Folder** menu on the phrase or in the editor. A phrase can be in one folder or in none.
+* **Works in** says which apps a phrase expands in: all apps, or only certain programs. The **Apps** list in the sidebar shows one entry per program. A phrase that works in several programs appears under each of them.
 
-## Create a folder
+## Folders
 
-Press **New folder**, type a **Folder name** (letters, digits, spaces, `,`, `-` and `_`) and press **Create folder**. A new folder applies to all apps.
-
-## Folder options
-
-Select a folder and open **Folder options**:
-
-* **Apps...** chooses where the phrases work.
-* **Rename** changes the name and updates everything that refers to it.
-* **Delete** asks for confirmation, lists every file it touches and keeps a backup copy so the folder can be restored.
-
-The line under the folder says where it applies, for example "Applies to: All apps", "Word only", "All apps except Word", or **Not used** (nothing loads it, so its phrases never expand; shown in a warning colour).
-
-## Limit a folder to some apps
-
-In **Apps...**, under "Where should this folder work?", pick **Only these apps**:
-
-* **Programs**: choose them from the list (see [Choosing programs](#choosing-programs)).
-* **Window title**: only windows whose title has this text, such as one website. Capitals do not matter. With programs chosen, both must match.
-
-Pick **All apps** to make it work everywhere again.
-
-Behind the scenes xpando writes a file in your `config` folder. File names and patterns are shown in [[Advanced Mode]] only.
+* **New folder** asks for a name. A new folder stays even while it is empty.
+* The **...** menu on a folder renames it, or deletes it. Deleting a folder does not delete its phrases: they stay in your list, in no folder.
+* Phrases that are in no folder are listed under **No folder** and in **All phrases**.
+* Behind the scenes the folder is stored on the phrase as `xpando_folder:` in its entry. espanso ignores it.
+* Phrases that were in your files before this existed keep working: a phrase in a file such as `base.yml` is in a folder named after the file, until you file it somewhere else. Phrases in files xpando made for one program (Word, Firefox...) start in no folder.
 
 ## Choosing programs
 
-The same picker is used for a folder's apps and for a phrase's **Works in**. Search by name, and pick from three lists:
+The same picker is used for a folder's apps and for a phrase's **Works in**. Search by name, and pick from two lists:
 
-* **Common**: well known programs (Word, Excel, Outlook, Chrome, Teams, Slack, Notepad, ...) with their friendly names. Windows only.
-* **Open now**: programs that have a window open at this moment. Open the program first if it is missing.
 * **Installed**: programs found through the Start Menu and the registry. The first look can take a few seconds; the answer is kept until xpando closes. Windows only.
+* **Open now**: programs that have a window open at this moment. Open the program first if it is missing.
 
 **Browse...** opens a file dialog to pick a program file (`.exe`). Chosen programs show as chips with a remove button. In [[Advanced Mode]] there is also a field to type a file name such as `winword.exe`.
 
@@ -57,7 +40,7 @@ xpando only reuses folders whose apps are a plain list of programs. A folder tha
 
 ## Limits
 
-* Programs are matched by file name, not by full path. On macOS and Linux, "Open now" uses the process list (`ps`); on Linux that is every running process. "Common" and "Installed" are Windows only, and "Browse..." works on Windows (tested) and Linux with `zenity` (not tested); on macOS use "Open now". The macOS and Linux paths have not been tested on those systems.
+* Programs are matched by file name, not by full path. On macOS and Linux, "Open now" uses the process list (`ps`); on Linux that is every running process. "Installed" is Windows only, and "Browse..." works on Windows (tested) and Linux with `zenity` (not tested); on macOS use "Open now". The macOS and Linux paths have not been tested on those systems.
 
 * Folders inside subfolders of `match`, and the `packages` folder, cannot be changed here.
 * If a configuration is too unusual for xpando to change safely, the command is disabled and says why. Nothing is changed.

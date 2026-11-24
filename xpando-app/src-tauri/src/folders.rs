@@ -101,6 +101,17 @@ pub fn set_phrase_where(
     index: usize,
     place: PhraseWhere,
     expected_hash: String,
+    pin_folder: Option<String>,
 ) -> Result<MoveOutcome, String> {
-    folders::set_phrase_where(&data_dir(&app)?, &file, index, &place, &expected_hash)
+    let dir = data_dir(&app)?;
+    let mut hash = expected_hash;
+    // A phrase with no folder label of its own is in the folder named after its file. Moving it
+    // to another file would change that, so its folder is written onto it first.
+    if let Some(pin) = pin_folder {
+        let pinned = xpando_core::edit::edit_file(&dir, &file, &hash, |text| {
+            xpando_core::edit::set_phrase_folders(text, &[index], Some(&pin))
+        })?;
+        hash = pinned.hash;
+    }
+    folders::set_phrase_where(&dir, &file, index, &place, &hash)
 }

@@ -88,6 +88,7 @@ export function WorksIn({
   onReload,
   compact,
   blocked,
+  pinFolder,
 }: {
   folder: WorksInFolder;
   phrase: WorksInPhrase;
@@ -100,6 +101,8 @@ export function WorksIn({
   compact?: boolean;
   /** Why Change is unavailable right now, when it is. */
   blocked?: string;
+  /** The folder to write on the phrase before it moves, when it has none of its own. */
+  pinFolder?: string;
 }) {
   const [open, setOpen] = useState(false);
   const info = infos[folder.file];
@@ -126,6 +129,7 @@ export function WorksIn({
       onClose={() => setOpen(false)}
       onMoved={onMoved}
       onReload={onReload}
+      pinFolder={pinFolder}
     />
   );
   if (compact) {
@@ -184,6 +188,7 @@ function WorksInDialog({
   onClose,
   onMoved,
   onReload,
+  pinFolder,
 }: {
   folder: WorksInFolder;
   phrase: WorksInPhrase;
@@ -193,6 +198,7 @@ function WorksInDialog({
   onClose: () => void;
   onMoved: (outcome: MoveOutcome, phraseName: string) => void;
   onReload: () => void;
+  pinFolder?: string;
 }) {
   const dialog = useDialog(onClose);
   const uid = useId();
@@ -248,6 +254,7 @@ function WorksInDialog({
         index: phrase.index,
         place,
         expectedHash: folder.hash,
+        pinFolder: pinFolder ?? null,
       });
       // Remember where an all-apps phrase came from, so "All apps" can put it back there.
       if (current.kind === "all" && place.kind === "apps") {
@@ -402,5 +409,99 @@ export function MovedNotice({
       </button>
       {error && <Problem message={error} />}
     </div>
+  );
+}
+
+/** Where a new phrase should work: `null` is every app. */
+export type NewPlace = { exes: string[]; names: string[] } | null;
+
+/**
+ * The "Works in" box of a phrase that does not exist yet. It looks and works like the one on an
+ * existing phrase (the same box and the same app picker), but picking only remembers the choice:
+ * the phrase goes to the right folder when it is saved.
+ */
+export function NewPhraseWorksIn({
+  value,
+  onChange,
+  advanced,
+}: {
+  value: NewPlace;
+  onChange: (next: NewPlace) => void;
+  advanced: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const label = value ? worksInLabel({ kind: "apps", exes: value.exes }) : "All apps";
+  return (
+    <div className="wi wi-compact">
+      <div className="wi-box">
+        <span className="wi-box-text">{label}</span>
+        <button type="button" className="wi-change" onClick={() => setOpen(true)}>
+          Change
+        </button>
+      </div>
+      {open && (
+        <NewPlaceDialog value={value} advanced={advanced} onClose={() => setOpen(false)} onPick={onChange} />
+      )}
+    </div>
+  );
+}
+
+function NewPlaceDialog({
+  value,
+  advanced,
+  onClose,
+  onPick,
+}: {
+  value: NewPlace;
+  advanced: boolean;
+  onClose: () => void;
+  onPick: (next: NewPlace) => void;
+}) {
+  const dialog = useDialog(onClose);
+  const uid = useId();
+  const [mode, setMode] = useState<"all" | "apps">(value ? "apps" : "all");
+  const [exes, setExes] = useState<string[]>(value?.exes ?? []);
+  const [names, setNames] = useState<string[]>(value?.names ?? []);
+  const canUse = mode === "all" || exes.length > 0;
+  return (
+    <Dialog title="Where should this phrase work?" labelId={`${uid}-title`} dialog={dialog}>
+      <fieldset className="fm-radios">
+        <legend className="fm-legend">Works in</legend>
+        <label className="fm-radio">
+          <input type="radio" name={`${uid}-mode`} checked={mode === "all"} onChange={() => setMode("all")} />
+          All apps
+        </label>
+        <label className="fm-radio">
+          <input type="radio" name={`${uid}-mode`} checked={mode === "apps"} onChange={() => setMode("apps")} />
+          Only these apps
+        </label>
+      </fieldset>
+      {mode === "apps" && (
+        <AppPicker
+          value={exes}
+          advanced={advanced}
+          onChange={(e, n) => {
+            setExes(e);
+            setNames(n);
+          }}
+        />
+      )}
+      <div className="fm-buttons">
+        <button
+          type="button"
+          className="btn btn-primary"
+          disabled={!canUse}
+          onClick={() => {
+            onPick(mode === "all" ? null : { exes, names });
+            dialog.close();
+          }}
+        >
+          Use this
+        </button>
+        <button type="button" className="btn" onClick={dialog.close}>
+          Cancel
+        </button>
+      </div>
+    </Dialog>
   );
 }
