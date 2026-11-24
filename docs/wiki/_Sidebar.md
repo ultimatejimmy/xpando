@@ -12,6 +12,7 @@
 * [[Data Folder]]
 * [[Import from espanso]]
 * [[Sync Tips]]
+* [[Updates]]
 
 **Advanced**
 * [[Advanced Mode]]

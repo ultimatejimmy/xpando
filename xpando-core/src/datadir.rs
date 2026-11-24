@@ -108,7 +108,7 @@ pub fn default_data_dir(env: &Env) -> Result<PathBuf, String> {
 }
 
 /// What the user chose, stored apart from the data.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Settings {
     /// The chosen data folder; `None` means the default.
     #[serde(default)]
@@ -116,6 +116,35 @@ pub struct Settings {
     /// The first-run import offer was answered (imported, or "Not now" was chosen to stop asking).
     #[serde(default)]
     pub import_handled: bool,
+    /// Which releases the updater offers: `stable` (default) or `beta`.
+    #[serde(default)]
+    pub update_channel: crate::update::Channel,
+    /// Look for a new version once a day.
+    #[serde(default = "default_true")]
+    pub auto_check: bool,
+    /// When the last successful update check finished, in seconds since 1970.
+    #[serde(default)]
+    pub last_update_check: Option<u64>,
+    /// A version the user chose "Skip this version" for (human form, e.g. `2026.11.23`).
+    #[serde(default)]
+    pub skipped_version: Option<String>,
+}
+
+fn default_true() -> bool {
+    true
+}
+
+impl Default for Settings {
+    fn default() -> Self {
+        Settings {
+            data_dir: None,
+            import_handled: false,
+            update_channel: crate::update::Channel::default(),
+            auto_check: true,
+            last_update_check: None,
+            skipped_version: None,
+        }
+    }
 }
 
 /// Reads `<settings_dir>/settings.yml`. A missing file means the defaults. A file that exists
@@ -552,6 +581,7 @@ mod tests {
         let s = Settings {
             data_dir: Some("D:\\Cloud\\xpando".into()),
             import_handled: true,
+            ..Default::default()
         };
         save_settings(&dir, &s).unwrap();
         assert_eq!(load_settings(&dir).unwrap(), s);
@@ -561,6 +591,53 @@ mod tests {
         let nested = dir.join("a").join("b");
         save_settings(&nested, &Settings::default()).unwrap();
         assert_eq!(load_settings(&nested).unwrap(), Settings::default());
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn update_settings_default_round_trip_and_survive_a_folder_change() {
+        use crate::update::Channel;
+        let dir = temp_dir("settings-update");
+        let d = load_settings(&dir).unwrap();
+        assert_eq!(d.update_channel, Channel::Stable);
+        assert!(d.auto_check);
+        assert_eq!(
+            (d.last_update_check, d.skipped_version.clone()),
+            (None, None)
+        );
+
+        // An old file with only the data folder keeps the update defaults.
+        fs::write(
+            dir.join("settings.yml"),
+            "data_dir: /x
+",
+        )
+        .unwrap();
+        let old = load_settings(&dir).unwrap();
+        assert!(old.auto_check);
+        assert_eq!(old.update_channel, Channel::Stable);
+
+        let s = Settings {
+            update_channel: Channel::Beta,
+            auto_check: false,
+            last_update_check: Some(1_700_000_000),
+            skipped_version: Some("2026.11.23".into()),
+            ..Default::default()
+        };
+        save_settings(&dir, &s).unwrap();
+        let text = fs::read_to_string(dir.join("settings.yml")).unwrap();
+        assert!(text.contains("update_channel: beta"), "{text}");
+        assert!(text.contains("auto_check: false"), "{text}");
+        assert_eq!(load_settings(&dir).unwrap(), s);
+
+        // A channel name from a newer or hand-edited file falls back to stable, not an error.
+        fs::write(
+            dir.join("settings.yml"),
+            "update_channel: nightly
+",
+        )
+        .unwrap();
+        assert_eq!(load_settings(&dir).unwrap().update_channel, Channel::Stable);
         fs::remove_dir_all(&dir).unwrap();
     }
 
@@ -603,6 +680,7 @@ mod tests {
             &Settings {
                 data_dir: Some(chosen.to_string_lossy().into_owned()),
                 import_handled: false,
+                ..Default::default()
             },
         )
         .unwrap();
@@ -613,11 +691,13 @@ mod tests {
         let blank = Settings {
             data_dir: Some("  ".into()),
             import_handled: false,
+            ..Default::default()
         };
         assert!(resolve(&e, &blank).unwrap().is_default);
         let rel = Settings {
             data_dir: Some("relative/dir".into()),
             import_handled: false,
+            ..Default::default()
         };
         assert!(resolve(&e, &rel).is_err());
     }
@@ -670,6 +750,7 @@ mod tests {
         let gone = Settings {
             data_dir: Some(dir.join("unplugged").to_string_lossy().into_owned()),
             import_handled: false,
+            ..Default::default()
         };
         let err = prepare(&e, &gone).unwrap_err();
         assert!(err.contains("cannot be found"), "{err}");
@@ -820,6 +901,7 @@ mod tests {
         let gone = Settings {
             data_dir: Some(root.join("unplugged").to_string_lossy().into_owned()),
             import_handled: false,
+            ..Default::default()
         };
         let info = data_info(&e, &gone).unwrap();
         assert_eq!(info.status, DirStatus::Missing);

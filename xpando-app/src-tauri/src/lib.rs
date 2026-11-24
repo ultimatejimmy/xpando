@@ -4,6 +4,7 @@ mod edit;
 mod engine;
 mod folders;
 mod richtext;
+mod update;
 mod vars;
 mod yamledit;
 
@@ -28,6 +29,11 @@ pub fn run() {
             data::check_data_dir,
             data::change_data_dir,
             data::pick_folder,
+            update::update_state,
+            update::set_update_prefs,
+            update::skip_update,
+            update::check_for_update,
+            update::install_update,
             advanced::get_entry_source,
             advanced::list_conflicts,
             advanced::config_path,

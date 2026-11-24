@@ -36,6 +36,7 @@ import {
   useDataInfo,
   useImportOffer,
 } from "./DataFolder";
+import { UpdateBanner, useUpdates } from "./Updates";
 
 interface MacroInfo {
   name: string;
@@ -206,6 +207,7 @@ export default function App() {
   const dataProblem = data.info?.problem ?? data.error;
   const importOffer = useImportOffer(data.info !== null && !data.info.problem);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const updates = useUpdates();
 
   /** The data folder changed or files were imported: start over from what is on disk. */
   const dataChanged = async () => {
@@ -370,6 +372,7 @@ export default function App() {
         onRetry={() => void dataChanged()}
         onOpenSettings={() => setSettingsOpen(true)}
       />
+      <UpdateBanner u={updates} />
       {error && !dataProblem && (
         <p className="error" role="alert">
           {error}
@@ -618,6 +621,7 @@ export default function App() {
       {settingsOpen && (
         <SettingsDialog
           info={data.info}
+          updates={updates}
           onClose={() => setSettingsOpen(false)}
           onChanged={() => void dataChanged()}
           onOffer={importOffer.open}

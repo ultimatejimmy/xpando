@@ -1,0 +1,37 @@
+/* Updates: the banner and the Settings section. Reuses .df-banner (data.css), .btn, .fm-check. */
+
+.up-banner {
+  border-left-color: var(--accent);
+}
+
+.up-tag {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 0 6px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  vertical-align: 1px;
+}
+
+.up-progress {
+  width: 100%;
+  max-width: 360px;
+  height: 8px;
+}
+
+.up-path {
+  margin: 4px 0;
+  word-break: break-all;
+}
+
+.up-check {
+  margin-top: 6px;
+}
+
+.up-help {
+  margin: 0 0 4px 26px;
+}

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { AlertTriangle, FolderInput, FolderOpen, RefreshCw, Settings as SettingsIcon, X } from "lucide-react";
+import { UpdatesSection, type UpdatesApi } from "./Updates";
 import "./data.css";
 
 /** A pasted path: surrounding spaces and quotes ("Copy as path" adds quotes) are removed. */
@@ -367,8 +368,10 @@ export function SettingsDialog({
   onClose,
   onChanged,
   onOffer,
+  updates,
 }: {
   info: DataInfo | null;
+  updates: UpdatesApi;
   onClose: () => void;
   /** The data folder changed (or an import ran): reload everything. */
   onChanged: () => void;
@@ -493,6 +496,8 @@ export function SettingsDialog({
             </button>
           </div>
           {note && <p className="fm-help">{note}</p>}
+
+          <UpdatesSection u={updates} />
           {error && (
             <p className="fm-problem" role="alert">
               {error}
