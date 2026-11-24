@@ -311,13 +311,16 @@ export function ExpansionSection() {
   if (!run) return null;
   return (
     <SettingsGroup title="Expansion and search">
-      <SwitchRow
-        title="Expand phrases as I type"
-        help={run.running ? "On. Works in any program." : run.stopped_by_user ? "Off. You turned it off." : "Off. Phrases are not expanding."}
-        checked={run.running}
-        disabled={busy}
-        onChange={(on) => void act(on ? "engine_start" : "engine_stop")}
-      />
+      {!run.running && (
+        <SettingsRow
+          title="Expansion is off"
+          help={run.stopped_by_user ? "You turned it off. Phrases do not expand until you turn it on." : "Phrases are not expanding."}
+        >
+          <button type="button" className="btn btn-primary" disabled={busy} onClick={() => void act("engine_start")}>
+            Turn on
+          </button>
+        </SettingsRow>
+      )}
       <SwitchRow
         title="Start when I sign in to this computer"
         checked={run.at_login}
