@@ -12,8 +12,15 @@ on:
         description: "Release tag to add macOS to, for example 2026.11.24-beta2"
         required: true
         type: string
+      dry_run:
+        description: "Dry run: build macOS and run every check, but upload nothing (recommended first)"
+        required: true
+        default: true
+        type: boolean
   schedule:
     # Nightly, when the runners are least busy (07:17 UTC is the middle of the night in the US).
+    # Only runs once the repository variable RELEASE_MACOS_NIGHTLY is "true" (see RELEASING.md), so
+    # it is switched on after a manual dry run and a manual real run have worked.
     - cron: "17 7 * * *"
 
 # No permissions by default; each job asks for what it needs.
@@ -29,6 +36,7 @@ env:
 jobs:
   plan:
     name: find releases without macOS
+    if: ${{ github.event_name == 'workflow_dispatch' || vars.RELEASE_MACOS_NIGHTLY == 'true' }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -215,54 +223,13 @@ jobs:
           else
             echo "ok=true" >> "$GITHUB_OUTPUT"
           fi
-      - name: Download the published release files
+      # All the logic (and its checks) is in a script that is tested without GitHub; see
+      # scripts/add-macos-to-release.test.mjs. With dry_run it checks everything and uploads nothing.
+      - name: Add macOS to the release
         if: steps.have.outputs.ok == 'true'
-        run: |
-          set -euo pipefail
-          mkdir published
-          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --dir published
-          ls -l published
-          # Someone else added macOS meanwhile: do nothing.
-          if ls published/*_universal.dmg >/dev/null 2>&1; then
-            echo "::warning::$TAG already has a macOS build; not adding another"
-            echo "SKIP=true" >> "$GITHUB_ENV"
-          fi
-      - name: Write the extended latest.json and SHA256SUMS.txt
-        if: steps.have.outputs.ok == 'true' && env.SKIP != 'true'
-        run: |
-          set -euo pipefail
-          mkdir out all
-          # The manifest only grows: the script refuses to replace a platform that is listed, and
-          # it checks every entry still points at this release and carries a signature.
-          node scripts/make-latest-json.mjs --dir macos-files --tag "$TAG" --repo "$GITHUB_REPOSITORY" \
-            --merge published/latest.json --out out/latest.json
-          cat out/latest.json
-          for k in windows-x86_64 darwin-aarch64 darwin-x86_64; do
-            if grep -q "\"$k\"" published/latest.json && ! grep -q "\"$k\"" out/latest.json; then
-              echo "a platform disappeared from latest.json: $k" >&2; exit 1
-            fi
-          done
-          grep -q '"darwin-aarch64"' out/latest.json
-          # Checksums over every installer file (the old and the new ones).
-          cp published/* all/
-          rm -f all/latest.json all/SHA256SUMS.txt
-          cp macos-files/* all/
-          (cd all && sha256sum -- * > ../out/SHA256SUMS.txt)
-          (cd all && sha256sum --check --strict ../out/SHA256SUMS.txt)
-          if grep -q 'SHA256SUMS' out/SHA256SUMS.txt; then echo "the list must not list itself" >&2; exit 1; fi
-      # Order matters: the new files go up first, so latest.json never points at a missing file.
-      - name: Upload the macOS files, then replace the manifest and checksums
-        if: steps.have.outputs.ok == 'true' && env.SKIP != 'true'
-        run: |
-          set -euo pipefail
-          gh release upload "$TAG" macos-files/* --repo "$GITHUB_REPOSITORY"
-          gh release upload "$TAG" out/latest.json out/SHA256SUMS.txt --repo "$GITHUB_REPOSITORY" --clobber
-      - name: Update the release notes
-        if: steps.have.outputs.ok == 'true' && env.SKIP != 'true'
-        run: |
-          set -euo pipefail
-          body="$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json body --jq .body)"
-          new="${body//Not included in this release (its build did not run): macOS./macOS was added after the release was published.}"
-          if [ "$new" != "$body" ]; then
-            printf '%s' "$new" | gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --notes-file -
-          fi
+        env:
+          REPO: ${{ github.repository }}
+          MAC_DIR: macos-files
+          WORK: work
+          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run && 'true' || 'false' }}
+        run: bash scripts/add-macos-to-release.sh
