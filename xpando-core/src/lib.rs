@@ -9,13 +9,17 @@ pub use copytree::{CopyReport, Problem};
 pub mod datadir;
 pub mod engine;
 pub mod import;
+mod minijson;
+pub mod sha256;
 pub mod syncsafe;
+pub mod update;
 pub mod yamledit;
 
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 
+pub use serde; // re-exported so the app can derive `Serialize` without declaring the crate itself
 use serde::{Deserialize, Serialize};
 use serde_norway::Value;
 

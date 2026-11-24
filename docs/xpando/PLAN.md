@@ -201,8 +201,12 @@ release-only `externalBin` overlay, see ENGINE.md) but has not had its first CI 
 - [ ] First-run onboarding (permissions on macOS, start-at-login, import existing espanso config).
 - [ ] Settings UI for `config/default.yml` (backend, toggle key, search shortcut, etc.).
 - [ ] Installers: **NSIS** (Windows; MSI can't hold date-based versions, see RELEASING.md), DMG (macOS,
-      signing + notarization needs Apple Developer account), AppImage/deb (Linux). Tauri updater for
-      auto-update, with a stable channel and an opt-in beta channel.
+      signing + notarization needs Apple Developer account), AppImage/deb (Linux).
+- [x] **In-app updater** (GitHub Releases, stable channel and opt-in beta channel, daily check,
+      SHA-256 checked download, Windows starts the NSIS installer; macOS/Linux reveal the file).
+      Built without `tauri-plugin-updater` (no new dependencies); see [RELEASING.md](RELEASING.md).
+      Open: update signing / code signing, and full auto-install on macOS and Linux. Not yet tried
+      against a real release (the repository has none yet).
 - [ ] **Date-based versioning and releases** as described in [RELEASING.md](RELEASING.md): tags like
       `2026.11.23`, patches `2026.11.23.1`, betas `2026.11.23-beta`, `-beta2`; betas are GitHub
       **pre-releases**. Build a `scripts/version` tool that maps the human version to a valid semver for

@@ -1,8 +1,8 @@
 # Releasing xpando
 
 How xpando is versioned and released. The scheme below is implemented by `scripts/version.mjs` and
-`.github/workflows/release.yml`; the remaining M5 items (signing, updater) are in
-[PLAN.md](PLAN.md).
+`.github/workflows/release.yml`; the remaining M5 items (signing and notarization) are in
+[PLAN.md](PLAN.md). The in-app updater is described in the last section.
 
 ## Version scheme (date-based)
 
@@ -91,37 +91,69 @@ for CI), `--from-semver <semver>` (reverse mapping). Tests: `node --test "script
      not mark it as latest;
    - otherwise: a normal release, marked latest.
 6. Smoke-test the artifacts from the release page before announcing.
-7. The in-app updater channel follows the same rule (see the design note below).
+7. The in-app updater follows the same rule (see "In-app updater" below). It only works if the release has `SHA256SUMS.txt`, which the workflow adds.
 
 What `release.yml` does: a `validate` job rejects tags that are not in the scheme and runs the script
 tests; a `build` job per OS (Windows NSIS, macOS universal DMG, Linux AppImage + deb on
 ubuntu-22.04) runs `version.mjs <tag>` and `--check`, `npm ci --ignore-scripts`, builds the patched engine (`scripts/build-engine.sh`, see ENGINE.md), then `tauri build` with the release-only sidecar config
 with no secrets in the environment, and renames installers to the human version; a `publish` job
-(the only one with `contents: write`) runs `gh release create --verify-tag --generate-notes`, with
+(the only one with `contents: write`) first writes `SHA256SUMS.txt` (the `sha256sum` of every installer; see the updater section) and then runs `gh release create --verify-tag --generate-notes` with the installers and that file, with
 `--prerelease --latest=false` for betas and `--latest` otherwise. All actions are pinned to full
 commit SHAs. Not done yet: code signing / notarization, and a changelog agreement check.
 
-## Updater design note (not implemented)
+## In-app updater
 
-The Tauri updater (`tauri-plugin-updater`, a new dependency, so deferred to its own PR) reads a
-JSON manifest from an endpoint and compares the **derived semver** with the running app, which
-already sorts correctly. Proposed channels:
+Implemented without `tauri-plugin-updater` (no new dependency). The logic is in
+`xpando-core/src/update.rs` (pure and tested); `xpando-app/src-tauri/src/update.rs` does the
+network and the launching; `xpando-app/src/Updates.tsx` is the banner and the Settings section.
+The user-facing description is the wiki page [Updates](../wiki/Updates.md).
 
-- Two static manifests published as release assets: `latest-stable.json` and `latest-beta.json`.
-  The workflow would generate them from the signed bundle `.sig` files after the build matrix.
-  Stable releases update both files; betas update only `latest-beta.json`.
-- The app picks its endpoint from a setting (default stable; opt-in "Include beta releases").
-  Both endpoints would use the GitHub release URL, e.g.
-  `https://github.com/ultimatejimmy/xpando/releases/latest/download/latest-stable.json` (GitHub's
-  "latest" skips pre-releases, which matches the stable channel for free); the beta manifest would
-  live at a fixed tag such as `updater-beta`.
-- Updates must be signed (Tauri's own minisign key pair): the private key is a repository secret
-  used only in the signing step of the build job, never in install steps; the public key goes in
-  `tauri.conf.json`. A beta user on `2026.1123.0-beta.2` is offered stable `2026.1123.0`
-  automatically since it sorts higher; stable users are never offered a pre-release.
-- Needs the signing key and Windows/macOS code-signing decisions (see M5) before it is enabled.
+**Where it looks.** `GET https://api.github.com/repos/ultimatejimmy/xpando/releases` (the list,
+newest first, 30 entries). Only the system's `curl` (Windows 10 and later has `curl.exe`; a
+PowerShell request is the fallback on older Windows) makes requests, with a 15 s connect timeout,
+a total time limit, a size limit, TLS 1.2+, https only and the User-Agent `xpando-updater`. Nothing
+else is sent: no version, no machine or user details.
 
-Tag patterns the workflow should use (case-sensitive):
+**Which release.** The newest one that is not a draft, has a valid version tag, is newer than the
+running version, is not the skipped version, and has both an installer for this OS/CPU and
+`SHA256SUMS.txt`. Stable users never get a beta; a release marked pre-release on GitHub counts as a
+beta even if its tag has no `-beta`. Beta users (Settings, "Get beta versions") get betas and
+any newer stable release. Nothing older than the running version is ever offered, so switching
+from beta back to stable keeps the beta until a newer stable release exists (the Settings section
+says so). The running version is the human version mapped back from the derived semver
+(`Version::from_semver`); a development build (`0.1.0`) has none and never checks.
+
+**Installer files.** Windows `*-setup.exe` (NSIS), macOS `.dmg` (universal), Linux `.AppImage`
+(amd64; the `.deb` is for manual installs). The release workflow names them
+`xpando_<human version>_<arch>...`.
+
+**`SHA256SUMS.txt`.** Written by the `publish` job from the files it uploads (`sha256sum -- *`,
+verified with `--check`) and attached to the release. Format: `<64 hex digits>  <file name>`.
+
+**Install.** The window only says which version to install; the backend looks the release up
+again. Downloads only from `https://github.com/ultimatejimmy/xpando/releases/download/<tag>/<file>`
+(strict check of host, path, no query or odd characters). Redirects are followed one hop at a time
+and each target must be https on github.com or GitHub's own download hosts
+(`objects.githubusercontent.com`, `release-assets.githubusercontent.com`,
+`github-releases.githubusercontent.com`, `api.github.com`), at most four. The files go to a new
+folder under the system temp folder. The installer's SHA-256 must equal its entry in
+`SHA256SUMS.txt`; a missing, malformed or conflicting entry or a mismatch deletes the download and
+stops. On Windows the installer is then started (after a second hash check) and xpando exits; on
+macOS and Linux the file is shown in the file manager and the user installs it. Full automatic
+install there is future work.
+
+**Settings** (`settings.yml`, next to `data_dir`): `update_channel: stable|beta` (default
+`stable`; an unknown value counts as stable), `auto_check: true`, `last_update_check` (seconds since
+1970), `skipped_version`. The daily check runs at start when more than 24 hours have passed and the
+open window asks every 30 minutes whether it is due again. It fails silently; the button reports
+errors.
+
+**Not covered.** Downloads are checksummed against a file from the same release, not signed, so
+the check protects against a corrupted or swapped download, not against a compromised release. A
+signature check needs the code-signing decisions in M5 (Authenticode / notarization) and is future
+work.
+
+Tag patterns the workflow uses (case-sensitive):
 
 - Stable or patch: `^[0-9]{4}\.[0-9]{1,2}\.[0-9]{1,2}(\.[0-9]+)?$`
 - Beta: `^[0-9]{4}\.[0-9]{1,2}\.[0-9]{1,2}-beta[0-9]*$`
