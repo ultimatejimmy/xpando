@@ -2149,6 +2149,38 @@ fn rollback(undo: Vec<Undo>) -> Vec<String> {
     failed
 }
 
+/// Which files differ between what a plan predicted and what is on disk, for the error message.
+fn describe_layout_diff(want: &Layout, got: &Layout) -> String {
+    let mut parts: Vec<String> = Vec::new();
+    for f in want.match_files.difference(&got.match_files) {
+        parts.push(format!("match/{f} is missing"));
+    }
+    for f in got.match_files.difference(&want.match_files) {
+        parts.push(format!("match/{f} appeared"));
+    }
+    for f in want.configs.keys().chain(got.configs.keys()) {
+        match (want.configs.get(f), got.configs.get(f)) {
+            (Some(a), Some(b)) if a != b => parts.push(format!("config/{f} differs")),
+            (Some(_), None) => parts.push(format!("config/{f} is missing")),
+            (None, Some(_)) => parts.push(format!("config/{f} appeared")),
+            _ => {}
+        }
+    }
+    for f in want.unreadable.symmetric_difference(&got.unreadable) {
+        parts.push(format!("config/{f} could not be read"));
+    }
+    if want.imports != got.imports {
+        parts.push("the imports of a match file differ".to_string());
+    }
+    parts.sort();
+    parts.dedup();
+    if parts.is_empty() {
+        "something else changed".to_string()
+    } else {
+        parts.join(", ")
+    }
+}
+
 /// Runs every step of `plan`. If a step fails, or the disk afterwards is not what the plan
 /// predicted, every step is undone (the one-time `.bak` copies stay).
 fn execute(dir: &Path, before: &Layout, plan: &Plan) -> Result<(), String> {
@@ -2171,7 +2203,10 @@ fn execute(dir: &Path, before: &Layout, plan: &Plan) -> Result<(), String> {
                 want.root.clear();
                 got.root.clear();
                 if want != got {
-                    result = Err("The files on disk changed while saving.".into());
+                    result = Err(format!(
+                        "The files on disk changed while saving ({}).",
+                        describe_layout_diff(&want, &got)
+                    ));
                 }
             }
             Err(e) => result = Err(e),

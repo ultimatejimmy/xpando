@@ -25,7 +25,7 @@ import {
   type ClipboardStart,
   type EditorOptions,
 } from "./PhraseEditor";
-import { FolderToolbar, NewFolderButton, ScopeLabel, useFolderInfo } from "./FolderManager";
+import { FolderExtras, FolderToolbar, NewFolderButton, ScopeLabel, useFolderInfo } from "./FolderManager";
 import { RichTextView } from "./RichLazy";
 import { VarsAka, macroLabel } from "./VarsEditor";
 import { ClipboardHackOffer, EngineWarning, useEngine } from "./EnginePanels";
@@ -500,29 +500,32 @@ export default function App() {
         </nav>
 
         <section className="pane list" aria-label={`${scopeName} phrases`}>
-          <h2 className="pane-title">
-            {scopeName} <span className="count">{visible.length}</span>
-          </h2>
-          {scopeFolder && (
-            <div
-              inert={folderActionsLocked}
-              className={folderActionsLocked ? "folder-actions-locked" : undefined}
-              title={folderActionsLocked ? "Save or cancel your edit to change this folder" : undefined}
-            >
-              <FolderToolbar
-                key={scopeFolder.file}
-                folder={{
-                  name: scopeFolder.name,
-                  file: scopeFolder.file,
-                  hash: scopeFolder.hash,
-                  phrases: scopeFolder.phrases.length,
-                }}
-                info={infos[scopeFolder.file]}
-                advanced={advanced}
-                onDone={(file) => void folderChanged(file)}
-              />
-            </div>
-          )}
+          <div className="pane-head">
+            <h2 className="pane-title">
+              {scopeName} <span className="count">{visible.length}</span>
+            </h2>
+            {scopeFolder && (
+              <div
+                inert={folderActionsLocked}
+                className={folderActionsLocked ? "folder-actions-locked" : undefined}
+                title={folderActionsLocked ? "Save or cancel your edit to change this folder" : undefined}
+              >
+                <FolderToolbar
+                  key={scopeFolder.file}
+                  folder={{
+                    name: scopeFolder.name,
+                    file: scopeFolder.file,
+                    hash: scopeFolder.hash,
+                    phrases: scopeFolder.phrases.length,
+                  }}
+                  info={infos[scopeFolder.file]}
+                  advanced={advanced}
+                  onDone={(file) => void folderChanged(file)}
+                />
+              </div>
+            )}
+          </div>
+          {scopeFolder && <FolderExtras info={infos[scopeFolder.file]} advanced={advanced} />}
           <NewPhraseButton
             disabled={folders.length === 0}
             onClick={() =>

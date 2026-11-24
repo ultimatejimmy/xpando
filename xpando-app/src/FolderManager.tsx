@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState, type FormEvent, type KeyboardEvent, type ReactNode } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { AppWindow, ChevronDown, FolderPlus, Pencil, Plus, Settings2, Trash2 } from "lucide-react";
+import { AppWindow, FolderPlus, MoreHorizontal, Pencil, Plus, Trash2 } from "lucide-react";
 import { AppPicker } from "./AppPicker";
 
 /** Mirrors `xpando_core::folders`. */
@@ -321,14 +321,6 @@ export function FolderToolbar({
   const scopeNote = info?.scope_locked ?? null;
   return (
     <div className="fm-bar">
-      {advanced && (
-        <p className="fm-bar-scope">
-          <AppWindow size={16} aria-hidden="true" />
-          <span>
-            Applies to: <strong>{info ? scopeLabel(info) : "…"}</strong>
-          </span>
-        </p>
-      )}
       <FolderMenu
         label={`Folder “${folder.name}”`}
         items={[
@@ -338,15 +330,34 @@ export function FolderToolbar({
         ]}
         onPick={(id) => setWhich(id)}
       />
-      {(lockNote || scopeNote) && (
-        <p className="fm-note">
-          {lockNote ? `This folder cannot be renamed or deleted here. ${lockNote}` : `Its apps cannot be changed here. ${scopeNote}`}
-        </p>
-      )}
       {which === "rename" && <RenameDialog folder={folder} onClose={close} onDone={onDone} advanced={advanced} />}
       {which === "delete" && <DeleteDialog folder={folder} onClose={close} onDone={onDone} advanced={advanced} />}
       {which === "apps" && info && (
         <AppsDialog folder={folder} info={info} advanced={advanced} onClose={close} onDone={onDone} />
+      )}
+    </div>
+  );
+}
+
+/** The lines under the folder's title: what it applies to (Advanced) and why it is locked, if it is. */
+export function FolderExtras({ info, advanced }: { info: FolderInfo | undefined; advanced: boolean }) {
+  const lockNote = info?.locked ?? null;
+  const scopeNote = info?.scope_locked ?? null;
+  if (!advanced && !lockNote && !scopeNote) return null;
+  return (
+    <div className="fm-extras">
+      {advanced && (
+        <p className="fm-bar-scope">
+          <AppWindow size={16} aria-hidden="true" />
+          <span>
+            Applies to: <strong>{info ? scopeLabel(info) : "…"}</strong>
+          </span>
+        </p>
+      )}
+      {(lockNote || scopeNote) && (
+        <p className="fm-note">
+          {lockNote ? `This folder cannot be renamed or deleted here. ${lockNote}` : `Its apps cannot be changed here. ${scopeNote}`}
+        </p>
       )}
     </div>
   );
@@ -403,15 +414,15 @@ function FolderMenu({
       <button
         type="button"
         ref={button}
-        className="btn"
+        className="btn btn-icon"
+        aria-label="Folder options"
+        title="Folder options"
         aria-haspopup="menu"
         aria-expanded={open}
         aria-controls={`${uid}-menu`}
         onClick={() => setOpen((o) => !o)}
       >
-        <Settings2 size={16} aria-hidden="true" />
-        Folder options
-        <ChevronDown size={16} aria-hidden="true" />
+        <MoreHorizontal size={18} aria-hidden="true" />
       </button>
       {open && (
         <div className="fm-menu-list" role="menu" id={`${uid}-menu`} aria-label={label}>

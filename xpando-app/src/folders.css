@@ -18,13 +18,17 @@
   margin: 8px;
 }
 
-/* Toolbar above the phrase list when one folder is chosen */
+/* The folder menu button in the list title row */
 .fm-bar {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
-  gap: 6px 10px;
-  margin: 0 8px 8px;
+}
+
+/* Under the title: what the folder applies to, and why it is locked */
+.fm-extras {
+  display: grid;
+  gap: 4px;
+  margin: -4px 8px 10px;
 }
 
 .fm-bar-scope {
