@@ -1795,7 +1795,7 @@ function TypeFields({ item, set, uid }: { item: Item; set: SetItem; uid: string 
           mono={false}
           value={textOf(item, "text")}
           onChange={(v) => set((it) => withParam(it, "text", text(v)))}
-          hint="Needs xpando's own engine; stock espanso rejects this type. The macro itself inserts nothing."
+          hint="The macro itself inserts nothing."
         />
       );
     default:

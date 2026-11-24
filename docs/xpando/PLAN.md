@@ -18,6 +18,8 @@ phrase management.
 | Frontend shell | Tauri — native window, tray icon, installers; not a browser tab |
 | First-release scope | Phrase manager GUI |
 | Rich text | Full WYSIWYG editor, stored as espanso's existing `html:` match field |
+| Relationship to espanso | xpando is its own app with its own engine; it does not support running on stock espanso. People coming from espanso get their YAML imported automatically (see M6) |
+| Data location | xpando keeps its data in its own folder, not espanso's. The user can choose that folder (including OneDrive, Google Drive, etc.) to back up or share between devices (see M6) |
 | Visual direction | **A + D hybrid**: Windows 11 Fluent look (A) with an **Advanced** switch that reveals Workbench (D) power tools — see below |
 
 ## Iconography and branding
@@ -225,6 +227,14 @@ The user-facing documentation lives in the repository's GitHub Wiki.
   and dark where it matters. Re-shot when the UI changes.
 - **Quality bar:** every feature merged from now on gets a wiki page or section in the same PR,
   and the wiki links to RELEASING.md for the version scheme.
+
+### M6 — Own data folder, import and sync
+- xpando-owned data folder (default under the user's app-data directory) holding `match/` and `config/`; the bundled engine is started with that folder as its config directory (espanso's `ESPANSO_CONFIG_DIR`), so it never reads or writes the stock espanso folder.
+- **Import from espanso:** on first run, detect an existing espanso config (`%APPDATA%\espanso` and the per-OS equivalents) and offer a one-click copy into the xpando folder. Copy only, never move or alter the originals; preview what will be imported; keep `_`-prefixed files and `config/` app filters; report anything the app cannot read.
+- **Choose the data folder:** a setting to point xpando at any folder, including a OneDrive/Google Drive/Dropbox folder, with move-existing-data support. Settings are stored separately from the data.
+- **Sync safety:** cloud folders can change underneath us. Keep the content-hash check and atomic saves, watch the folder for outside changes and reload, detect sync-conflict copies (for example `file (conflicted copy).yml`) and surface them, warn when the folder is unreachable or offline instead of silently falling back.
+- **Single engine:** detect and warn if a stock espanso daemon is running (it would also expand the same triggers).
+- Remove the temporary stock-espanso handling once the engine is bundled.
 
 ### Later (post-0.1)
 - Modern hotkey popup / search bar replacing espanso-modulo's wxWidgets search UI.

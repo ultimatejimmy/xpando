@@ -25,7 +25,7 @@ export function useEngine(): EngineStatus | null {
 
 const KIND_TEXT: Record<EngineKind, string> = {
   xpando: "xpando engine",
-  stock: "stock espanso (does not know Set clipboard)",
+  stock: "a different espanso build (not xpando's)",
   missing: "not found",
 };
 
@@ -46,9 +46,7 @@ export function EngineWarning({ engine, usesSetClipboard }: { engine: EngineStat
   return (
     <p className="eng-warning" role="alert">
       <AlertTriangle size={14} aria-hidden="true" />{" "}
-      {engine.kind === "stock"
-        ? "This phrase uses a Set clipboard macro, which stock espanso does not understand. Use the xpando engine."
-        : "This phrase uses a Set clipboard macro, but no espanso engine was found."}
+      This phrase uses a Set clipboard macro, but xpando's engine was not found, so it will not run.
     </p>
   );
 }
@@ -110,7 +108,7 @@ export function ClipboardHackOffer<F>({
     <div className="eng-offer">
       <p>
         The macro <span className="placeholder">{`{{${preview.candidate.name}}}`}</span> copies text with PowerShell. It can
-        be a Set clipboard macro instead, which is faster and works on every system. It needs the xpando engine.
+        be a Set clipboard macro instead, which is faster and works on every system.
       </p>
       {!open ? (
         <button type="button" onClick={() => setOpen(true)}>
