@@ -17,6 +17,21 @@ on:
         required: true
         default: true
         type: boolean
+      reuse_run:
+        description: "Optional: number of an earlier release-macos run whose macOS build to reuse (skips building again). Its artifact is kept 7 days."
+        required: false
+        default: ""
+        type: string
+      runner:
+        description: "Mac runner pool (each has its own queue; try another if one never starts)"
+        required: true
+        default: macos-latest
+        type: choice
+        options:
+          - macos-latest
+          - macos-15
+          - macos-15-intel
+          - macos-26-intel
   schedule:
     # Nightly, when the runners are least busy (07:17 UTC is the middle of the night in the US).
     # Only runs once the repository variable RELEASE_MACOS_NIGHTLY is "true" (see RELEASING.md), so
@@ -40,9 +55,11 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      actions: read # to check the earlier run whose build may be reused
     outputs:
       tags: ${{ steps.find.outputs.tags }}
       any: ${{ steps.find.outputs.any }}
+      reuse: ${{ steps.reuse.outputs.ok }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -101,12 +118,45 @@ jobs:
             echo "tags=$json" >> "$GITHUB_OUTPUT"
             echo "will build: $json"
           fi
+      # Reusing a build (by hand only): skip the macOS build and use the files an earlier run of
+      # this workflow already made. Anything about that run that is not exactly right stops the run
+      # here, with the reason; nothing is rebuilt behind your back.
+      - name: Check the build to reuse
+        id: reuse
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ inputs.reuse_run }}
+          TAG_INPUT: ${{ inputs.tag }}
+          EVENT: ${{ github.event_name }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT" != "workflow_dispatch" ] || [ -z "${RUN_ID// /}" ]; then
+            echo "ok=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          RUN_ID="${RUN_ID// /}"
+          case "$RUN_ID" in *[!0-9]*|"") echo "::error::reuse_run must be a run number, digits only" >&2; exit 1 ;; esac
+          run="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$RUN_ID")"
+          check() { jq -e "$1" <<<"$run" >/dev/null || { echo "::error::run $RUN_ID: $2" >&2; exit 1; }; }
+          check '.name == "release-macos"' "it is not a release-macos run"
+          check '.event == "workflow_dispatch"' "it was not started by hand"
+          check ".repository.full_name == \"$GITHUB_REPOSITORY\" and .head_repository.full_name == \"$GITHUB_REPOSITORY\"" "it is not from this repository"
+          check '.status == "completed"' "it has not finished"
+          count="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$RUN_ID/artifacts" \
+            --jq "[.artifacts[] | select(.name == \"installers-macos-$TAG_INPUT\" and (.expired | not))] | length")"
+          if [ "$count" != "1" ]; then
+            echo "::error::run $RUN_ID has no usable macOS build for $TAG_INPUT (expired after 7 days, or built for another tag)" >&2
+            exit 1
+          fi
+          echo "reusing the macOS build of run $RUN_ID for $TAG_INPUT; the macOS build step will be skipped"
+          echo "ok=true" >> "$GITHUB_OUTPUT"
 
   build:
     name: build macOS (${{ matrix.tag }})
     needs: plan
-    if: ${{ needs.plan.outputs.any == 'true' }}
-    runs-on: macos-latest
+    if: ${{ needs.plan.outputs.any == 'true' && needs.plan.outputs.reuse != 'true' }}
+    # By hand: the chosen pool. Nightly: the repository variable RELEASE_MACOS_RUNNER if set.
+    runs-on: ${{ inputs.runner || vars.RELEASE_MACOS_RUNNER || 'macos-latest' }}
     # A runner may take a long time to appear; once it has one the build itself takes a while.
     timeout-minutes: 120
     permissions:
@@ -130,6 +180,31 @@ jobs:
       - name: Derive the version from the tag
         id: info
         run: node scripts/version.mjs --info "$TAG" | tee -a "$GITHUB_OUTPUT"
+      # The tagged source can predate fixes needed to build on a Mac runner now (a runner of another
+      # pool, a newer Xcode). The fixes are small patches kept in scripts/release-patches/ on the
+      # branch this workflow runs from. Each is applied to this build's copy only (nothing is
+      # committed), skipped when the tag already has it, and a patch that no longer applies fails
+      # the build instead of building something unexpected.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          path: build-fixes
+          persist-credentials: false
+      - name: Apply build fixes made after the tag
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          for p in build-fixes/scripts/release-patches/*.patch; do
+            if git apply --reverse --check "$p" 2>/dev/null; then
+              echo "$(basename "$p"): the tag already has it"
+            elif git apply --check "$p"; then
+              git apply "$p"
+              echo "$(basename "$p"): applied"
+            else
+              echo "::error::$(basename "$p") does not apply to $TAG; update or remove it"
+              exit 1
+            fi
+          done
       - name: Install Rust
         run: |
           rustup toolchain install stable --profile minimal
@@ -184,10 +259,11 @@ jobs:
     name: add macOS to ${{ matrix.tag }}
     needs: [plan, build]
     # Runs for every tag even when another tag's build failed; a tag without a build is skipped.
-    if: ${{ always() && needs.plan.outputs.any == 'true' }}
+    if: ${{ always() && needs.plan.result == 'success' && needs.plan.outputs.any == 'true' }}
     runs-on: ubuntu-latest
     permissions:
-      contents: write # upload assets and replace latest.json / SHA256SUMS.txt; nothing else
+      contents: write # upload assets and replace latest.json / SHA256SUMS.txt
+      actions: read # to download the macOS build of an earlier run when it is reused
     strategy:
       fail-fast: false
       max-parallel: 1
@@ -207,17 +283,28 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 22
-      - name: Download the macOS build
+      - name: Download the macOS build of this run
         id: dl
+        if: ${{ needs.plan.outputs.reuse != 'true' }}
         continue-on-error: true
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: installers-macos-${{ matrix.tag }}
           path: macos-files
+      - name: Download the macOS build of the earlier run
+        id: dlr
+        if: ${{ needs.plan.outputs.reuse == 'true' }}
+        continue-on-error: true
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: installers-macos-${{ matrix.tag }}
+          path: macos-files
+          run-id: ${{ inputs.reuse_run }}
+          github-token: ${{ github.token }}
       - name: Check there is something to add
         id: have
         run: |
-          if [ "${{ steps.dl.outcome }}" != "success" ] || ! ls macos-files/*_universal.dmg macos-files/*_universal.app.tar.gz macos-files/*_universal.app.tar.gz.sig >/dev/null 2>&1; then
+          if [ "${{ steps.dl.outcome }}" != "success" ] && [ "${{ steps.dlr.outcome }}" != "success" ] || ! ls macos-files/*_universal.dmg macos-files/*_universal.app.tar.gz macos-files/*_universal.app.tar.gz.sig >/dev/null 2>&1; then
             echo "::warning::no macOS build for $TAG; leaving the release as it is"
             echo "ok=false" >> "$GITHUB_OUTPUT"
           else
