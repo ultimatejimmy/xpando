@@ -112,7 +112,7 @@ marked pre-release). xpando checks for updates daily and can install them for yo
 
 ## Support
 
-xpando is free. If it saves you time, you can tip via [Ko-fi](https://ko-fi.com/jimmypautz),
+xpando is free. If it saves you time, you can support it via [Ko-fi](https://ko-fi.com/jimmypautz),
 [Buy Me a Coffee](https://buymeacoffee.com/ultimatejimmy) or [Liberapay](https://liberapay.com/ultimatejimmy).
 A star, a bug report or telling a friend helps just as much.
 
