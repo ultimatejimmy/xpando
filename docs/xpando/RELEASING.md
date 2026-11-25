@@ -172,7 +172,7 @@ Release selection is our own; download, signature check and install are Tauri's 
 `tauri-plugin-updater` (2.14.1). The selection logic is in
 `xpando-core/src/update.rs` (pure and tested); `xpando-app/src-tauri/src/update.rs` reads the release
 list and drives the plugin; `xpando-app/src/Updates.tsx` is the banner and the Settings section.
-The user-facing description is the wiki page [Updates](../wiki/Updates.md).
+The user-facing description is the wiki page [Updates](../wiki/4.3-Updates.md).
 
 **Where it looks.** `GET https://api.github.com/repos/ultimatejimmy/xpando/releases` (the list,
 newest first, 30 entries). Only the system's `curl` (Windows 10 and later has `curl.exe`; a

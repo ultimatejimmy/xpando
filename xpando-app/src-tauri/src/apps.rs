@@ -7,7 +7,7 @@
 //! is treated as untrusted text: names are checked and cleaned before they reach the UI.
 //!
 //! Only the Windows paths have been exercised on a real machine; the macOS and Linux paths are
-//! written but untested (see docs/wiki/Folders-and-Apps.md).
+//! written but untested (see docs/wiki/2.5-Folders-and-Apps.md).
 
 use std::process::{Command, Stdio};
 use std::sync::{Mutex, OnceLock};
