@@ -11,6 +11,7 @@ pub mod engine;
 pub mod import;
 mod minijson;
 pub mod shortcut;
+pub mod stats;
 pub mod syncsafe;
 pub mod update;
 pub mod yamledit;

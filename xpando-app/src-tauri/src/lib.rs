@@ -6,6 +6,7 @@ mod engine;
 mod engine_run;
 mod folders;
 mod richtext;
+mod stats;
 mod update;
 mod vars;
 mod yamledit;
@@ -97,6 +98,10 @@ pub fn run() {
             apps::list_installed_programs,
             apps::app_icons,
             apps::pick_program,
+            stats::stats_summary,
+            stats::stats_save_settings,
+            stats::stats_set_enabled,
+            stats::stats_reset,
             richtext::save_rich_phrase,
             richtext::create_rich_phrase,
             richtext::sanitize_html,

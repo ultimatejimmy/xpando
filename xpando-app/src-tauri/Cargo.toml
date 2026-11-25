@@ -1,6 +1,6 @@
 [package]
 name = "xpando-app"
-version = "2026.1125.0"
+version = "2026.1125.1"
 description = "xpando phrase manager"
 edition = "2021"
 license = "GPL-3.0"

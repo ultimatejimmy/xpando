@@ -37,6 +37,7 @@ Quick answers. Can't find yours? Try [Troubleshooting](Troubleshooting), or [ope
 | **Can I paste formatted text from Word?** | Yes. In the rich text editor press **Ctrl+V**, or use **From clipboard** to start a phrase from it. See [Rich Text](Rich-Text). |
 | **How do I get today's date?** | Click **Insert macro**, then **Date**. See [Macros](Macros). |
 | **What is the Advanced switch for?** | It shows the technical side: the YAML of each phrase, trigger conflicts, and every option. See [Advanced Mode](Advanced-Mode). |
+| **How much time does xpando save me?** | Click the chart icon in the header. See [Your Savings](Your-Savings). |
 | **How do I search from another program?** | Press the search shortcut, **Alt+Space** unless you changed it in Settings. See [Quick Search](Quick-Search). |
 | **Does xpando start when I sign in?** | Only if you turn on **Start when I sign in to this computer** in Settings. |
 | **Does closing the window stop expansion?** | No. The engine runs in the background and keeps working until you quit it. |

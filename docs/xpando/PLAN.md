@@ -264,7 +264,8 @@ Still open: a live file watcher (today the folder is re-read on window focus, an
 ### Later (post-0.1)
 - Modern hotkey popup / search bar replacing espanso-modulo's wxWidgets search UI.
 - Modern forms window replacing modulo forms.
-- Clipboard history, autotext suggestions, usage statistics.
+- Clipboard history, autotext suggestions.
+- Usage statistics: built ("Your savings" dialog, chart icon in the header). The engine logs each expansion (time, characters, trigger) and measures typing speed from key timing only; both files live in the app's local data folder (`engine/stats`), never the synced data folder. Core maths in `xpando_core::stats`; engine side in `espanso/src/cli/worker/xpando_stats.rs`; an `off` file pauses logging.
 - Shared/team phrase libraries (Git- or folder-backed, read-only subscriptions).
 - Import from PhraseExpress (`.pxp` export) and other expanders.
 

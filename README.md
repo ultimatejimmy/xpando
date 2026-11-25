@@ -70,6 +70,10 @@ so espanso's features keep working, but you no longer have to hand-edit them.
 
 <p align="center"><img src="site/assets/gif/popup.gif" alt="Pressing Alt and Space in an email, typing thank in the search box that opens and pressing Enter to type the phrase" width="760" /></p>
 
+**See what it saves you.** Your savings shows the typing time xpando has saved, as hours and as money (hourly or salaried), with your typing speed learned as you type.
+
+<p align="center"><img src="site/assets/img/savings.light.png" alt="The Your savings window with the time and money saved this month, a chart of expansions per day, the top phrases and the pay and typing speed settings" width="760" /></p>
+
 **Find anything as you type.** Search looks through triggers, names and the text itself.
 
 <p align="center"><img src="site/assets/gif/search.gif" alt="Typing in the search box while the phrase list narrows with every letter" width="760" /></p>

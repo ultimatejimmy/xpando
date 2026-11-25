@@ -96,7 +96,7 @@
   };
 
   let kept = ["Email", "Dates", "Personal", "Support", "Snippets"];
-  const state = { engineRunning: true };
+  const state = { engineRunning: true, stats: { pay_type: "hourly", hourly_rate: 48, annual_salary: 0, hours_per_week: 40, speed_mode: "auto", manual_wpm: 40 } };
   const find = (f, i) => files[f].phrases.find((x) => x.index === i);
   const apply = (ph, edit) => {
     if (edit.triggers) ph.triggers = edit.triggers;
@@ -164,6 +164,24 @@
     create_phrase: ({ file, phrase }) => add(file, phrase),
     create_phrase_with_vars: ({ file, phrase, variables }) => add(file, phrase, { vars: mkVars(variables) }),
     create_rich_phrase: ({ file, phrase, html }) => add(file, { ...phrase, body: html }, { kind: "html" }),
+    // "Your savings": made-up numbers for a person who has used xpando for a month.
+    stats_summary: () => {
+      const st = state.stats;
+      const rate = st.pay_type === "hourly" ? st.hourly_rate : st.annual_salary / (st.hours_per_week * 52);
+      const secs = 33120;
+      return {
+        enabled: true, expansions: 1284, chars: 142310, seconds_saved: secs, previous_seconds_saved: 28100,
+        money_saved: rate > 0 ? (secs / 3600) * rate : null, hourly_rate: rate > 0 ? rate : null,
+        wpm: st.speed_mode === "manual" ? st.manual_wpm : 58, wpm_measured: st.speed_mode !== "manual", best_day: 96,
+        days: [34, 52, 41, 63, 78, 8, 3, 58, 71, 96, 66, 88, 44, 79].map((count, i) => ({ date: `2026-11-${12 + i}`, count })),
+        top: [[";sig", 9300, 412], [";thx", 6900, 238], [";addr", 5100, 181], [";reset", 4300, 97], [";ty", 2400, 356]]
+          .map(([trigger, seconds_saved, count]) => ({ trigger, count, seconds_saved })),
+        settings: st,
+      };
+    },
+    stats_save_settings: ({ settings }) => { state.stats = settings; return settings; },
+    stats_set_enabled: () => null,
+    stats_reset: () => null,
     delete_phrase: ({ file, index }) => { files[file].phrases = files[file].phrases.filter((x) => x.index !== index); return touch(file); },
   };
 
