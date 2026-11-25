@@ -1,13 +1,9 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
-  <!-- xpando icon: Lucide "panda" (ISC license, https://lucide.dev/icons/panda) on a green tile. Fills the tab; changes with the browser theme. -->
+  <!-- xpando icon: Lucide "panda" (ISC license, https://lucide.dev/icons/panda), no tile, like the tray icon:
+       dark on a light browser, white on a dark one. Scaled to fill the tab. -->
   <style>
-    .tile { fill: #107c10; }
-    .glyph { stroke: #ffffff; }
-    @media (prefers-color-scheme: dark) {
-      .tile { fill: #62cf5a; }
-      .glyph { stroke: #0b1f0b; }
-    }
+    .p { stroke: #14181a; }
+    @media (prefers-color-scheme: dark) { .p { stroke: #ffffff; } }
   </style>
-  <rect class="tile" width="64" height="64" rx="15"/>
-  <g class="glyph" transform="translate(4.5 4.5) scale(2.29)" fill="none" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M11.25 17.25h1.5L12 18z"/><path d="m15 12 2 2"/><path d="M17.902 6.599a8 8 0 0 0-.5-.5"/><path d="M2 14.5C2 19.47 6.48 22 12 22s10-2.53 10-7.5a10 10 0 0 0-1.3-4.83 4.5 4.5 0 1 0-7.05-5.5 8 8 0 0 0-3.3 0 4.5 4.5 0 1 0-7.04 5.5A10 10 0 0 0 2 14.5"/><path d="M6.099 6.599a8 8 0 0 1 .5-.5"/><path d="m9 12-2 2"/></g>
+  <g class="p" transform="translate(1.6 1.6) scale(2.6)" fill="none" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M11.25 17.25h1.5L12 18z"/><path d="m15 12 2 2"/><path d="M17.902 6.599a8 8 0 0 0-.5-.5"/><path d="M2 14.5C2 19.47 6.48 22 12 22s10-2.53 10-7.5a10 10 0 0 0-1.3-4.83 4.5 4.5 0 1 0-7.05-5.5 8 8 0 0 0-3.3 0 4.5 4.5 0 1 0-7.04 5.5A10 10 0 0 0 2 14.5"/><path d="M6.099 6.599a8 8 0 0 1 .5-.5"/><path d="m9 12-2 2"/></g>
 </svg>
