@@ -47,6 +47,7 @@ pub fn run() {
             data::import_offer,
             data::import_espanso,
             data::skip_import,
+            data::seed_samples,
             data::check_data_dir,
             data::change_data_dir,
             data::pick_folder,

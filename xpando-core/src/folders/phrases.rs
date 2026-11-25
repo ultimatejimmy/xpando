@@ -312,10 +312,17 @@ fn choose_dest(
                         });
                         match base.or_else(|| all.next()) {
                             Some(i) => i.file.clone(),
-                            None => return Err(
-                                "There is no folder that works in all apps yet. Create one first."
-                                    .into(),
-                            ),
+                            None => {
+                                // Nothing works in all apps yet: start one, so the person never
+                                // has to create a folder just to use this.
+                                let name = free_folder_name(l, "base").ok_or(
+                                    "xpando could not find a free name for a new folder.",
+                                )?;
+                                return Ok(Dest::New {
+                                    name,
+                                    exes: Vec::new(),
+                                });
+                            }
                         }
                     }
                 };
@@ -533,7 +540,7 @@ fn plan_move(
             p.preview.blocked = None;
             p.preview.unchanged = true;
             p.preview.to_file = Some(src.to_string());
-            p.preview.notice = format!("The phrase is already in the folder {}.", quote(&src_name));
+            p.preview.notice = "The phrase already works there.".to_string();
             p.preview.warnings = warnings;
             p.to_file = src.to_string();
             return Ok(p);
@@ -574,14 +581,26 @@ fn plan_move(
     match &dest {
         Dest::New { name, exes } => {
             let (mut p1, file1) = plan_create(l, name)?;
-            let (p2, file2) = plan_scope(
-                &p1.after,
-                &file1,
-                &ScopeSpec::Apps {
-                    exes: Some(exes.clone()),
-                    title: TitleChange::Clear,
-                },
-            )?;
+            // No programs: a plain folder that works in all apps, so nothing to limit.
+            let (p2, file2) = if exes.is_empty() {
+                (
+                    Plan {
+                        ops: Vec::new(),
+                        changes: Vec::new(),
+                        after: p1.after.clone(),
+                    },
+                    file1.clone(),
+                )
+            } else {
+                plan_scope(
+                    &p1.after,
+                    &file1,
+                    &ScopeSpec::Apps {
+                        exes: Some(exes.clone()),
+                        title: TitleChange::Clear,
+                    },
+                )?
+            };
             // The new file is created with the phrase already in it.
             for op in &mut p1.ops {
                 if let Op::CreateMatch { name, text } = op {
@@ -591,10 +610,14 @@ fn plan_move(
                 }
             }
             if let Some(c) = p1.changes.first_mut() {
-                c.detail = format!(
-                    "A new folder {} for these programs. The phrase is put into it.",
-                    quote(name)
-                );
+                c.detail = if exes.is_empty() {
+                    "A new file for phrases that work in all apps. The phrase is put into it.".into()
+                } else {
+                    format!(
+                        "A new folder {} for these programs. The phrase is put into it.",
+                        quote(name)
+                    )
+                };
             }
             plan = Plan {
                 ops: p1.ops.into_iter().chain(p2.ops).collect(),
@@ -645,16 +668,10 @@ fn plan_move(
         )
     });
 
-    let notice = match (&dest, wh) {
-        (Dest::New { .. }, _) => format!(
-            "This creates the folder {} for these programs and moves the phrase to it.",
-            quote(&dest_name)
-        ),
-        (_, PhraseWhere::All { .. }) => format!(
-            "This moves the phrase to the folder {}, which works in all apps.",
-            quote(&dest_name)
-        ),
-        _ => format!("This moves the phrase to the folder {}.", quote(&dest_name)),
+    let notice = match wh {
+        PhraseWhere::All { .. } => "This phrase will work in all apps.".to_string(),
+        PhraseWhere::Apps { .. } => "This phrase will work only in the apps you chose.".to_string(),
+        PhraseWhere::Folder { .. } => "This phrase will be moved.".to_string(),
     };
     let changes = plan.changes.clone();
     Ok(Planned {

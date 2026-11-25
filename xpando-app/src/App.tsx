@@ -262,6 +262,15 @@ export default function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const updates = useUpdates();
 
+  // A first run with nothing to import starts with a few sample phrases in a sample folder.
+  useEffect(() => {
+    if (!loaded || folders.length > 0 || importOffer.preview || !data.info || data.info.problem) return;
+    invoke<boolean>("seed_samples")
+      .then((added) => (added ? load() : null))
+      .catch(() => undefined);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loaded, folders.length, importOffer.preview, data.info]);
+
   /** The data folder changed or files were imported: start over from what is on disk. */
   const dataChanged = async () => {
     await data.refresh();
@@ -533,6 +542,21 @@ export default function App() {
         : (scopeLabel ?? scopeCategory?.name ?? "");
   // New phrases are stored in an all-apps file and filed in the folder being viewed.
   const newFile = (allAppsFolders(folders, infos)[0] ?? folders[0])?.file ?? "";
+  // With no match file at all (a fresh start), the first new phrase creates match/base.yml.
+  const withNewFile = async (open: (file: string) => void) => {
+    if (newFile) {
+      open(newFile);
+      return;
+    }
+    try {
+      const out = await invoke<{ file: string | null }>("create_folder", { name: "base" });
+      const fresh = await load();
+      const file = out.file ?? fresh?.[0]?.file;
+      if (file) open(file);
+    } catch (e) {
+      setError(String(e));
+    }
+  };
   const editorPane =
     editing && "newIn" in editing ? (
       <PhraseEditor
@@ -776,6 +800,18 @@ export default function App() {
               </div>
             )}
           </div>
+          {query && (
+            <div className="search-active" role="status">
+              <Search size={14} aria-hidden="true" />
+              <span className="grow">
+                Filtered by “{query}”
+                {visible.length === 0 ? "" : ` · ${visible.length} shown`}
+              </span>
+              <button type="button" onClick={() => changeQuery("")} aria-label="Clear search">
+                Clear
+              </button>
+            </div>
+          )}
           <label className="list-sort">
             Sort
             <select value={sortBy} onChange={(e) => changeSort(e.target.value as "name" | "file")}>
@@ -784,20 +820,40 @@ export default function App() {
             </select>
           </label>
           <NewPhraseButton
-            disabled={folders.length === 0}
+            disabled={!loaded}
             onClick={() =>
-              guard(() => setEditing({ newIn: newFile, n: Date.now(), place: newPlaceFor(scopeCategory), folder: scopeLabel }))
+              guard(() =>
+                void withNewFile((file) =>
+                  setEditing({ newIn: file, n: Date.now(), place: newPlaceFor(scopeCategory), folder: scopeLabel }),
+                ),
+              )
             }
             onFromClipboard={(start) =>
-              guard(() => setEditing({ newIn: newFile, n: Date.now(), start, place: newPlaceFor(scopeCategory), folder: scopeLabel }))
+              guard(() =>
+                void withNewFile((file) =>
+                  setEditing({ newIn: file, n: Date.now(), start, place: newPlaceFor(scopeCategory), folder: scopeLabel }),
+                ),
+              )
             }
           />
           {loaded && visible.length === 0 && (
             <p className="empty">
               {query
-                ? "No phrases match your search."
+                ? (
+                  <>
+                    {scope === ALL ? "No phrases match" : `No phrases in ${scopeName} match`} “{query}”.{" "}
+                    {scope !== ALL && rows.some((r) => matches(r, terms)) && (
+                      <button type="button" className="link" onClick={() => changeScope(ALL)}>
+                        Search all phrases
+                      </button>
+                    )}{" "}
+                    <button type="button" className="link" onClick={() => changeQuery("")}>
+                      Clear search
+                    </button>
+                  </>
+                )
                 : folders.length === 0
-                  ? "No folders yet. Use New folder to start, or open Settings to bring in your espanso phrases."
+                  ? "No phrases yet. Use New phrase to start, or open Settings to bring in your espanso phrases."
                   : "No phrases yet."}
             </p>
           )}

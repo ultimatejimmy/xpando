@@ -412,3 +412,41 @@ mod tests {
         assert!(!encoded_picker_script().is_empty());
     }
 }
+
+const SAMPLES_MARKER: &str = "xpando-samples-added";
+const SAMPLES: &str = "matches:
+  # Sample phrases to try. Edit or delete them any time.
+  - trigger: \":hello\"
+    replace: \"Hello, and thanks for getting in touch!\"
+    xpando_folder: \"Samples\"
+
+  - trigger: \":sig\"
+    replace: \"Best regards,\nYour Name\"
+    xpando_folder: \"Samples\"
+
+  - trigger: \":date\"
+    replace: \"{{today}}\"
+    vars:
+      - name: today
+        type: date
+        params:
+          format: \"%B %d, %Y\"
+    xpando_folder: \"Samples\"
+";
+
+/// On a first run with nothing to import, adds a few sample phrases in a sample folder (once).
+/// Returns whether it did.
+#[tauri::command]
+pub fn seed_samples(app: AppHandle) -> Result<bool, String> {
+    if import_offer(app.clone(), false)?.is_some() {
+        return Ok(false);
+    }
+    let dir = data_dir(&app)?;
+    if dir.join(SAMPLES_MARKER).exists() || datadir::has_data(&dir) {
+        return Ok(false);
+    }
+    std::fs::write(dir.join("match").join("base.yml"), SAMPLES)
+        .map_err(|e| format!("Could not add the sample phrases: {e}"))?;
+    std::fs::write(dir.join(SAMPLES_MARKER), "").map_err(|e| e.to_string())?;
+    Ok(true)
+}

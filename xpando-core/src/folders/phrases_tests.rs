@@ -149,7 +149,7 @@ fn creates_a_folder_for_several_apps_and_reuses_it() {
     let pv = preview_phrase_where(&d.0, "base.yml", index_of(&d, "base.yml", ":sig"), &wh).unwrap();
     assert!(pv.creates_folder);
     assert_eq!(pv.to_name, "Word, Outlook");
-    assert!(pv.notice.contains("creates the folder"));
+    assert!(pv.notice.contains("only in the apps"));
     assert!(pv.blocked.is_none());
     // A preview changes nothing.
     assert!(!d.exists("match/_Word, Outlook.yml"));
@@ -472,10 +472,9 @@ fn packages_and_missing_all_apps_folders_are_explained() {
     );
     let pv =
         preview_phrase_where(&d.0, "_word.yml", 0, &PhraseWhere::All { folder: None }).unwrap();
-    assert!(pv
-        .blocked
-        .unwrap()
-        .contains("no folder that works in all apps"));
+    // With no all-apps folder yet, one is started for the phrase.
+    assert!(pv.blocked.is_none());
+    assert!(pv.creates_folder);
     let e = preview_phrase_where(&d.0, "_word.yml", 0, &apps(&[])).unwrap();
     assert!(e.blocked.is_some());
 }

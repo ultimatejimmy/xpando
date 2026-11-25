@@ -47,7 +47,7 @@ You can see it in the phrase details and in the editor. Click **Change** to open
 
 ![The Works in dialog with Only these apps chosen and Outlook ticked in the list of installed programs](images/works-in.png)
 
-![Changing a phrase to work only in Word, then clicking Move phrase](images/worksin.gif)
+![Changing a phrase to work only in Word, then clicking Save](images/worksin.gif)
 
 ### Choose the programs
 
@@ -58,7 +58,7 @@ You can see it in the phrase details and in the editor. Click **Change** to open
    * **Browse...** lets you pick a program file yourself.
 3. Chosen programs appear as tags at the top, each with an **x** to remove it.
 4. Read the sentence under the list. It says what will happen.
-5. Click **Move phrase**.
+5. Click **Save**.
 
 For a new phrase, the same box is in the form, and the choice is applied when you save. A new phrase made while a program is selected under **Apps** starts as "Only" that program.
 
