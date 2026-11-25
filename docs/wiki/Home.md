@@ -16,7 +16,7 @@ xpando adds a modern phrase manager to [espanso](https://espanso.org), the open 
 * **Rich text.** Write formatted phrases (bold, links, lists, tables) and paste from Word. See [Rich Text](Rich-Text).
 * **Macros.** Insert today's date, what you copied last, a random pick, a choice list and more. See [Macros](Macros).
 * **Folders and per-app phrases.** File phrases in folders, and make a phrase work only in certain programs. See [Folders and Apps](Folders-and-Apps).
-* **Search.** Find phrases fast, in the window or with a shortcut from anywhere. See [Search](Search).
+* **Search.** Find phrases fast, in the window, or press Alt+Space in any program for a quick search box. See [Search](Search) and [Quick Search](Quick-Search).
 * **Safe edits.** Your phrases stay in plain files. xpando saves them carefully and refuses to overwrite a file that changed underneath it.
 * **An Advanced switch** for power users: the YAML source, trigger conflicts, every option. See [Advanced Mode](Advanced-Mode).
 
@@ -47,7 +47,7 @@ Already using espanso? See [Migrating from espanso](Migrating-from-espanso).
 
 **Getting started:** [Installation](Installation), [Getting Started](Getting-Started)
 
-**Using xpando:** [The Phrase Manager](The-Phrase-Manager), [Writing Phrases](Writing-Phrases), [Rich Text](Rich-Text), [Macros](Macros), [Folders and Apps](Folders-and-Apps), [Search](Search)
+**Using xpando:** [The Phrase Manager](The-Phrase-Manager), [Writing Phrases](Writing-Phrases), [Rich Text](Rich-Text), [Macros](Macros), [Folders and Apps](Folders-and-Apps), [Search](Search), [Quick Search](Quick-Search)
 
 **Power tools:** [Advanced Mode](Advanced-Mode), [Trigger Conflicts](Trigger-Conflicts)
 
