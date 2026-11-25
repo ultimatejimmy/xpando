@@ -23,11 +23,6 @@
   .fresh { background:var(--flash); border-radius:4px; transition:none; }
   .sig { margin-top:6px; }
   .sig a { color:#0b6bcb; }
-  #toast { position:fixed; right:26px; bottom:26px; display:flex; align-items:center; gap:10px; background:#1b1b1f; color:#fff; border-radius:10px; padding:10px 16px 10px 12px; box-shadow:0 8px 24px rgba(0,0,0,.28); opacity:0; transform:translateY(8px); }
-  #toast.on { opacity:1; transform:none; }
-  #toast img { width:22px; height:22px; }
-  #toast b { font-family:Consolas,monospace; font-weight:600; color:#8be28b; }
-  #toast i { color:#9aa0a6; font-style:normal; }
 </style>
 <div class="ribbon">
   <div class="send"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg>Send</div>
@@ -40,22 +35,20 @@
 <div class="field"><label>To</label><span class="chip">Dana Whitfield</span></div>
 <div class="field"><label>Subject</label><span>Re: Quick question about the onboarding timeline</span></div>
 <div id="body"></div>
-<div id="toast"><img src="../../xpando-app/src-tauri/icons/32x32.png" alt=""><span><b id="t-trig"></b> <i>expanded by xpando</i></span></div>
 <script>
-  const body = document.getElementById("body"), toast = document.getElementById("toast");
+  const body = document.getElementById("body");
   const caret = '<span class="caret"></span>';
   let html = "";            // everything typed so far, as HTML
   let live = "";            // the trigger being typed, shown with a grey background
   let armed = false;
   const render = () => { body.innerHTML = html + (live ? `<span class="trig${armed ? " armed" : ""}">${live}</span>` : "") + caret; };
   window.demo = {
-    reset() { html = ""; live = ""; armed = false; toast.className = ""; render(); },
+    reset() { html = ""; live = ""; armed = false; render(); },
     type(s) { html += s.replace(/\n/g, "<br>"); render(); },
     typeTrigger(ch) { live += ch; render(); },
     arm() { armed = true; render(); },
-    expand(trigger, replacement, fresh) { live = ""; armed = false; html += fresh ? `<span class="fresh">${replacement}</span>` : replacement; render(); document.getElementById("t-trig").textContent = trigger; toast.className = "on"; },
+    expand(trigger, replacement, fresh) { live = ""; armed = false; html += fresh ? `<span class="fresh">${replacement}</span>` : replacement; render(); },
     settle() { html = html.replace(/<span class="fresh">([\s\S]*?)<\/span>/g, "$1"); render(); },
-    hideToast() { toast.className = ""; },
   };
   demo.reset();
 </script>
