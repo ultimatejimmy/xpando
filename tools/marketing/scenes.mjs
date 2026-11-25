@@ -173,7 +173,7 @@ const GIFS = {
     for (const ch of ";thx") { await d(`typeTrigger(${JSON.stringify(ch)})`); await s.snap(170); }
     await d("arm()"); await s.snap(450);
     await d(`expand(";thx", "Thanks so much for reaching out. I'll look into this today and get back to you by end of day.", true)`); await s.snap(1500);
-    await d("settle()"); await d("type('\\n\\n')"); await d("hideToast()"); await s.snap(500);
+    await d("settle()"); await d("type('\\n\\n')"); await s.snap(500);
     // second phrase: ;sig
     for (const ch of ";sig") { await d(`typeTrigger(${JSON.stringify(ch)})`); await s.snap(170); }
     await d("arm()"); await s.snap(450);
