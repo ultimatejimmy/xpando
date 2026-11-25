@@ -1,47 +1,102 @@
 # Folders and Apps
 
-**Folders** and **apps** are two separate ways to organize phrases.
+Folders and apps are two separate ways to organise phrases.
 
-* A **folder** is only a label you put on a phrase, such as "Client work". It has nothing to do with where the phrase works. Put a phrase in a folder, or take it out, from the **Folder** menu on the phrase or in the editor. A phrase can be in one folder or in none.
-* **Works in** says which apps a phrase expands in: all apps, or only certain programs. The **Apps** list in the sidebar shows one entry per program. A phrase that works in several programs appears under each of them.
+* A **folder** is only a label. It helps **you** find things ("Email", "Dates", "Support"). A folder never changes where a phrase works.
+* **Works in** decides **which programs** a phrase expands in: **All apps**, or **Only these apps**. The **Apps** list in the left pane shows the programs your phrases are limited to.
+
+![The Outlook entry selected under Apps, showing the two phrases that work only in Outlook](images/apps.png)
 
 ## Folders
 
-* **New folder** asks for a name. A new folder stays even while it is empty.
-* The **...** menu on a folder renames it, or deletes it. Deleting a folder does not delete its phrases: they stay in your list, in no folder.
-* Phrases that are in no folder are listed under **No folder** and in **All phrases**.
-* Behind the scenes the folder is stored on the phrase as `xpando_folder:` in its entry. espanso ignores it.
-* Phrases that were in your files before this existed keep working: a phrase in a file such as `base.yml` is in a folder named after the file, until you file it somewhere else. Phrases in files xpando made for one program (Word, Firefox...) start in no folder.
+### Make a folder
 
-## Choosing programs
+1. Click **New folder** (under the folder list).
+2. Type a **Folder name** and click **Create folder**.
 
-The same picker is used for a folder's apps and for a phrase's **Works in**. Search by name, and pick from two lists:
+A folder name can be up to 60 characters, and two folders cannot have the same name (capital letters do not count). A new folder stays in the list even while it is empty.
 
-* **Installed**: programs found through the Start Menu and the registry. The first look can take a few seconds; the answer is kept until xpando closes. Windows only.
-* **Open now**: programs that have a window open at this moment. Open the program first if it is missing.
+### Put a phrase in a folder
 
-**Browse...** opens a file dialog to pick a program file (`.exe`). Chosen programs show as chips with a remove button. In [[Advanced Mode]] there is also a field to type a file name such as `winword.exe`.
+* In the phrase details, use the **Folder** menu. Choose a folder, or **No folder**.
+* In the phrase form (**New phrase** or **Edit**), use the **Folder** menu there.
+* A new phrase starts in the folder you were looking at.
 
-Everything is keyboard operable: arrow keys move in the tab row and the list, Space or Enter picks or unpicks a program.
+A phrase is in one folder, or in none. Phrases in no folder show under **No folder** and under **All phrases**.
 
-## Works in (one phrase)
+### Rename or delete a folder
 
-espanso limits apps per folder, not per phrase. So xpando offers **Works in** on each phrase (**All apps** or **Only these apps**) and keeps the rule by moving the phrase to the right folder:
+1. Click the folder in the left pane.
+2. Click the **...** button (**Folder options**) in the middle pane.
+3. Choose **Rename folder** or **Delete folder**.
 
-* Choosing apps puts the phrase in the folder that works in exactly those programs. If there is none, xpando creates one named after them (for example "Word" or "Word, Outlook") and moves the phrase there. Several programs share one folder.
-* Choosing **All apps** moves it back to the folder it came from (if xpando remembers it), otherwise to your default all-apps folder, and you can pick another one.
-* Before anything happens the dialog says what will happen, for example: "This moves the phrase to the folder "Word"."  Afterwards an **Undo** button moves it back. A folder xpando created stays (empty) after an undo; delete it under Folder options if you do not need it.
-* Folders for specific apps are listed under **Apps** in the folder list, so it is clear why a phrase moved.
-* The phrase text, its description comment and all its settings travel unchanged. A backup copy of each file is kept the first time it changes. Either both files change or neither.
+Deleting a folder does **not** delete its phrases. They stay in your list, in no folder. xpando says so before you confirm.
 
-xpando only reuses folders whose apps are a plain list of programs. A folder that also filters on a window title, or uses a hand-written pattern, is never reused or changed: a new folder is created instead and the dialog says so. A move is refused when the same trigger already exists in the destination (or, for an app folder, in a folder that works in all apps), when a file is read-only, or when the phrase belongs to an installed package.
+### Folders you already had
 
-[[Advanced Mode]] shows the files that will change in the dialog.
+If you imported phrases, or had files from before folders became labels, each phrase file shows as a folder named after the file. For example phrases in `base.yml` appear in a folder called `base` until you file them elsewhere. Phrases in files that xpando made for one program start in no folder.
+
+## Which programs a phrase works in
+
+Every phrase has a **Works in** setting.
+
+* **All apps** (the default): it expands everywhere.
+* **Only these apps**: it expands only in the programs you pick, for example Outlook.
+
+You can see it in the phrase details and in the editor. Click **Change** to open the dialog **Where should "name" work?**
+
+![The Works in dialog with Only these apps chosen and Outlook ticked in the list of installed programs](images/works-in.png)
+
+![Changing a phrase to work only in Word, then clicking Move phrase](images/worksin.gif)
+
+### Choose the programs
+
+1. Choose **Only these apps**.
+2. Pick programs from the list. You can search by name in **Search programs**.
+   * **Installed**: programs xpando found on this computer (Windows only). The first look can take a few seconds. **Refresh** looks again.
+   * **Open now**: programs that have a window open right now. If your program is missing, open it first.
+   * **Browse...** lets you pick a program file yourself.
+3. Chosen programs appear as tags at the top, each with an **x** to remove it.
+4. Read the sentence under the list. It says what will happen.
+5. Click **Move phrase**.
+
+For a new phrase, the same box is in the form, and the choice is applied when you save. A new phrase made while a program is selected under **Apps** starts as "Only" that program.
+
+### How it works
+
+espanso, the engine under xpando, can limit whole phrase **files** to programs, not single phrases. So when you change **Works in**, xpando moves the phrase to a file that works in exactly those programs, and creates one if needed. You do not have to manage those files.
+
+* Phrases for the same set of programs share one file.
+* The phrase, its description and all its settings move unchanged.
+* **All apps** puts the phrase back where it came from, if xpando remembers. Otherwise it goes to your main all-apps file, and you can choose another place from the **Put it in this folder** list.
+* After a move, a note says **Moved "name" to the folder "...".** with an **Undo** button. Undo puts the phrase back. A file xpando created stays (empty) after an undo.
+* xpando makes a one-time backup copy (`.bak`) of each file before the first change. Either both files change or neither does.
+
+### When a move is refused
+
+xpando tells you why, and changes nothing. For example:
+
+* The same trigger already exists where the phrase would go (a clash).
+* A file is read-only.
+* The phrase comes from an installed espanso package. Change packages with espanso, not in xpando.
+* The setup of that file is too unusual to change safely.
+
+If a program limit was written by hand in a way xpando does not manage (for example by window title), the phrase details say so, and changing **Works in** moves the phrase to another file.
+
+### The Apps list
+
+* One entry per program, with a count. A phrase that works in several programs appears under each of them.
+* Programs with no phrases are hidden. They come back when they get a phrase. [Advanced Mode](Advanced-Mode) shows all of them, with their file names.
+* A message such as "No setting loads the folder ..., so this phrase does not expand" means nothing loads the file the phrase is in. Change **Works in** to fix it.
 
 ## Limits
 
-* Programs are matched by file name, not by full path. On macOS and Linux, "Open now" uses the process list (`ps`); on Linux that is every running process. "Installed" is Windows only, and "Browse..." works on Windows (tested) and Linux with `zenity` (not tested); on macOS use "Open now". The macOS and Linux paths have not been tested on those systems.
+* Programs are matched by file name (for example `winword.exe`), not by full path.
+* **Installed** works on Windows only. **Browse...** is tested on Windows. On Linux it needs `zenity`, and on macOS use **Open now**. The macOS and Linux versions of the picker have not been tested.
+* On macOS and Linux, **Open now** uses the list of running processes.
+* Only one app setting applies to the program in front at a time: the first matching app-specific one, otherwise the general one.
+* Files inside subfolders of `match` and installed packages cannot be changed here.
 
-* Folders inside subfolders of `match`, and the `packages` folder, cannot be changed here.
-* If a configuration is too unusual for xpando to change safely, the command is disabled and says why. Nothing is changed.
-* Only one configuration is active at a time: the first app-specific one that matches the window, otherwise the default. A folder works in an app only if that configuration loads it.
+---
+
+Related pages: [The Phrase Manager](The-Phrase-Manager) | [Writing Phrases](Writing-Phrases) | [Advanced Mode](Advanced-Mode) | [Migrating from espanso](Migrating-from-espanso)

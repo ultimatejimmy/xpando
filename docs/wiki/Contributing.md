@@ -1,34 +1,37 @@
 # Contributing
 
-xpando is open source under GPL-3.0. Fixes, ideas and wiki improvements are welcome.
+xpando is free software under the **GPL-3.0** license. Bug reports, ideas, fixes and documentation improvements are welcome.
 
-## Where the code is
+## Ways to help
 
-| Folder | What |
-|---|---|
-| `xpando-app/` | The Tauri 2 app: a TypeScript interface (`src/`) and a Rust backend (`src-tauri/`). |
-| `xpando-core/` | Rust library that reads and edits phrase files safely. |
-| `espanso-*`, `espanso/` | The engine, from espanso. Changes here stay small so upstream merges stay easy. |
-| `docs/xpando/` | Design notes: plan, terms, folders, rich text, set clipboard, releasing. |
-| `docs/wiki/` | The source of this wiki. |
+* **Report a problem or suggest a feature:** [open an issue](https://github.com/ultimatejimmy/xpando/issues). Include your xpando version (Settings, under Updates), your system, and what you did. Please do not paste private phrases.
+* **Test on macOS and Linux.** These builds get much less testing than Windows. Reports about them are very useful.
+* **Try beta versions** (Settings, **Get beta versions**) and tell us what you find.
+* **Improve the docs.** If something on this wiki is unclear or wrong, open an issue.
+* **Send a pull request.** Fixes and small features are welcome. For something big, open an issue first so we can talk about it.
 
-## Build and run
+## Before a pull request
 
-You need Rust (stable) with the platform build tools, and Node.js. See `Compilation.md` in the repository for the engine. For the app, install the frontend dependencies in `xpando-app` and use the Tauri development command.
+1. Build and run the app: see [Building from Source](Building-from-Source).
+2. Run the checks of the part you changed (`cargo test` in `xpando-core`, `npm run build` in `xpando-app`).
+3. Keep changes focused and say what and why in the description.
 
-Dependency rules: use the project's configured registry, install with scripts disabled (`--ignore-scripts`), pin exact versions, commit the lockfile and use `npm ci` in CI.
+Branch from `dev`, the main development branch.
 
 ## Guidelines
 
-* **Normal mode is simple, Advanced mode adds more.** Each control is always visible, behind **More options**, or Advanced only. Nothing is removed.
-* **One word for one thing.** Use the words on the [[Home]] page (phrase, trigger, text, macro, setting, folder). Never "variable", "placeholder" or "parameter" for normal users.
-* **Never lose the user's text.** Guard unsaved changes, offer Undo, write atomically with backups.
-* Every new feature gets a wiki page or section in the same pull request.
+* **Normal mode is simple. Advanced mode adds more.** Each control is always visible, behind **More options**, or Advanced only. Nothing is removed, only moved.
+* **One word for one thing.** Use phrase, trigger, text, macro, setting and folder as explained on the [Home](Home) page. Do not say "variable", "placeholder" or "parameter" to normal-mode users.
+* **Never lose the user's text.** Guard unsaved changes, offer Undo, and write files atomically with backups.
+* **Dependencies:** pin exact versions, install with `--ignore-scripts`, commit the lockfile and use `npm ci` in CI.
+* **Keep the engine close to upstream.** Changes to the engine (espanso's code, plus xpando's additions) stay small so upstream fixes can still be merged.
 
-## Editing the wiki
+## Credits and license
 
-Do not edit the wiki on GitHub: it is overwritten on every publish. Edit the Markdown in `docs/wiki/` and open a pull request. When it is merged to `dev`, a workflow publishes it. Screenshots are listed in `docs/wiki/SCREENSHOTS.md`; put images in `docs/wiki/images/`.
+xpando is built on [espanso](https://github.com/espanso/espanso), created by [Federico Terzi](https://github.com/federico-terzi) and maintained by the espanso team and contributors. Thank you all. The espanso engine, its documentation and its community live at [espanso.org](https://espanso.org).
 
-## Pull requests
+xpando is licensed under the [GPL-3.0 license](https://github.com/ultimatejimmy/xpando/blob/dev/LICENSE), the same as espanso. The panda icon is from [Lucide](https://lucide.dev), and the wordmark font is Fredoka (SIL Open Font License).
 
-Branch from `dev`, keep changes focused, run the tests of the part you changed, and describe what and why.
+---
+
+Related pages: [Building from Source](Building-from-Source) | [FAQ](FAQ) | [Home](Home)

@@ -1,0 +1,61 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Expansion demo</title>
+<!-- A staged illustration of what xpando does: type a short trigger anywhere and it turns into
+     the full phrase. Driven frame by frame by scenes.mjs; this is not a real mail program. -->
+<style>
+  :root { --bg:#fff; --ink:#1b1b1f; --mute:#6b6f76; --line:#e3e5e8; --soft:#f4f6f8; --green:#107c10; --flash:#d7f0d4; }
+  * { box-sizing: border-box; }
+  html, body { margin:0; height:100%; background:var(--bg); color:var(--ink); font:15px/1.5 "Segoe UI Variable Text","Segoe UI",system-ui,sans-serif; }
+  .ribbon { display:flex; align-items:center; gap:10px; padding:12px 20px; border-bottom:1px solid var(--line); background:var(--soft); }
+  .send { background:var(--green); color:#fff; border-radius:6px; padding:7px 18px; font-weight:600; display:flex; gap:8px; align-items:center; }
+  .tools { display:flex; gap:6px; margin-left:12px; color:var(--mute); }
+  .tools span { width:32px; height:32px; border-radius:6px; display:grid; place-items:center; font-weight:600; }
+  .tools svg { width:18px; height:18px; stroke:currentColor; fill:none; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; }
+  .field { display:flex; align-items:center; gap:14px; padding:10px 28px; border-bottom:1px solid var(--line); }
+  .field label { color:var(--mute); width:64px; }
+  .chip { background:var(--soft); border:1px solid var(--line); border-radius:999px; padding:1px 12px; }
+  #body { padding:26px 28px; font-size:16px; min-height:420px; white-space:pre-wrap; }
+  #body p { margin:0; }
+  .caret { display:inline-block; width:2px; height:1.15em; background:var(--ink); vertical-align:text-bottom; margin-left:1px; }
+  .trig { background:#ececf0; border-radius:4px; }
+  .trig.armed { background:var(--flash); outline:2px solid #9ad69a; }
+  .fresh { background:var(--flash); border-radius:4px; transition:none; }
+  .sig { margin-top:6px; }
+  .sig a { color:#0b6bcb; }
+  #toast { position:fixed; right:26px; bottom:26px; display:flex; align-items:center; gap:10px; background:#1b1b1f; color:#fff; border-radius:10px; padding:10px 16px 10px 12px; box-shadow:0 8px 24px rgba(0,0,0,.28); opacity:0; transform:translateY(8px); }
+  #toast.on { opacity:1; transform:none; }
+  #toast img { width:22px; height:22px; }
+  #toast b { font-family:Consolas,monospace; font-weight:600; color:#8be28b; }
+  #toast i { color:#9aa0a6; font-style:normal; }
+</style>
+<div class="ribbon">
+  <div class="send"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg>Send</div>
+  <div class="tools">
+    <span><b>B</b></span><span><i>I</i></span><span><u>U</u></span>
+    <span><svg viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg></span>
+    <span><svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/></svg></span>
+  </div>
+</div>
+<div class="field"><label>To</label><span class="chip">Dana Whitfield</span></div>
+<div class="field"><label>Subject</label><span>Re: Quick question about the onboarding timeline</span></div>
+<div id="body"></div>
+<div id="toast"><img src="../../xpando-app/src-tauri/icons/32x32.png" alt=""><span><b id="t-trig"></b> <i>expanded by xpando</i></span></div>
+<script>
+  const body = document.getElementById("body"), toast = document.getElementById("toast");
+  const caret = '<span class="caret"></span>';
+  let html = "";            // everything typed so far, as HTML
+  let live = "";            // the trigger being typed, shown with a grey background
+  let armed = false;
+  const render = () => { body.innerHTML = html + (live ? `<span class="trig${armed ? " armed" : ""}">${live}</span>` : "") + caret; };
+  window.demo = {
+    reset() { html = ""; live = ""; armed = false; toast.className = ""; render(); },
+    type(s) { html += s.replace(/\n/g, "<br>"); render(); },
+    typeTrigger(ch) { live += ch; render(); },
+    arm() { armed = true; render(); },
+    expand(trigger, replacement, fresh) { live = ""; armed = false; html += fresh ? `<span class="fresh">${replacement}</span>` : replacement; render(); document.getElementById("t-trig").textContent = trigger; toast.className = "on"; },
+    settle() { html = html.replace(/<span class="fresh">([\s\S]*?)<\/span>/g, "$1"); render(); },
+    hideToast() { toast.className = ""; },
+  };
+  demo.reset();
+</script>
