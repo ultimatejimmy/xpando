@@ -303,25 +303,6 @@ function WorksInDialog({
       {mode === "all" && current.kind === "all" && (
         <p className="fm-help">This phrase already works in all apps.</p>
       )}
-      {mode === "all" && current.kind !== "all" && (
-        <div className="fm-form">
-          <label htmlFor={`${uid}-target`}>Put it in this folder</label>
-          <select
-            id={`${uid}-target`}
-            className="field wi-select"
-            value={target}
-            onChange={(e) => setTarget(e.target.value)}
-          >
-            {allFolders.length === 0 && <option value="">(no folder works in all apps)</option>}
-            {allFolders.map((f) => (
-              <option key={f.file} value={f.file}>
-                {f.name}
-              </option>
-            ))}
-          </select>
-        </div>
-      )}
-
       <div className="wi-result" aria-live="polite">
         {place && !preview && !problem && <p className="fm-help">Checking…</p>}
         {preview && !preview.unchanged && !blockedText && <p>{preview.notice}</p>}
@@ -368,7 +349,7 @@ function WorksInDialog({
       <div className="fm-buttons">
         <button type="button" className="btn btn-primary" onClick={() => void move()} disabled={!canMove}>
           <MoveRight size={16} aria-hidden="true" />
-          {busy ? "Moving…" : "Move phrase"}
+          {busy ? "Saving…" : "Save"}
         </button>
         <button type="button" className="btn" onClick={dialog.close} disabled={busy}>
           Cancel
@@ -397,8 +378,7 @@ export function MovedNotice({
   return (
     <div className="wi-toast" role="status">
       <span>
-        Moved “{phraseName}” to the folder “{outcome.to_name}”.
-        {outcome.created_folder && " xpando made that folder for these apps."}
+        Changed where “{phraseName}” works.
       </span>
       <button type="button" className="btn" onClick={onUndo} disabled={busy}>
         <Undo2 size={16} aria-hidden="true" />
