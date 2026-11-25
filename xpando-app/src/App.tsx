@@ -37,6 +37,7 @@ import {
   sameFolder,
 } from "./folderNames";
 import { RichTextView } from "./RichLazy";
+import { StatsButton, StatsDialog } from "./Stats";
 import { VarsAka, macroLabel } from "./VarsEditor";
 import { ClipboardHackOffer, EngineWarning, useEngine } from "./EnginePanels";
 import {
@@ -260,6 +261,7 @@ export default function App() {
   const dataProblem = data.info?.problem ?? data.error;
   const importOffer = useImportOffer(data.info !== null && !data.info.problem);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [statsOpen, setStatsOpen] = useState(false);
   const updates = useUpdates();
 
   // A first run with nothing to import starts with a few sample phrases in a sample folder.
@@ -674,6 +676,7 @@ export default function App() {
           />
         </div>
         <AdvancedSwitch on={advanced} onChange={setAdvanced} />
+        <StatsButton onClick={() => setStatsOpen(true)} />
         <SettingsButton onClick={() => setSettingsOpen(true)} />
       </header>
       {advanced && (searchFocused || !query) && <SearchHint />}
@@ -1029,6 +1032,16 @@ export default function App() {
           preview={importOffer.preview}
           onClose={importOffer.close}
           onImported={() => void dataChanged()}
+        />
+      )}
+      {statsOpen && (
+        <StatsDialog
+          onClose={() => setStatsOpen(false)}
+          names={Object.fromEntries(
+            folders.flatMap((f) =>
+              f.phrases.flatMap((p) => (p.label ? p.triggers.map((t) => [t, p.label as string]) : [])),
+            ),
+          )}
         />
       )}
       {settingsOpen && (

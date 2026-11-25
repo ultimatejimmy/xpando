@@ -1,0 +1,318 @@
+/* Your savings dialog. Uses the app's colour variables and the Settings rows. */
+
+.fm-dialog:has(.stats) {
+  width: min(980px, calc(100vw - 32px));
+  overflow-y: auto;
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+  gap: 20px;
+  align-items: start;
+}
+
+.stats-main,
+.stats-side {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+}
+
+.stats-side .st-group {
+  margin: 0;
+}
+
+/* Narrow windows: one column, and the dialog scrolls. */
+@media (max-width: 880px) {
+  .stats-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.stats {
+  display: grid;
+  gap: 12px;
+}
+
+.stats p {
+  margin: 0;
+}
+
+.stats-bar {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.stats-seg {
+  display: inline-flex;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.stats-seg button {
+  padding: 4px 12px;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.stats-seg button.on {
+  background: var(--accent);
+  color: #fff;
+}
+
+.stats-seg button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.stats-note {
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: var(--bg);
+  font-size: 13px;
+}
+
+.stats-link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.stats-hero {
+  padding: 14px 18px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--accent) 12%, var(--surface));
+  color: var(--accent);
+}
+
+.stats-hero-k {
+  font-size: 13px;
+}
+
+.stats-hero-v {
+  font-size: 34px;
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+.stats-hero-s {
+  font-size: 13px;
+}
+
+.stats-tiles {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.stats-tile {
+  padding: 10px;
+  border-radius: 8px;
+  background: var(--bg);
+}
+
+.stats-tile .k,
+.stats-tile .s {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.stats-tile .v {
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.stats-h {
+  margin: 0 0 6px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.stats-bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 5px;
+  height: 70px;
+}
+
+.stats-col {
+  display: flex;
+  flex: 1;
+  align-items: flex-end;
+  height: 100%;
+  border-bottom: 1px solid var(--border);
+}
+
+.stats-col i {
+  display: block;
+  width: 100%;
+  border-radius: 3px 3px 0 0;
+  background: var(--accent);
+}
+
+.stats-empty {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.stats-top {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.stats-top li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 0;
+  border-top: 1px solid var(--border);
+  font-size: 13px;
+}
+
+.stats-top .n {
+  width: 18px;
+  color: var(--muted);
+}
+
+.stats-top .name {
+  display: flex;
+  flex: 1;
+  gap: 8px;
+  align-items: baseline;
+  min-width: 0;
+}
+
+.stats-top .name code {
+  flex: none;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: var(--bg);
+  font-size: 12px;
+}
+
+.stats-top .label {
+  overflow: hidden;
+  color: var(--muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.stats-top .meter {
+  flex: 0 0 90px;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--bg);
+}
+
+.stats-top .meter i {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+  background: var(--accent);
+}
+
+.stats-top .time {
+  min-width: 110px;
+  text-align: right;
+}
+
+.stats-top .uses {
+  color: var(--muted);
+}
+
+.stats-num {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+}
+
+.stats-below {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-top: 8px;
+}
+
+.stats-test {
+  display: grid;
+  gap: 8px;
+  width: 100%;
+}
+
+.stats-test-text {
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--bg);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.stats-test-text .ok {
+  color: var(--accent);
+}
+
+.stats-test-text .bad {
+  color: #c42b1c;
+  text-decoration: underline;
+}
+
+.stats-test textarea {
+  width: 100%;
+  resize: none;
+  font: inherit;
+}
+
+.stats-test-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.stats-test-foot .btn-quiet {
+  margin-left: auto;
+}
+
+.stats-test-time {
+  font-variant-numeric: tabular-nums;
+}
+
+.stats-test-src {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  font-style: italic;
+}
+
+.stats-side .st-row {
+  padding: 10px 14px;
+}
+
+/* Slightly smaller buttons for the settings rows, in step with the segmented switches. */
+.btn.stats-small {
+  min-height: 28px;
+  padding: 2px 12px;
+  font-size: 13px;
+}
+
+.stats-num .field {
+  width: auto;
+  padding: 3px 8px;
+  text-align: right;
+}
+
+.stats-test textarea.field {
+  min-height: 56px;
+}

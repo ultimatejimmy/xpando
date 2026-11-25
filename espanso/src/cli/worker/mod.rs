@@ -44,6 +44,7 @@ mod match_cache;
 mod secure_input;
 mod stats_recorder;
 mod ui;
+pub mod xpando_stats;
 
 pub fn new() -> CliModule {
     #[allow(clippy::needless_update)]
@@ -94,8 +95,10 @@ fn worker_main(args: CliModuleArgs) -> i32 {
     let icon_paths =
         crate::icon::load_icon_paths(&paths.runtime).expect("unable to initialize icons");
 
-    // Initialize stats database and set recorder (configurable, default OFF)
-    if config_store.default().stats_enabled() {
+    // xpando's own statistics (the app sets XPANDO_STATS_DIR); otherwise espanso's, default OFF.
+    if xpando_stats::init() {
+        info!("xpando stats recorder initialized");
+    } else if config_store.default().stats_enabled() {
         if let Err(err) = crate::cli::stats::init_stats_db_in(&paths.config) {
             error!("failed to initialize stats database: {}", err);
         } else {

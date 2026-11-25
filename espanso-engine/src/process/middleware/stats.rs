@@ -26,7 +26,10 @@ use std::sync::{Arc, OnceLock};
 // A thin interface implemented by the host binary (espanso) to persist stats.
 #[derive(Clone, Debug)]
 pub struct StatsRecord {
+    /// What was typed to start the expansion; empty when it came from a hotkey or the search box.
     pub trigger: String,
+    /// Characters in the text that replaced it (0 for images).
+    pub chars: usize,
 }
 
 pub trait StatsRecorder: Send + Sync {
@@ -51,6 +54,7 @@ fn get_recorder() -> &'static Arc<dyn StatsRecorder> {
 // Minimal middleware to attribute a trigger to an actual injection.
 struct PendingEntry {
     trigger: String,
+    chars: usize,
 }
 
 pub struct StatsMiddleware {
@@ -73,18 +77,22 @@ impl Middleware for StatsMiddleware {
     fn next(&self, event: Event, _: &mut dyn FnMut(Event)) -> Event {
         match &event.etype {
             EventType::RenderingRequested(r_event) => {
-                if let Some(trigger) = &r_event.trigger {
-                    let mut pend = self.pending.borrow_mut();
-                    if pend.len() > 4096 {
-                        // simple capacity cap
-                        pend.clear();
-                    }
-                    pend.insert(
-                        event.source_id,
-                        PendingEntry {
-                            trigger: trigger.clone(),
-                        },
-                    );
+                let mut pend = self.pending.borrow_mut();
+                if pend.len() > 4096 {
+                    // simple capacity cap
+                    pend.clear();
+                }
+                pend.insert(
+                    event.source_id,
+                    PendingEntry {
+                        trigger: r_event.trigger.clone().unwrap_or_default(),
+                        chars: 0,
+                    },
+                );
+            }
+            EventType::Rendered(rendered) => {
+                if let Some(entry) = self.pending.borrow_mut().get_mut(&event.source_id) {
+                    entry.chars = rendered.body.chars().count();
                 }
             }
             EventType::ImageRequested(i_event) => {
@@ -97,6 +105,7 @@ impl Middleware for StatsMiddleware {
                         event.source_id,
                         PendingEntry {
                             trigger: trigger.clone(),
+                            chars: 0,
                         },
                     );
                 }
@@ -116,6 +125,7 @@ impl Middleware for StatsMiddleware {
                 if let Some(entry) = self.pending.borrow_mut().remove(&event.source_id) {
                     let rec = StatsRecord {
                         trigger: entry.trigger,
+                        chars: entry.chars,
                     };
                     get_recorder().record(rec);
                 }

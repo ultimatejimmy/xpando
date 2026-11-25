@@ -42,15 +42,23 @@ impl<'a> funnel::Source<'a> for DetectSource {
             .recv(&self.receiver)
             .expect("unable to select data from DetectSource receiver");
         match input_event {
-            InputEvent::Keyboard(keyboard_event) => Some(Event {
-                source_id,
-                etype: EventType::Keyboard(KeyboardEvent {
-                    key: convert_to_engine_key(keyboard_event.key),
-                    value: keyboard_event.value,
-                    status: convert_to_engine_status(keyboard_event.status),
-                    variant: keyboard_event.variant.map(convert_to_engine_variant),
-                }),
-            }),
+            InputEvent::Keyboard(keyboard_event) => {
+                if matches!(
+                    keyboard_event.status,
+                    espanso_detect::event::Status::Pressed
+                ) {
+                    crate::cli::worker::xpando_stats::key_pressed(keyboard_event.value.as_deref());
+                }
+                Some(Event {
+                    source_id,
+                    etype: EventType::Keyboard(KeyboardEvent {
+                        key: convert_to_engine_key(keyboard_event.key),
+                        value: keyboard_event.value,
+                        status: convert_to_engine_status(keyboard_event.status),
+                        variant: keyboard_event.variant.map(convert_to_engine_variant),
+                    }),
+                })
+            }
             InputEvent::Mouse(mouse_event) => Some(Event {
                 source_id,
                 etype: EventType::Mouse(MouseEvent {

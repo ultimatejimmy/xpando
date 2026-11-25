@@ -23,6 +23,8 @@ pub struct DefaultStatsRecorder;
 
 impl StatsRecorder for DefaultStatsRecorder {
     fn record(&self, record: StatsRecord) {
-        let _ = crate::cli::stats::record_stats(record);
+        if !record.trigger.is_empty() {
+            let _ = crate::cli::stats::record_stats(record);
+        }
     }
 }

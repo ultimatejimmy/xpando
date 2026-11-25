@@ -79,6 +79,10 @@ const STILLS = {
     await s.click("button[aria-label*=ettings]"); await s.wait(700);
     await s.hideCursor();
   },
+  async savings(s) {
+    await s.click("button[aria-label='Your savings']"); await s.wait(900);
+    await s.hideCursor();
+  },
   // The Alt+Space search box, drawn from tools/marketing/popup.html (a native window in the real app).
   async "popup-search"(s) { await popupShot(s, ""); },
   async "popup-filter"(s) { await popupShot(s, "thank"); },

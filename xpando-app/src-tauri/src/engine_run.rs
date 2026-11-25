@@ -34,7 +34,7 @@ pub struct EngineRun {
     pub problem: Option<String>,
 }
 
-fn runtime_dir(app: &AppHandle) -> Result<PathBuf, String> {
+pub fn runtime_dir(app: &AppHandle) -> Result<PathBuf, String> {
     let dir = app
         .path()
         .app_local_data_dir()
@@ -42,6 +42,12 @@ fn runtime_dir(app: &AppHandle) -> Result<PathBuf, String> {
         .join("engine");
     fs::create_dir_all(&dir).map_err(|e| format!("Could not create {}: {e}", dir.display()))?;
     Ok(dir)
+}
+
+/// Where the engine writes the usage statistics (on this computer only, never in the data
+/// folder, so a synced folder is not touched by every expansion).
+pub fn stats_dir(app: &AppHandle) -> Result<PathBuf, String> {
+    Ok(runtime_dir(app)?.join("stats"))
 }
 
 fn stopped_flag(app: &AppHandle) -> Result<PathBuf, String> {
@@ -86,6 +92,7 @@ fn base_command(app: &AppHandle, engine: &Path) -> Result<Command, String> {
     let mut cmd = Command::new(engine);
     cmd.env("ESPANSO_CONFIG_DIR", data)
         .env("ESPANSO_RUNTIME_DIR", runtime)
+        .env("XPANDO_STATS_DIR", stats_dir(app)?)
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null());

@@ -12,6 +12,7 @@
 * [Folders and Apps](Folders-and-Apps)
 * [Search](Search)
 * [Quick Search](Quick-Search)
+* [Your Savings](Your-Savings)
 
 **Power tools**
 * [Advanced Mode](Advanced-Mode)
