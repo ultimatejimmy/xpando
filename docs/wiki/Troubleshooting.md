@@ -29,7 +29,7 @@ These messages appear under **Expansion and search** in **Settings**:
 | "Could not start the engine: ..." | The system reported an error when starting the engine, and the rest of the message says which. Try **Turn on** again. If it keeps failing, report it. |
 | "Windows did not allow xpando to start at sign-in." | Your system blocked the start entry. Try again, or start xpando by hand. |
 
-When the engine starts, you usually see a notification "xpando is running!". The engine's search box (**Alt+Space**) also lists **Show xpando's logs**.
+When the engine starts, you usually see a notification "xpando is running!". The engine's search box (**Alt+Space** unless you changed the shortcut) also lists **Show xpando's logs**.
 
 ## "New phrase" is greyed out
 

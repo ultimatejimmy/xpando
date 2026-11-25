@@ -1,6 +1,6 @@
 # Quick Search
 
-Press **Alt+Space** in any program and a small search box opens. Type a few letters of a phrase, press **Enter**, and xpando types it where you were. You never have to open the xpando window.
+Press a keyboard shortcut in any program and a small search box opens. The shortcut is **Alt+Space** unless you choose your own (see [Change the shortcut](#change-the-shortcut)). Type a few letters of a phrase, press **Enter**, and xpando types it where you were. You never have to open the xpando window.
 
 ![A short animation: in an email, the writer presses Alt and Space, a search box opens over the email, they type "thank" and press Enter, and the phrase is typed into the email.](images/popup.gif)
 
@@ -9,7 +9,7 @@ Press **Alt+Space** in any program and a small search box opens. Type a few lett
 ## Use it
 
 1. Click where you want the text, for example in an email or a chat box.
-2. Press **Alt+Space**. The search box opens.
+2. Press the search shortcut (**Alt+Space** by default). The search box opens.
 3. Type a few letters. The list narrows as you type.
 4. Press **Enter** to type the highlighted phrase, or use one of the shortcuts below.
 
@@ -50,12 +50,12 @@ Type **>** to see the built-in commands instead of phrases:
 3. Press the keys you want. Hold **Ctrl** or **Alt** (you can add **Shift**) and press a letter, number, F key or Space (some other keys work too).
 4. Press **Esc** if you change your mind.
 
-xpando restarts the engine for you so the new shortcut works at once. If another program already uses the same keys, choose different ones. The shortcut is stored in the `search_shortcut` line of `config/default.yml` in your data folder. If it is set to `OFF` there, Settings shows "Off."
+xpando restarts the engine for you so the new shortcut works at once. If another program already uses the same keys, choose different ones. The shortcut is stored in the `search_shortcut` line of `config/default.yml` in your data folder. If it is set to `OFF` there, the shortcut is turned off and Settings shows "Off."
 
 ## If nothing happens
 
 * Check that the engine is running. xpando shows a warning in its window when it is not.
-* Another program may already use **Alt+Space**. Choose a different shortcut as described above.
+* Another program may already use the same keys (**Alt+Space** by default). Choose a different shortcut as described above.
 * On macOS and Linux the shortcut and the box come from the same engine but get less testing than Windows. See [Troubleshooting](Troubleshooting).
 
 ---

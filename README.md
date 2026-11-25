@@ -66,7 +66,7 @@ so espanso's features keep working, but you no longer have to hand-edit them.
 
 <p align="center"><img src="site/assets/gif/create.gif" alt="Creating a phrase with a trigger, a name and text that includes a date macro, then saving it" width="760" /></p>
 
-**Search from any app.** Press Alt+Space anywhere, type a few letters and press Enter: xpando types the phrase where you were.
+**Search from any app.** Press a shortcut anywhere (Alt+Space by default, and you can change it), type a few letters and press Enter: xpando types the phrase where you were.
 
 <p align="center"><img src="site/assets/gif/popup.gif" alt="Pressing Alt and Space in an email, typing thank in the search box that opens and pressing Enter to type the phrase" width="760" /></p>
 

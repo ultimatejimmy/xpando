@@ -51,7 +51,7 @@ Examples:
 
 ## Search from any program
 
-Press **Alt+Space** in any program to open a small search box, pick a phrase and have it typed where you were. It also has a few built-in commands. See [Quick Search](Quick-Search) for how it works and how to change the shortcut.
+Press the search shortcut (**Alt+Space** unless you change it) in any program to open a small search box, pick a phrase and have it typed where you were. It also has a few built-in commands. See [Quick Search](Quick-Search) for how it works and how to change the shortcut.
 
 ---
 
