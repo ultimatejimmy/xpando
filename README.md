@@ -32,7 +32,10 @@ so espanso's features keep working, but you no longer have to hand-edit them.
 > first time it edits a file).
 
 <p align="center">
-  <img src="site/assets/img/library.light.png" alt="The xpando phrase manager: folders, phrase list and details" width="860" />
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="site/assets/img/library.dark.png">
+    <img src="site/assets/img/library.light.png" alt="The xpando phrase manager: folders, phrase list and details" width="860" />
+  </picture>
 </p>
 
 ## What you get
@@ -57,6 +60,41 @@ so espanso's features keep working, but you no longer have to hand-edit them.
   xpando's engine is its own build of espanso's: mostly the same, with additions that stock
   espanso does not have. See the [espanso docs](https://espanso.org/docs/) for the shared parts.
 
+## A quick tour
+
+**Make a phrase in seconds.** Pick a trigger, write the text and drop in a macro such as today's date.
+
+<p align="center"><img src="site/assets/gif/create.gif" alt="Creating a phrase with a trigger, a name and text that includes a date macro, then saving it" width="760" /></p>
+
+**Find anything as you type.** Search looks through triggers, names and the text itself.
+
+<p align="center"><img src="site/assets/gif/search.gif" alt="Typing in the search box while the phrase list narrows with every letter" width="760" /></p>
+
+**Rich text, like a document.** Bold, lists, links and tables with a familiar toolbar.
+
+<p align="center"><img src="site/assets/gif/richtext.gif" alt="Editing an email signature in the rich text editor and adding a bold line" width="760" /></p>
+
+**Macros fill in the details.** Dates in any format, the clipboard, a random pick, a choice list and more.
+
+<p align="center"><img src="site/assets/gif/macros.gif" alt="Changing how a date macro is written by picking one of the example formats" width="760" /></p>
+
+**The right phrase in the right app.** Limit a phrase to the programs you choose.
+
+<p align="center"><img src="site/assets/gif/worksin.gif" alt="Choosing the programs a phrase works in and moving it to its own app entry" width="760" /></p>
+
+**Power tools, one switch away.** Advanced mode adds the YAML view, every match option and the trigger conflicts panel.
+
+<p align="center"><img src="site/assets/gif/advanced.gif" alt="Turning on Advanced mode to show the YAML view, the conflicts panel and the status bar" width="760" /></p>
+
+<details>
+<summary>More screenshots</summary>
+
+<p align="center"><img src="site/assets/img/settings.light.png" alt="Settings: data folder in OneDrive, import from espanso, start at sign-in, search shortcut and updates" width="760" /></p>
+<p align="center"><img src="site/assets/img/conflicts.light.png" alt="The trigger conflicts panel warning that one trigger is the start of another" width="760" /></p>
+<p align="center"><img src="site/assets/img/library.dark.png" alt="The phrase manager in the dark theme" width="760" /></p>
+
+</details>
+
 ## Install
 
 Get the installer for your system from the [latest release](https://github.com/ultimatejimmy/xpando/releases/latest):
@@ -74,7 +112,7 @@ marked pre-release). xpando checks for updates daily and can install them for yo
 
 ## Support
 
-xpando is free. If it saves you time, you can tip via [Ko-fi](https://ko-fi.com/jimmypautz),
+xpando is free. If it saves you time, you can support it via [Ko-fi](https://ko-fi.com/jimmypautz),
 [Buy Me a Coffee](https://buymeacoffee.com/ultimatejimmy) or [Liberapay](https://liberapay.com/ultimatejimmy).
 A star, a bug report or telling a friend helps just as much.
 
