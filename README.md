@@ -72,6 +72,12 @@ marked pre-release). xpando checks for updates daily and can install them for yo
 [wiki](https://github.com/ultimatejimmy/xpando/wiki) for a guided tour and
 [docs/xpando/RELEASING.md](docs/xpando/RELEASING.md) for how releases are made.
 
+## Support
+
+xpando is free. If it saves you time, you can tip via [Ko-fi](https://ko-fi.com/jimmypautz),
+[Buy Me a Coffee](https://buymeacoffee.com/ultimatejimmy) or [Liberapay](https://liberapay.com/ultimatejimmy).
+A star, a bug report or telling a friend helps just as much.
+
 ## Build from source
 
 You need Rust (stable) and Node.js. On Windows, install the Visual Studio 2022
