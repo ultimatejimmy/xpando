@@ -64,21 +64,24 @@ pub fn initialize_notification_thread(notification_icon_path: PathBuf) -> Result
         *lock = Some(sender);
     }
 
-    std::thread::Builder::new().name("notification-thread".to_string()).spawn(move || {
-    register_app_user_model_id(&notification_icon_path);
+    std::thread::Builder::new()
+        .name("notification-thread".to_string())
+        .spawn(move || {
+            register_app_user_model_id(&notification_icon_path);
 
-    while let Ok(message) = receiver.recv() {
-      if let Err(err) = Toast::new(XPANDO_APP_USER_MODEL_ID)
-        .icon(&notification_icon_path, IconCrop::Square, "xpando")
-        .title("xpando")
-        .text1(&message)
-        .sound(None)
-        .show()
-        .map_err(|e| anyhow!("failed to show notification: {}", e)) {    
-          error!("unable to show notification: {}", err); 
-      }
-    }
-  })?;
+            while let Ok(message) = receiver.recv() {
+                if let Err(err) = Toast::new(XPANDO_APP_USER_MODEL_ID)
+                    .icon(&notification_icon_path, IconCrop::Square, "xpando")
+                    .title("xpando")
+                    .text1(&message)
+                    .sound(None)
+                    .show()
+                    .map_err(|e| anyhow!("failed to show notification: {}", e))
+                {
+                    error!("unable to show notification: {}", err);
+                }
+            }
+        })?;
 
     Ok(())
 }
