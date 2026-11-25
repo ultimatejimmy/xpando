@@ -126,19 +126,16 @@ pub fn key_pressed(value: Option<&str>) {
     if now < t.quiet_until {
         return;
     }
-    match t.last_key {
-        Some(prev) => {
-            let gap = now.duration_since(prev);
-            if gap < TOO_FAST {
-                return;
-            }
-            if gap <= PAUSE {
-                t.active_ms += gap.as_millis() as u64;
-                t.chars += 1;
-                t.dirty = true;
-            }
+    if let Some(prev) = t.last_key {
+        let gap = now.duration_since(prev);
+        if gap < TOO_FAST {
+            return;
         }
-        None => {}
+        if gap <= PAUSE {
+            t.active_ms += gap.as_millis() as u64;
+            t.chars += 1;
+            t.dirty = true;
+        }
     }
     t.last_key = Some(now);
     if t.chars > HALVE_AT_CHARS {
