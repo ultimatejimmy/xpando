@@ -34,11 +34,13 @@ def font(size):
         return ImageFont.load_default()
 
 
-TITLE = {"text": "xpando", "icon": True}
+TITLE = {"text": "xpando", "icon": True, "frameless": False}
 
 
 def window(shot: Image.Image, scheme: str) -> Image.Image:
     """The screenshot inside a window frame, as RGBA with transparent rounded corners."""
+    if TITLE["frameless"]:  # a popup with no title bar: the capture already has its own rounded corners
+        return shot.convert("RGBA")
     t = THEME[scheme]
     w, h = shot.size
     s = max(1, round(w / 1280))  # work in device pixels when the capture was taken at 2x
@@ -95,7 +97,7 @@ def place(win: Image.Image, scheme, flat=False, shadow=True) -> Image.Image:
     if shadow:
         sh = Image.new("RGBA", size, (0, 0, 0, 0))
         ImageDraw.Draw(sh).rounded_rectangle(
-            [pad, pad + 14 * s, pad + win.size[0], pad + win.size[1] + 14 * s], radius=RADIUS * s,
+            [pad, pad + 14 * s, pad + win.size[0], pad + win.size[1] + 14 * s], radius=(16 if TITLE["frameless"] else RADIUS * s),
             fill=(0, 0, 0, 120 if scheme == "dark" else 70))
         sh = sh.filter(ImageFilter.GaussianBlur(22 * s))
         bg.alpha_composite(sh)
@@ -148,8 +150,9 @@ def main():
     ap.add_argument("--colors", type=int, default=256)
     ap.add_argument("--title", default="xpando")
     ap.add_argument("--noicon", action="store_true")
+    ap.add_argument("--frameless", action="store_true")
     a = ap.parse_args()
-    TITLE["text"], TITLE["icon"] = a.title, not a.noicon
+    TITLE["text"], TITLE["icon"], TITLE["frameless"] = a.title, not a.noicon, a.frameless
     if a.mode == "still":
         save_png(frame_image(a.src, a.scheme, a.bare, False, a.width), a.out)
     elif a.mode == "poster":

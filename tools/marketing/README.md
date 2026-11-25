@@ -4,7 +4,9 @@ Makes the screenshots and animated GIFs used by the website (`site/`) and the wi
 
 The real xpando front end runs in a headless browser against a made-up phrase library
 (`mock.js` stands in for the Tauri backend), so nothing touches your own phrases, your
-running xpando, or your desktop. `expand.html` is a staged illustration of an expansion.
+running xpando, or your desktop. `expand.html` is a staged illustration of an expansion, and
+`popup.html` is a drawing of the engine's Alt+Space search box (a native window that a browser
+cannot capture), laid out from the real one and filled with demo phrases.
 
 ```powershell
 # 1. start the front end (separate terminal)

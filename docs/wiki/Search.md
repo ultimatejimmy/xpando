@@ -51,23 +51,8 @@ Examples:
 
 ## Search from any program
 
-Press **Alt+Space** in any program to open a search box. You can then pick a phrase and have it typed where you were.
-
-* This search box is part of the engine, so it works even when the xpando window is closed (as long as the engine is running).
-* It finds phrases using their triggers, names and **Search terms**.
-* It also lists a few built-in entries such as "Open xpando", "Restart xpando", "Quit xpando" and "Show xpando's logs".
-
-### Change the shortcut
-
-1. Open **Settings** (the gear).
-2. Under **Expansion and search**, find **Open the search box** and click **Change**.
-3. Press the keys you want. Hold **Ctrl** or **Alt** (you can add **Shift**) and press a letter, number, F key or Space (some other keys work too).
-4. Press **Esc** if you change your mind.
-
-xpando restarts the engine for you so the new shortcut works at once. If another program already uses the same keys, choose different ones.
-
-The shortcut is stored in the `search_shortcut` line of `config/default.yml` in your data folder. If it is set to `OFF` there, Settings shows "Off."
+Press the search shortcut (**Alt+Space** unless you change it) in any program to open a small search box, pick a phrase and have it typed where you were. It also has a few built-in commands. See [Quick Search](Quick-Search) for how it works and how to change the shortcut.
 
 ---
 
-Related pages: [The Phrase Manager](The-Phrase-Manager) | [Writing Phrases](Writing-Phrases) | [Advanced Mode](Advanced-Mode) | [Settings and Data Folder](Settings-and-Data-Folder)
+Related pages: [Quick Search](Quick-Search) | [The Phrase Manager](The-Phrase-Manager) | [Writing Phrases](Writing-Phrases) | [Advanced Mode](Advanced-Mode) | [Settings and Data Folder](Settings-and-Data-Folder)

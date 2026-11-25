@@ -10,7 +10,8 @@ IMG = os.path.join(ROOT, "site", "assets", "img")
 GIF = os.path.join(ROOT, "site", "assets", "gif")
 WIKI = os.path.join(HERE, "out", "wiki")
 STILLS = ["library", "editor-rich", "macros", "macro-menu", "apps", "works-in", "advanced", "conflicts", "search", "settings", "new-phrase"]
-GIFS = {"create": 1500, "search": 1500, "richtext": 1500, "macros": 1500, "advanced": 1500, "worksin": 1500, "expand": 1300}
+GIFS = {"create": 1500, "search": 1500, "richtext": 1500, "macros": 1500, "advanced": 1500, "worksin": 1500, "expand": 1300, "popup": 1300}
+POPUP_STILLS = ["popup-search", "popup-filter", "popup-commands"]  # the Alt+Space search box: light only, no title bar
 EXPAND_TITLE = ["--title", "Re: Quick question about the onboarding timeline - Message", "--noicon"]
 
 def run(*a):
@@ -26,11 +27,17 @@ if what in ("all", "stills"):
             run("still", src, os.path.join(IMG, f"{n}.{scheme}.png"), "--scheme", scheme, "--width", "2000")
         src = os.path.join(RAW, f"{n}.light.png")
         if os.path.exists(src): run("still", src, os.path.join(WIKI, f"{n}.png"), "--scheme", "light", "--bare", "--width", "1600")
+if what in ("all", "stills"):
+    for n in POPUP_STILLS:
+        src = os.path.join(RAW, f"{n}.light.png")
+        if not os.path.exists(src): continue
+        run("still", src, os.path.join(IMG, f"{n}.png"), "--scheme", "light", "--frameless")
+        run("still", src, os.path.join(WIKI, f"{n}.png"), "--scheme", "light", "--frameless", "--bare")
 if what in ("all", "gifs"):
     for n, w in GIFS.items():
         d = os.path.join(RAW, f"{n}.light")
         if not os.path.isdir(d): continue
-        extra = EXPAND_TITLE if n == "expand" else []
+        extra = EXPAND_TITLE if n in ("expand", "popup") else []
         run("gif", d, os.path.join(GIF, f"{n}.gif"), "--scheme", "light", "--width", str(w), *extra)
         run("gif", d, os.path.join(WIKI, f"{n}.gif"), "--scheme", "light", "--width", str(w), "--bare", *extra)
 

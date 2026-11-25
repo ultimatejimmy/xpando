@@ -11,6 +11,7 @@
 * [Macros](Macros)
 * [Folders and Apps](Folders-and-Apps)
 * [Search](Search)
+* [Quick Search](Quick-Search)
 
 **Power tools**
 * [Advanced Mode](Advanced-Mode)

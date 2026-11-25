@@ -13,6 +13,12 @@ const scrollDetail = (s, to = 99999) =>
   s.eval(`document.querySelectorAll(".detail, .detail *").forEach((e) => { if (e.scrollHeight > e.clientHeight + 20 && getComputedStyle(e).overflowY !== "visible") e.scrollTop = ${to}; })`);
 const advancedOn = (s) => s.eval(`(() => { const c = document.querySelector('input[role=switch]'); if (!c.checked) c.click(); })()`);
 
+async function popupShot(s, query) {
+  await s.eval(`demo.query(${JSON.stringify(query)})`);
+  await s.page.send("Emulation.setDefaultBackgroundColorOverride", { color: { r: 0, g: 0, b: 0, a: 0 } }); // keep its rounded corners clear
+  await s.wait(250);
+}
+
 // ----------------------------------------------------------------------------------------- stills
 const STILLS = {
   async library(s) {
@@ -73,6 +79,10 @@ const STILLS = {
     await s.click("button[aria-label*=ettings]"); await s.wait(700);
     await s.hideCursor();
   },
+  // The Alt+Space search box, drawn from tools/marketing/popup.html (a native window in the real app).
+  async "popup-search"(s) { await popupShot(s, ""); },
+  async "popup-filter"(s) { await popupShot(s, "thank"); },
+  async "popup-commands"(s) { await popupShot(s, ">"); },
   async "new-phrase"(s) {
     await s.click("button", "Email");
     await s.click("button", "New phrase"); await s.wait(500);
@@ -163,6 +173,18 @@ const GIFS = {
     await s.click("button", "Move phrase", { record: true }); await s.wait(800);
     await s.hideCursor(); await s.snap(2000);
   },
+  /** The Alt+Space search box over an email: open it, type a few letters, press Enter, the phrase is typed. */
+  async popup(s) {
+    const d = (js) => s.eval(`demo.${js}`);
+    await d(`mailType(${JSON.stringify("Hi Dana,\n\n")})`);
+    await s.snap(900);
+    await d(`keys(["Alt","+","Space"])`); await s.snap(700);
+    await d("show(true)"); await d("keys(null)"); await s.snap(1100);
+    for (const q of ["t", "th", "tha", "than", "thank"]) { await d(`query(${JSON.stringify(q)})`); await s.snap(q === "thank" ? 1300 : 230); }
+    await d(`keys(["Enter"])`); await s.snap(500);
+    await d("show(false)"); await d("keys(null)");
+    await d(`mailInsert(${JSON.stringify("Thanks so much for reaching out. I'll look into this today and get back to you by end of day.")})`); await s.snap(2400);
+  },
   /** A staged illustration: type a trigger in any program and xpando swaps in the full phrase. */
   async expand(s) {
     const d = (js) => s.eval(`demo.${js}`);
@@ -182,6 +204,14 @@ const GIFS = {
 };
 
 // ----------------------------------------------------------------------------------------- runner
+const popupUrl = (mode) => pathToFileURL(join(HERE, "popup.html")).href + "?mode=" + mode;
+function sceneOpts(kind, id) {
+  if (kind === "gif" && id === "expand") return { url: pathToFileURL(join(HERE, "expand.html")).href, mock: false, width: 1100, height: 540 };
+  if (kind === "gif" && id === "popup") return { url: popupUrl("demo"), mock: false, width: 1100, height: 540 };
+  if (kind === "still" && id.startsWith("popup-")) return { url: popupUrl("solo"), mock: false, width: 500, height: 376, only: ["light"] };
+  return {};
+}
+
 async function run() {
   const args = process.argv.slice(2);
   const want = args.length ? args : ["stills", "gifs"];
@@ -195,7 +225,8 @@ async function run() {
   for (const n of names) {
     const [kind, id] = n.split(":");
     for (const scheme of kind === "gif" ? ["light"] : SCHEMES) {
-      const opts = kind === "gif" && id === "expand" ? { url: pathToFileURL(join(HERE, "expand.html")).href, mock: false, width: 1100, height: 540 } : {};
+      const { only, ...opts } = sceneOpts(kind, id);
+      if (only && !only.includes(scheme)) continue;
       const s = await session({ scheme, scale: 2, ...opts });
       try {
         if (kind === "still") { await STILLS[id](s); await s.still(`${id}.${scheme}`); }

@@ -37,10 +37,10 @@ Quick answers. Can't find yours? Try [Troubleshooting](Troubleshooting), or [ope
 | **Can I paste formatted text from Word?** | Yes. In the rich text editor press **Ctrl+V**, or use **From clipboard** to start a phrase from it. See [Rich Text](Rich-Text). |
 | **How do I get today's date?** | Click **Insert macro**, then **Date**. See [Macros](Macros). |
 | **What is the Advanced switch for?** | It shows the technical side: the YAML of each phrase, trigger conflicts, and every option. See [Advanced Mode](Advanced-Mode). |
-| **How do I search from another program?** | Press **Alt+Space** (you can change it in Settings). See [Search](Search). |
+| **How do I search from another program?** | Press the search shortcut, **Alt+Space** unless you changed it in Settings. See [Quick Search](Quick-Search). |
 | **Does xpando start when I sign in?** | Only if you turn on **Start when I sign in to this computer** in Settings. |
 | **Does closing the window stop expansion?** | No. The engine runs in the background and keeps working until you quit it. |
-| **How do I stop expansion?** | The xpando window has no off switch yet. The search box you open with **Alt+Space** lists a **Quit xpando** entry that stops the engine. When the engine is stopped, **Settings** shows **Expansion is off** with a **Turn on** button. |
+| **How do I stop expansion?** | The xpando window has no off switch yet. The search box (opened with **Alt+Space** unless you changed the shortcut) lists a **Quit xpando** entry that stops the engine. When the engine is stopped, **Settings** shows **Expansion is off** with a **Turn on** button. |
 
 ## Updates and versions
 

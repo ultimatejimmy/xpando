@@ -62,7 +62,7 @@ If your sync service leaves a "conflicted copy" next to a file, xpando shows a b
 
 * **Expansion is off** appears only when the engine is not running, with a **Turn on** button. If xpando cannot start it, the message says why. See [Troubleshooting](Troubleshooting).
 * **Start when I sign in to this computer**: when on, xpando starts its engine in the background each time you sign in, without opening a window. Your phrases then work without you opening xpando. On Windows this adds a start entry for your user. On macOS and Linux it adds a login item.
-* **Open the search box**: the shortcut that opens the search box from any program (**Alt+Space** unless you change it). See [Search](Search).
+* **Open the search box**: the shortcut that opens the search box from any program (**Alt+Space** unless you change it). See [Quick Search](Quick-Search).
 
 When you open the xpando window, it starts the engine for you unless you turned expansion off on purpose.
 
