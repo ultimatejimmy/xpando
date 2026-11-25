@@ -12,14 +12,28 @@
   <img alt="Status" src="https://img.shields.io/badge/status-early%20development-orange" />
 </p>
 
+<p align="center">
+  <a href="https://github.com/ultimatejimmy/xpando/releases/latest"><b>Download</b></a> &nbsp;·&nbsp;
+  <a href="https://ultimatejimmy.github.io/xpando/">Website</a> &nbsp;·&nbsp;
+  <a href="https://github.com/ultimatejimmy/xpando/wiki">Wiki</a>
+</p>
+
+<p align="center">
+  <img src="site/assets/gif/expand.gif" alt="Typing ;thx and ;sig in an email and xpando writing the rest" width="720" />
+</p>
+
 xpando is a fork of espanso with a modern desktop app for managing your phrases,
 in the spirit of tools like PhraseExpress. Your phrases stay in plain YAML files,
-so everything espanso can do still works, but you no longer have to hand-edit them.
+so espanso's features keep working, but you no longer have to hand-edit them.
 
 > **Status:** early development. Windows is the primary target. macOS and Linux
 > are kept building in CI but get less testing. Expect rough edges, and keep
 > backups of your `match` folder (xpando also writes a one-time `.yml.bak` the
 > first time it edits a file).
+
+<p align="center">
+  <img src="site/assets/img/library.light.png" alt="The xpando phrase manager: folders, phrase list and details" width="860" />
+</p>
 
 ## What you get
 
@@ -39,15 +53,24 @@ so everything espanso can do still works, but you no longer have to hand-edit th
 * **Set clipboard.** A native `set_clipboard` macro for xpando's engine, instead
   of PowerShell workarounds. Stock espanso does not understand it. See
   [docs/xpando/SET-CLIPBOARD.md](docs/xpando/SET-CLIPBOARD.md).
-* **Everything espanso does.** Triggers, regex, app-specific configs, packages
-  and the espanso hub keep working. See the [espanso docs](https://espanso.org/docs/).
+* **Built on espanso's engine.** Triggers, regex and app-specific configs keep working.
+  xpando's engine is its own build of espanso's: mostly the same, with additions that stock
+  espanso does not have. See the [espanso docs](https://espanso.org/docs/) for the shared parts.
 
 ## Install
 
-Installers will be published on the [Releases](https://github.com/ultimatejimmy/xpando/releases)
-page once the release pipeline is live. Versions are date-based
-(for example `2026.11.23`, with betas like `2026.11.23-beta`, which are marked
-pre-release). See [docs/xpando/RELEASING.md](docs/xpando/RELEASING.md).
+Get the installer for your system from the [latest release](https://github.com/ultimatejimmy/xpando/releases/latest):
+
+| System | File |
+| :----- | :--- |
+| Windows (primary) | `xpando_<version>_x64-setup.exe` |
+| macOS | `xpando_<version>_universal.dmg` |
+| Linux | `xpando_<version>_amd64.AppImage` or `.deb` |
+
+Versions are date-based (for example `2026.11.24`, with betas like `2026.11.24-beta`, which are
+marked pre-release). xpando checks for updates daily and can install them for you. See the
+[wiki](https://github.com/ultimatejimmy/xpando/wiki) for a guided tour and
+[docs/xpando/RELEASING.md](docs/xpando/RELEASING.md) for how releases are made.
 
 ## Build from source
 
@@ -68,7 +91,7 @@ cd xpando-core; cargo test
 cd ..\xpando-app; npm run build
 ```
 
-The espanso engine itself builds as before, see [Compilation.md](Compilation.md).
+The engine (espanso's code plus xpando's additions) builds as before, see [Compilation.md](Compilation.md).
 
 ## Project layout
 
@@ -77,7 +100,7 @@ The espanso engine itself builds as before, see [Compilation.md](Compilation.md)
 | `xpando-core/` | Rust library: parsing, format-preserving YAML edits, conflicts, folders |
 | `xpando-app/` | The Tauri 2 desktop app (React and TypeScript front end) |
 | `docs/xpando/` | Plan, glossary, design notes and release process |
-| everything else | The upstream espanso engine, kept close to upstream so changes can be merged |
+| everything else | espanso's engine with xpando's additions, kept close to upstream so changes can be merged |
 
 The roadmap is in [docs/xpando/PLAN.md](docs/xpando/PLAN.md) and the shared
 vocabulary (for example, "macro") is in [docs/xpando/TERMS.md](docs/xpando/TERMS.md).

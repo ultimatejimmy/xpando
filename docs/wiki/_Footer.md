@@ -1,0 +1,1 @@
+xpando is free software (GPL-3.0), built on [espanso](https://espanso.org). Early development: expect rough edges. [Report an issue](https://github.com/ultimatejimmy/xpando/issues) | [Source code](https://github.com/ultimatejimmy/xpando) | [Download](https://github.com/ultimatejimmy/xpando/releases/latest)

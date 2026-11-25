@@ -1,0 +1,103 @@
+# Installation
+
+xpando is free. Download it from the [latest release](https://github.com/ultimatejimmy/xpando/releases/latest) on GitHub.
+
+> **Status: early development.** Windows is the main target and the best tested. macOS and Linux builds are made on every release, but they get much less hands-on testing. If something does not work there, please [open an issue](https://github.com/ultimatejimmy/xpando/issues).
+
+## Which file do I download?
+
+Every release has these files. `<version>` is the release date, for example `2026.11.24` (see [Updates](Updates) for how versions are named).
+
+| System | File | What it is |
+|---|---|---|
+| Windows | `xpando_<version>_x64-setup.exe` | The installer |
+| macOS | `xpando_<version>_universal.dmg` | One disk image for Apple Silicon and Intel Macs |
+| Linux | `xpando_<version>_amd64.deb` | Package for Debian and Ubuntu |
+| Linux | `xpando_<version>_amd64.AppImage` | A single file that runs on most distributions |
+| All | `SHA256SUMS.txt` | Checksums, so you can check your download |
+
+Other files on the release page (`.sig` files, `latest.json`, `.app.tar.gz`) are used by xpando's own updater. You can ignore them.
+
+Sometimes the macOS file is missing from a release for a while. The release notes say so when that happens.
+
+## Windows
+
+1. Download `xpando_<version>_x64-setup.exe`.
+2. Optional but recommended: [check the download](#check-your-download).
+3. Run the installer and follow the steps.
+4. Start xpando from the Start menu.
+
+### "Windows protected your PC"
+
+The Windows installer is **not code-signed yet**. Because of that, Windows SmartScreen can show a blue "Windows protected your PC" window the first time you run it. That is expected for now.
+
+To go on, choose **More info**, then **Run anyway**. If you want extra certainty, check the download against `SHA256SUMS.txt` first (below).
+
+## macOS
+
+macOS builds are **not signed or notarized** (this is a deliberate choice, not a mistake).
+
+1. Download `xpando_<version>_universal.dmg` and open it.
+2. Drag xpando to your **Applications** folder.
+3. The first time, **right-click** (or Control-click) xpando in Applications and choose **Open**. Then confirm. Double-clicking an unsigned app is blocked by macOS.
+
+xpando watches what you type to notice a trigger, so macOS may ask you to allow it in **System Settings, Privacy and Security** (for example Accessibility and Input Monitoring). If triggers do nothing, check those lists first.
+
+macOS support is the least tested. Please report problems.
+
+## Linux
+
+**Debian and Ubuntu (`.deb`):**
+
+```bash
+sudo apt install ./xpando_<version>_amd64.deb
+```
+
+**Any distribution (`.AppImage`):**
+
+```bash
+chmod +x xpando_<version>_amd64.AppImage
+./xpando_<version>_amd64.AppImage
+```
+
+Good to know:
+
+* The engine needs the wxWidgets 3 GTK library from your distribution. How the `.deb` and AppImage provide it is still an open item in the project notes, so if xpando will not start, install that library and try again (the package name differs between distributions).
+* Wayland support is experimental, as in espanso.
+* An AppImage can update itself. A copy installed from the `.deb` cannot. For it, xpando opens the release page in your browser. See [Updates](Updates).
+
+## Check your download
+
+Each release has `SHA256SUMS.txt`. It lists a checksum for every file, one per line: a long hexadecimal number, two spaces, then the file name.
+
+**Windows (PowerShell):**
+
+```powershell
+Get-FileHash .\xpando_<version>_x64-setup.exe -Algorithm SHA256
+```
+
+Open `SHA256SUMS.txt` and find the line for your file. The `Hash` value PowerShell prints must be the same as the number on that line. Capital and small letters do not matter. If it differs, delete the file and download it again.
+
+**macOS:**
+
+```bash
+shasum -a 256 xpando_<version>_universal.dmg
+```
+
+**Linux:**
+
+```bash
+sha256sum -c SHA256SUMS.txt --ignore-missing
+```
+
+## After installing
+
+* When you open xpando it starts its **engine**, the background program that watches your typing. The engine keeps running after you close the xpando window, so your phrases keep working.
+* To start xpando's engine automatically when you sign in, see [Settings and Data Folder](Settings-and-Data-Folder).
+* Coming from espanso? xpando offers to copy your phrases the first time it starts. See [Migrating from espanso](Migrating-from-espanso).
+
+Next: [Getting Started](Getting-Started).
+
+---
+
+Related pages: [Getting Started](Getting-Started) | [Updates](Updates) | [Migrating from espanso](Migrating-from-espanso) | [Troubleshooting](Troubleshooting)

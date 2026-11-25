@@ -1,0 +1,37 @@
+# Contributing
+
+xpando is free software under the **GPL-3.0** license. Bug reports, ideas, fixes and documentation improvements are welcome.
+
+## Ways to help
+
+* **Report a problem or suggest a feature:** [open an issue](https://github.com/ultimatejimmy/xpando/issues). Include your xpando version (Settings, under Updates), your system, and what you did. Please do not paste private phrases.
+* **Test on macOS and Linux.** These builds get much less testing than Windows. Reports about them are very useful.
+* **Try beta versions** (Settings, **Get beta versions**) and tell us what you find.
+* **Improve the docs.** If something on this wiki is unclear or wrong, open an issue.
+* **Send a pull request.** Fixes and small features are welcome. For something big, open an issue first so we can talk about it.
+
+## Before a pull request
+
+1. Build and run the app: see [Building from Source](Building-from-Source).
+2. Run the checks of the part you changed (`cargo test` in `xpando-core`, `npm run build` in `xpando-app`).
+3. Keep changes focused and say what and why in the description.
+
+Branch from `dev`, the main development branch.
+
+## Guidelines
+
+* **Normal mode is simple. Advanced mode adds more.** Each control is always visible, behind **More options**, or Advanced only. Nothing is removed, only moved.
+* **One word for one thing.** Use phrase, trigger, text, macro, setting and folder as explained on the [Home](Home) page. Do not say "variable", "placeholder" or "parameter" to normal-mode users.
+* **Never lose the user's text.** Guard unsaved changes, offer Undo, and write files atomically with backups.
+* **Dependencies:** pin exact versions, install with `--ignore-scripts`, commit the lockfile and use `npm ci` in CI.
+* **Keep the engine close to upstream.** Changes to the engine (espanso's code, plus xpando's additions) stay small so upstream fixes can still be merged.
+
+## Credits and license
+
+xpando is built on [espanso](https://github.com/espanso/espanso), created by [Federico Terzi](https://github.com/federico-terzi) and maintained by the espanso team and contributors. Thank you all. The espanso engine, its documentation and its community live at [espanso.org](https://espanso.org).
+
+xpando is licensed under the [GPL-3.0 license](https://github.com/ultimatejimmy/xpando/blob/dev/LICENSE), the same as espanso. The panda icon is from [Lucide](https://lucide.dev), and the wordmark font is Fredoka (SIL Open Font License).
+
+---
+
+Related pages: [Building from Source](Building-from-Source) | [FAQ](FAQ) | [Home](Home)
