@@ -297,35 +297,33 @@ fn choose_dest(
             if src_info.scope.kind == ScopeKind::All && folder.as_ref().is_none_or(|f| f == src) {
                 return Ok(Dest::Same);
             }
-            let target =
-                match folder {
-                    Some(f) => {
-                        ensure_known(l, f)?;
-                        f.clone()
-                    }
-                    None => {
-                        let mut all = infos.iter().filter(|i| {
-                            i.scope.kind == ScopeKind::All && manageable(&i.file).is_ok()
-                        });
-                        let base = infos.iter().find(|i| {
-                            i.file.to_lowercase() == "base.yml" && i.scope.kind == ScopeKind::All
-                        });
-                        match base.or_else(|| all.next()) {
-                            Some(i) => i.file.clone(),
-                            None => {
-                                // Nothing works in all apps yet: start one, so the person never
-                                // has to create a folder just to use this.
-                                let name = free_folder_name(l, "base").ok_or(
-                                    "xpando could not find a free name for a new folder.",
-                                )?;
-                                return Ok(Dest::New {
-                                    name,
-                                    exes: Vec::new(),
-                                });
-                            }
+            let target = match folder {
+                Some(f) => {
+                    ensure_known(l, f)?;
+                    f.clone()
+                }
+                None => {
+                    let mut all = infos
+                        .iter()
+                        .filter(|i| i.scope.kind == ScopeKind::All && manageable(&i.file).is_ok());
+                    let base = infos.iter().find(|i| {
+                        i.file.to_lowercase() == "base.yml" && i.scope.kind == ScopeKind::All
+                    });
+                    match base.or_else(|| all.next()) {
+                        Some(i) => i.file.clone(),
+                        None => {
+                            // Nothing works in all apps yet: start one, so the person never
+                            // has to create a folder just to use this.
+                            let name = free_folder_name(l, "base")
+                                .ok_or("xpando could not find a free name for a new folder.")?;
+                            return Ok(Dest::New {
+                                name,
+                                exes: Vec::new(),
+                            });
                         }
                     }
-                };
+                }
+            };
             if target == src {
                 return Ok(Dest::Same);
             }
@@ -611,7 +609,8 @@ fn plan_move(
             }
             if let Some(c) = p1.changes.first_mut() {
                 c.detail = if exes.is_empty() {
-                    "A new file for phrases that work in all apps. The phrase is put into it.".into()
+                    "A new file for phrases that work in all apps. The phrase is put into it."
+                        .into()
                 } else {
                     format!(
                         "A new folder {} for these programs. The phrase is put into it.",
