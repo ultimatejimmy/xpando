@@ -6,29 +6,29 @@ xpando adds a modern phrase manager to [espanso](https://espanso.org), the open 
 
 ![A staged example: typing the triggers ;thx and ;sig in an email reply, and xpando replacing each one with the full phrase](images/expand.gif)
 
-> **Status: early development.** xpando works, but it is young. Expect rough edges and keep a backup of your phrases (see [Settings and Data Folder](Settings-and-Data-Folder)). Windows is the main target. macOS and Linux builds exist but get less testing.
+> **Status: early development.** xpando works, but it is young. Expect rough edges and keep a backup of your phrases (see [Settings and Data Folder](4.1-Settings-and-Data-Folder)). Windows is the main target. macOS and Linux builds exist but get less testing.
 
 [**Download the latest release**](https://github.com/ultimatejimmy/xpando/releases/latest)
 
 ## What you get
 
-* **A phrase manager.** Browse, search and edit all your phrases in one window. See [The Phrase Manager](The-Phrase-Manager).
-* **Rich text.** Write formatted phrases (bold, links, lists, tables) and paste from Word. See [Rich Text](Rich-Text).
-* **Macros.** Insert today's date, what you copied last, a random pick, a choice list and more. See [Macros](Macros).
-* **Folders and per-app phrases.** File phrases in folders, and make a phrase work only in certain programs. See [Folders and Apps](Folders-and-Apps).
-* **Search.** Find phrases fast, in the window, or press a keyboard shortcut (Alt+Space by default) in any program for a quick search box. See [Search](Search) and [Quick Search](Quick-Search).
+* **A phrase manager.** Browse, search and edit all your phrases in one window. See [The Phrase Manager](2.1-The-Phrase-Manager).
+* **Rich text.** Write formatted phrases (bold, links, lists, tables) and paste from Word. See [Rich Text](2.3-Rich-Text).
+* **Macros.** Insert today's date, what you copied last, a random pick, a choice list and more. See [Macros](2.4-Macros).
+* **Folders and per-app phrases.** File phrases in folders, and make a phrase work only in certain programs. See [Folders and Apps](2.5-Folders-and-Apps).
+* **Search.** Find phrases fast, in the window, or press a keyboard shortcut (Alt+Space by default) in any program for a quick search box. See [Search](2.6-Search) and [Quick Search](2.7-Quick-Search).
 * **Safe edits.** Your phrases stay in plain files. xpando saves them carefully and refuses to overwrite a file that changed underneath it.
-* **An Advanced switch** for power users: the YAML source, trigger conflicts, every option. See [Advanced Mode](Advanced-Mode).
+* **An Advanced switch** for power users: the YAML source, trigger conflicts, every option. See [Advanced Mode](3.1-Advanced-Mode).
 
 ![The xpando window: folders on the left, the phrase list in the middle and the selected phrase on the right](images/library.png)
 
 ## Start here
 
-1. [Install xpando](Installation).
-2. Follow [Getting Started](Getting-Started) to make your first phrase.
-3. Learn how to [write phrases](Writing-Phrases) with options, then add [macros](Macros).
+1. [Install xpando](1.1-Installation).
+2. Follow [Getting Started](1.2-Getting-Started) to make your first phrase.
+3. Learn how to [write phrases](2.2-Writing-Phrases) with options, then add [macros](2.4-Macros).
 
-Already using espanso? See [Migrating from espanso](Migrating-from-espanso).
+Already using espanso? See [Migrating from espanso](4.4-Migrating-from-espanso).
 
 ## Words used in this wiki
 
@@ -45,18 +45,18 @@ Already using espanso? See [Migrating from espanso](Migrating-from-espanso).
 
 ## All pages
 
-**Getting started:** [Installation](Installation), [Getting Started](Getting-Started)
+**Getting started:** [Installation](1.1-Installation), [Getting Started](1.2-Getting-Started)
 
-**Using xpando:** [The Phrase Manager](The-Phrase-Manager), [Writing Phrases](Writing-Phrases), [Rich Text](Rich-Text), [Macros](Macros), [Folders and Apps](Folders-and-Apps), [Search](Search), [Quick Search](Quick-Search)
+**Using xpando:** [The Phrase Manager](2.1-The-Phrase-Manager), [Writing Phrases](2.2-Writing-Phrases), [Rich Text](2.3-Rich-Text), [Macros](2.4-Macros), [Folders and Apps](2.5-Folders-and-Apps), [Search](2.6-Search), [Quick Search](2.7-Quick-Search)
 
-**Power tools:** [Advanced Mode](Advanced-Mode), [Trigger Conflicts](Trigger-Conflicts)
+**Power tools:** [Advanced Mode](3.1-Advanced-Mode), [Trigger Conflicts](3.2-Trigger-Conflicts)
 
-**Your data and updates:** [Settings and Data Folder](Settings-and-Data-Folder), [Sync Tips](Sync-Tips), [Updates](Updates), [Migrating from espanso](Migrating-from-espanso)
+**Your data and updates:** [Settings and Data Folder](4.1-Settings-and-Data-Folder), [Sync Tips](4.2-Sync-Tips), [Updates](4.3-Updates), [Migrating from espanso](4.4-Migrating-from-espanso)
 
-**Help:** [FAQ](FAQ), [Troubleshooting](Troubleshooting)
+**Help:** [FAQ](5.1-FAQ), [Troubleshooting](5.2-Troubleshooting)
 
-**Project:** [Building from Source](Building-from-Source), [Contributing](Contributing)
+**Project:** [Building from Source](6.1-Building-from-Source), [Contributing](6.2-Contributing)
 
 ---
 
-Related pages: [Installation](Installation) | [Getting Started](Getting-Started) | [FAQ](FAQ)
+Related pages: [Installation](1.1-Installation) | [Getting Started](1.2-Getting-Started) | [FAQ](5.1-FAQ)
