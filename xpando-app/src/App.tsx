@@ -275,6 +275,7 @@ export default function App() {
   const dataChanged = async () => {
     await data.refresh();
     await load();
+    loadKept();
     setEditing(null);
     setDirty(false);
     setSelected(null);
